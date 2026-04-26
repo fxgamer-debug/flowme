@@ -16,7 +16,11 @@ export const energyProfile: FlowProfile = {
   shape: 'dot',
   glow: true,
   unit_label: 'W',
-  visibility_threshold: 10,
+  // Lowered from 10 → 1 W in v1.0.2 so real idle loads (a single LED bulb
+  // at 2 W, a router at 6 W, a fridge compressor dipping to 3 W) still
+  // render a visible flow. Users can still raise this per-flow via
+  // `threshold:` in YAML if they want to mute truly trivial values.
+  visibility_threshold: 1,
 
   speed_curve(value: number): number {
     const magnitude = Math.abs(value);

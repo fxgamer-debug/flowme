@@ -1,24 +1,41 @@
-import type { FlowRenderer } from './types.js';
+import type { FlowRenderer, FlowRendererKind } from './types.js';
 import { SvgRenderer } from './svg-renderer.js';
 import { HoudiniRenderer } from './houdini-renderer.js';
 
 /**
- * Pick the best renderer available. v0.2 prefers the Houdini Paint Worklet
- * renderer when the browser supports both `CSS.paintWorklet` and
- * `CSS.registerProperty`. Otherwise we fall back to the native SVG renderer.
+ * Pick the best renderer available.
  *
- * The factory can be forced via `?flowme_renderer=svg` in the document URL —
- * handy for debugging or users on Houdini-capable browsers who prefer the
- * fallback.
+ * v1.0.2 changed the default from "auto-select Houdini if supported" to
+ * "always SVG unless the user explicitly opts in". Reason: in Home
+ * Assistant's Chromium embed the paint-worklet API is reported as
+ * supported but CSP / blob-URL handling often silently blocks the
+ * painter from registering, leaving flows completely invisible with no
+ * console error. SVG + animateMotion renders the same shapes with 100%
+ * reliability across every browser HA ships to.
+ *
+ * To opt into the Houdini renderer (for perf experiments / advanced
+ * shapes), append `?flowme_renderer=houdini` to the dashboard URL.
+ * `?flowme_renderer=svg` also works to force the default when needed.
  */
 export function createRenderer(): FlowRenderer {
   const override = readRendererOverride();
-  if (override === 'svg') return new SvgRenderer();
-  if (override === 'houdini') return new HoudiniRenderer();
+  const kind: FlowRendererKind = override ?? 'svg';
 
-  if (hasHoudiniSupport()) {
+  console.info(
+    `[flowme] using ${kind} renderer${override ? ' (forced via ?flowme_renderer)' : ''}`,
+  );
+
+  if (kind === 'houdini') {
+    if (!hasHoudiniSupport()) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[flowme] ?flowme_renderer=houdini requested but CSS.paintWorklet / registerProperty is not available — falling back to SVG',
+      );
+      return new SvgRenderer();
+    }
     return new HoudiniRenderer();
   }
+
   return new SvgRenderer();
 }
 
@@ -34,7 +51,7 @@ function hasHoudiniSupport(): boolean {
   }
 }
 
-function readRendererOverride(): 'svg' | 'houdini' | null {
+function readRendererOverride(): FlowRendererKind | null {
   try {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('flowme_renderer');

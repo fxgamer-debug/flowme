@@ -2,6 +2,29 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.2] — 2026-04-26
+
+Second bugfix after first real-world dashboard deploy.
+
+### Fixed
+
+- **No animation on flow lines** — the renderer factory now defaults to the SVG renderer. In Home Assistant's Chromium embed the paint-worklet API is reported as supported but CSP / blob-URL handling often silently blocks the painter from ever registering, leaving flows completely invisible with no console error. SVG + `animateMotion` renders the same shapes reliably everywhere. The Houdini renderer stays available behind `?flowme_renderer=houdini`, and the card now catches renderer-init failures and automatically falls back to SVG instead of crashing.
+- **Energy `visibility_threshold` lowered from 10 W → 1 W** — a single LED bulb (2 W) or a router (6 W) now animates a visible flow at idle. Users can still raise this per-flow via `threshold:` in YAML.
+- **All nodes rendering the same default colour** — a node with no explicit `color:` now inherits the `color_positive` of any flow that starts or ends at it. Set `color_positive` on your solar / grid / battery / load flows and the connected nodes pick the matching hue automatically.
+- **Doubled unit of measurement ("1 W W")** — node value text now uses the sensor's own `unit_of_measurement` attribute when present and never appends the profile `unit_label` on top of a unit the sensor already reported. Falls back to `profile.describe()` when the sensor has no unit attribute.
+
+### Added
+
+- **`?flowme_debug=1` URL parameter** — forces every flow to animate at a fixed 2 s regardless of value, bypassing `speed_curve` and `visibility_threshold`, and logs each `updateFlow`/`applyFlow` step in the console. Pointed-and-shootable debugger for "why isn't my flow moving" symptoms; described under Troubleshooting in the README.
+- **Camera overlay auto-refresh** — the camera snapshot now refreshes every 10 s via a cache-busted URL, driven by a timer that only runs when at least one camera overlay is present.
+- **Camera offline placeholder** — when the camera entity is missing, `unavailable`, `unknown`, or has no `entity_picture`, the overlay now renders a grey box with a camera-glyph SVG instead of a half-blank tile.
+- **Switch overlay touch targets** — switch overlays now have a 44 × 44 px minimum touch target regardless of configured size percentages, matching the WCAG / iOS HIG guidance. `.is-on` / `.is-off` now also show a subtle green/red inset ring for instant at-a-glance state feedback.
+- **Renderer diagnostic log** — the card now logs `[flowme] using <svg|houdini> renderer` on init, plus `[flowme] renderer init failed — falling back to SVG` when the Houdini path rejects.
+
+### Tests
+
+- +2 cases for doubled-unit fix and camera offline placeholder (now 131 tests, all green).
+
 ## [1.0.1] — 2026-04-26
 
 First bugfix based on feedback from initial HA deploy.

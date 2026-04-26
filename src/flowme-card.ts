@@ -9,6 +9,7 @@ import type {
 } from './types.js';
 import { FlowmeConfigError, validateConfig } from './validate-config.js';
 import { createRenderer } from './animation/renderer-factory.js';
+import { SvgRenderer } from './animation/svg-renderer.js';
 import type { FlowRenderer } from './animation/types.js';
 import { getProfile } from './flow-profiles/index.js';
 import { parseAspectRatio, parseSensorValue } from './utils.js';
@@ -16,7 +17,7 @@ import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.1';
+const CARD_VERSION = '1.0.2';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -47,6 +48,13 @@ export class FlowmeCard extends LitElement {
   private transitionTimer: number | null = null;
   private preloadCache = new Map<string, HTMLImageElement>();
   private lastAppliedBgUrl = '';
+  /**
+   * Interval that forces a LitElement re-render every 10 s when the card
+   * contains camera overlays. The overlay renderer uses a bucketed
+   * cache-bust token to fetch fresh snapshots, but it can only advance
+   * the token when the card actually re-renders.
+   */
+  private cameraRefreshTimer: number | null = null;
   /**
    * Set of `${flowId}:${entityId}` we've already warned about missing data for.
    * Keeps console noise under control when a sensor is permanently stale.
@@ -85,7 +93,21 @@ export class FlowmeCard extends LitElement {
       window.clearTimeout(this.transitionTimer);
       this.transitionTimer = null;
     }
+    if (this.cameraRefreshTimer !== null) {
+      window.clearInterval(this.cameraRefreshTimer);
+      this.cameraRefreshTimer = null;
+    }
     super.disconnectedCallback();
+  }
+
+  private syncCameraTimer(): void {
+    const hasCameras = !!this.config?.overlays?.some((o) => o.type === 'camera');
+    if (hasCameras && this.cameraRefreshTimer === null) {
+      this.cameraRefreshTimer = window.setInterval(() => this.requestUpdate(), 10_000);
+    } else if (!hasCameras && this.cameraRefreshTimer !== null) {
+      window.clearInterval(this.cameraRefreshTimer);
+      this.cameraRefreshTimer = null;
+    }
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -96,7 +118,19 @@ export class FlowmeCard extends LitElement {
       this.teardownRenderer();
       this.renderer = createRenderer();
       this.rendererReadyFor = this.config;
-      void this.renderer.init(mount, this.config);
+      const activeConfig = this.config;
+      void this.renderer.init(mount, activeConfig).catch((err) => {
+        console.warn(
+          '[flowme] renderer init failed — falling back to SVG renderer',
+          err,
+        );
+        this.teardownRenderer();
+        this.renderer = new SvgRenderer();
+        this.rendererReadyFor = activeConfig;
+        void this.renderer.init(mount, activeConfig).catch((err2) => {
+          console.error('[flowme] SVG renderer init also failed', err2);
+        });
+      });
     }
 
     if (changed.has('hass') && this.renderer && this.hass) {
@@ -126,6 +160,10 @@ export class FlowmeCard extends LitElement {
 
     if (changed.has('config') || changed.has('hass')) {
       this.syncWeatherBackground();
+    }
+
+    if (changed.has('config')) {
+      this.syncCameraTimer();
     }
   }
 
@@ -313,13 +351,26 @@ export class FlowmeCard extends LitElement {
     const showValue = node.show_value !== false && !!state;
     const showLabel = node.show_label !== false && !!node.label;
     const profile = getProfile(this.config?.domain);
-    const fill = node.color ?? profile.default_color_positive;
+    const fill = node.color ?? this.nodeFlowColor(node.id) ?? profile.default_color_positive;
     const size = node.size ?? 12;
-    const valueText = state
-      ? `${profile.describe(parseSensorValue(state.state))}${
-          profile.unit_label ? ` ${profile.unit_label}` : ''
-        }`
-      : '';
+    // Value rendering: prefer the sensor's own `unit_of_measurement` attribute
+    // over the profile's default unit_label, and only append a unit once. This
+    // fixes the "1 W W" doubled-unit bug users were seeing when a sensor
+    // reported "1 W" and the profile also appended " W".
+    let valueText = '';
+    if (state) {
+      const rawNum = parseSensorValue(state.state);
+      const sensorUnit = (state.attributes?.['unit_of_measurement'] as string | undefined) ?? '';
+      if (sensorUnit) {
+        // sensor knows its own unit — use it verbatim to avoid doubling
+        valueText = `${this.formatSensorNumber(rawNum)} ${sensorUnit}`;
+      } else {
+        // no sensor unit → fall back to the profile's describe() (which
+        // embeds the profile unit itself), without appending unit_label
+        // again.
+        valueText = profile.describe(rawNum);
+      }
+    }
 
     return html`
       <div
@@ -335,6 +386,37 @@ export class FlowmeCard extends LitElement {
         ${showValue ? html`<span class="node-value">${valueText}</span>` : null}
       </div>
     `;
+  }
+
+  /**
+   * Walk the configured flows looking for one that either starts or ends at
+   * the given node and has a `color_positive` set. That colour is used as the
+   * node's fallback fill so the dashboard visually groups nodes with their
+   * flow colour (solar nodes glow yellow, grid nodes blue, etc.) without the
+   * user having to duplicate colours on every node.
+   */
+  private nodeFlowColor(nodeId: string): string | undefined {
+    if (!this.config) return undefined;
+    for (const flow of this.config.flows) {
+      if (flow.from_node === nodeId || flow.to_node === nodeId) {
+        if (flow.color_positive) return flow.color_positive;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Format a numeric sensor reading for node display. Mirrors the compact
+   * thresholds the overlay renderer uses so values stay consistent across
+   * the card.
+   */
+  private formatSensorNumber(n: number): string {
+    if (!Number.isFinite(n)) return '—';
+    const abs = Math.abs(n);
+    if (abs >= 1000) return n.toFixed(0);
+    if (abs >= 100) return n.toFixed(0);
+    if (abs >= 10) return n.toFixed(1);
+    return n.toFixed(2);
   }
 
   private teardownRenderer(): void {
@@ -467,6 +549,28 @@ export class FlowmeCard extends LitElement {
       margin-left: 3px;
       font-weight: 500;
     }
+    .overlay-switch {
+      /* 44 px is the iOS HIG / WCAG minimum touch target. Percentage
+         sizes still scale the overlay visually, but we never let the
+         actual clickable box shrink below 44×44. */
+      min-width: 44px;
+      min-height: 44px;
+    }
+    .switch-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      width: 100%;
+      height: 100%;
+    }
+    .switch-body.is-on {
+      box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.6);
+    }
+    .switch-body.is-off {
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.5);
+    }
     .switch-body .switch-track {
       width: 28px;
       height: 14px;
@@ -522,6 +626,18 @@ export class FlowmeCard extends LitElement {
       justify-content: center;
       background: rgba(255, 255, 255, 0.08);
       border-radius: 6px;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .camera-icon {
+      width: 40%;
+      max-width: 48px;
+      max-height: 48px;
+      opacity: 0.9;
+    }
+    .overlay-camera {
+      padding: 2px;
+      background: rgba(8, 8, 8, 0.75);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
     }
     .camera-label {
       position: absolute;

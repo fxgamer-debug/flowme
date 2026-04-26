@@ -161,14 +161,49 @@ function renderButton(overlay: OverlayConfig, hass: HomeAssistant | undefined): 
   `;
 }
 
+/**
+ * Camera snapshots advance every 10 seconds. We bucket the cache-bust
+ * timestamp to a 10 s grid so all camera overlays on the card share the
+ * same underlying image request when pointed at the same entity — this
+ * stops LitElement re-rendering thrashing the browser cache once per
+ * frame. When the entity is `unavailable` / `unknown` / missing or has
+ * no `entity_picture`, we render a grey placeholder with an SVG camera
+ * glyph so the user sees the overlay location even while cameras are
+ * offline.
+ */
+const CAMERA_REFRESH_MS = 10_000;
+
+function cameraBustToken(): number {
+  return Math.floor(Date.now() / CAMERA_REFRESH_MS);
+}
+
 function renderCamera(overlay: OverlayConfig, hass: HomeAssistant | undefined): TemplateResult {
   const state = overlay.entity ? hass?.states[overlay.entity] : undefined;
   const picture = state?.attributes?.['entity_picture'] as string | undefined;
+  const offline =
+    !state || state.state === 'unavailable' || state.state === 'unknown' || !picture;
+  const src = picture
+    ? `${picture}${picture.includes('?') ? '&' : '?'}flowme_bust=${cameraBustToken()}`
+    : '';
   return html`
     <div class="overlay-body camera-body">
-      ${picture
-        ? html`<img class="camera-frame" src=${picture} alt=${overlay.entity ?? ''} />`
-        : html`<div class="camera-placeholder">${overlay.label ?? 'camera'}</div>`}
+      ${offline
+        ? html`
+            <div class="camera-placeholder" title=${overlay.entity ?? 'camera offline'}>
+              <svg
+                class="camera-icon"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  fill="currentColor"
+                  d="M9.4 5 8 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4l-1.4-2zM12 10a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"
+                />
+              </svg>
+            </div>
+          `
+        : html`<img class="camera-frame" src=${src} alt=${overlay.entity ?? ''} />`}
       ${overlay.label ? html`<div class="camera-label">${overlay.label}</div>` : nothing}
     </div>
   `;

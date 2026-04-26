@@ -100,6 +100,68 @@ describe('flowme-card smoke test (happy-dom)', () => {
     expect(Array.isArray(stub.nodes)).toBe(true);
   });
 
+  it('renders a node value using the sensor unit_of_measurement (no doubling with profile.unit_label)', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      nodes: [
+        { id: 'src', position: { x: 10, y: 50 }, entity: 'sensor.power', show_value: true },
+        { id: 'dst', position: { x: 90, y: 50 } },
+      ],
+    });
+    card.hass = {
+      states: {
+        'sensor.power': {
+          entity_id: 'sensor.power',
+          state: '1',
+          attributes: { unit_of_measurement: 'W' },
+        },
+      },
+    } as HomeAssistant;
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const html = card.shadowRoot!.innerHTML;
+    // Happy-dom strips a lot but the value text must NOT have the unit twice.
+    expect(html).not.toContain('W W');
+  });
+
+  it('camera overlay renders a placeholder SVG icon when entity_picture is missing', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      overlays: [
+        {
+          id: 'cam1',
+          type: 'camera',
+          entity: 'camera.unreachable',
+          position: { x: 50, y: 50 },
+          size: { width: 16, height: 16 },
+        },
+      ],
+    });
+    card.hass = {
+      states: {
+        'camera.unreachable': {
+          entity_id: 'camera.unreachable',
+          state: 'unavailable',
+          attributes: {},
+        },
+      },
+    } as HomeAssistant;
+    document.body.appendChild(card);
+    await card.updateComplete;
+    expect(card.shadowRoot!.innerHTML).toContain('camera-placeholder');
+    expect(card.shadowRoot!.innerHTML).toContain('camera-icon');
+  });
+
   it('getLayoutOptions + getGridOptions return grid hints so HA stops warning about resizing', () => {
     const card = document.createElement('flowme-card') as HTMLElement & {
       setConfig: (c: unknown) => void;

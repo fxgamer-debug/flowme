@@ -12,6 +12,24 @@ import type { FlowRenderer } from './types.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
+/**
+ * `?flowme_debug=1` → bypasses visibility_threshold, forces a 2000 ms
+ * animation on every flow and logs each particle-build step. Used to
+ * prove the animation engine itself works without depending on real
+ * sensor values. See README "Troubleshooting → no animation".
+ */
+function readDebugMode(): boolean {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    return p.get('flowme_debug') === '1';
+  } catch {
+    return false;
+  }
+}
+
+const DEBUG = readDebugMode();
+const DEBUG_DUR_MS = 2000;
+
 const DEFAULT_PARTICLE_COUNT = 3;
 const DOT_RADIUS = 5; // px
 const SQUARE_SIZE = 9; // px
@@ -84,6 +102,10 @@ export class SvgRenderer implements FlowRenderer {
 
   updateFlow(flowId: string, value: number): void {
     if (!this.flowsById.has(flowId)) return;
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.debug(`[flowme][svg] updateFlow(${flowId}) value=${value}`);
+    }
     this.latestValues.set(flowId, value);
     this.applyUpdate();
   }
@@ -216,9 +238,9 @@ export class SvgRenderer implements FlowRenderer {
     if (!flow || !dom) return;
 
     const profile = this.profileFor(flow);
-    const threshold = flow.threshold ?? profile.visibility_threshold;
+    const threshold = DEBUG ? 0 : flow.threshold ?? profile.visibility_threshold;
     const magnitude = Math.abs(value);
-    const visible = magnitude >= threshold;
+    const visible = DEBUG || magnitude >= threshold;
 
     if (!visible) {
       this.setGroupVisible(dom, false);
@@ -227,8 +249,16 @@ export class SvgRenderer implements FlowRenderer {
     this.setGroupVisible(dom, true);
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    const durMs = Math.max(50, profile.speed_curve(magnitude) * speedMultiplier);
+    const durMs = DEBUG
+      ? DEBUG_DUR_MS
+      : Math.max(50, profile.speed_curve(magnitude) * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.debug(
+        `[flowme][svg] applyFlow(${flowId}) dur=${durMs}ms dir=${direction} shape=${dom.shape}`,
+      );
+    }
     const color =
       direction > 0
         ? flow.color_positive ?? profile.default_color_positive
