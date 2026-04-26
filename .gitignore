@@ -1,0 +1,10 @@
+node_modules
+coverage
+.DS_Store
+*.log
+.vite
+.vitest
+.eslintcache
+tsconfig.tsbuildinfo
+
+# dist/ is intentionally NOT ignored — HACS distributes the built bundle directly
