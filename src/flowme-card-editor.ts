@@ -20,12 +20,21 @@ import {
 } from './editor/commands.js';
 import './editor/toolbar.js';
 import type { ToolbarAction } from './editor/toolbar.js';
+import { suggestPath } from './pathfinding/index.js';
+import type { Point } from './pathfinding/types.js';
 
 type DragTarget =
   | { kind: 'node'; id: string }
   | { kind: 'waypoint'; flowId: string; index: number };
 
 type PendingAction = null | { kind: 'add-node' } | { kind: 'add-flow'; step: 'pick-from' } | { kind: 'add-flow'; step: 'pick-to'; fromId: string };
+
+interface SuggestPreview {
+  flowId: string;
+  waypoints: Point[];
+  edgesUsable: boolean;
+  elapsedMs: number;
+}
 
 /**
  * v0.2 editor — full drag + undo/redo with waypoints, snap, and keyboard
@@ -54,6 +63,8 @@ export class FlowmeCardEditor extends LitElement {
   @state() private canRedo = false;
   @state() private undoLabel = '';
   @state() private redoLabel = '';
+  @state() private suggestPreview: SuggestPreview | null = null;
+  @state() private suggestBusy = false;
 
   private readonly stageRef: Ref<HTMLDivElement> = createRef();
   private undoStack = new UndoStack((next) => this.applyConfig(next, /*commitToHa*/ false));
@@ -107,7 +118,7 @@ export class FlowmeCardEditor extends LitElement {
           .previewMode=${this.previewMode}
           .undoLabel=${this.undoLabel}
           .redoLabel=${this.redoLabel}
-          .suggestPathDisabled=${true}
+          .suggestPathDisabled=${this.selectedFlowId === null || this.suggestBusy}
           @toolbar-action=${this.onToolbarAction}
         ></flowme-editor-toolbar>
         ${this.statusMessage ? html`<div class="status">${this.statusMessage}</div>` : nothing}
@@ -127,7 +138,9 @@ export class FlowmeCardEditor extends LitElement {
           </svg>
           ${this.config.flows.map((f) => this.renderWaypointHandles(f))}
           ${this.config.nodes.map((n) => this.renderHandle(n))}
+          ${this.renderSuggestPreview()}
         </div>
+        ${this.renderSuggestBar()}
         ${this.renderInspector()}
         ${this.errorMessage ? html`<pre class="error">${this.errorMessage}</pre>` : nothing}
       </div>
@@ -268,7 +281,7 @@ export class FlowmeCardEditor extends LitElement {
         this.statusMessage = 'Click the source node.';
         break;
       case 'suggest-path':
-        this.statusMessage = 'Auto-routing arrives in v0.3.';
+        void this.runSuggestPath();
         break;
       case 'undo':
         this.undoStack.undo();
@@ -288,6 +301,115 @@ export class FlowmeCardEditor extends LitElement {
         break;
     }
   };
+
+  // -- suggest path --
+
+  private async runSuggestPath(): Promise<void> {
+    if (!this.config || !this.selectedFlowId) {
+      this.statusMessage = 'Select a flow first — then use Suggest path.';
+      return;
+    }
+    const flow = this.config.flows.find((f) => f.id === this.selectedFlowId);
+    if (!flow) return;
+    const fromNode = this.config.nodes.find((n) => n.id === flow.from_node);
+    const toNode = this.config.nodes.find((n) => n.id === flow.to_node);
+    if (!fromNode || !toNode) {
+      this.statusMessage = 'Flow is missing a source or destination node.';
+      return;
+    }
+
+    this.suggestBusy = true;
+    this.statusMessage = 'Analysing background…';
+    try {
+      const result = await suggestPath({
+        imageUrl: this.config.background.default,
+        from: fromNode.position,
+        to: toNode.position,
+      });
+      if (!result.edgesUsable) {
+        this.statusMessage =
+          'Could not analyse the background image (likely a CORS issue). Serve it from the same origin as Home Assistant and try again.';
+        this.suggestPreview = null;
+        return;
+      }
+      if (result.waypoints.length === 0) {
+        this.statusMessage = 'No waypoints suggested — a straight line already follows the strongest path.';
+        this.suggestPreview = null;
+        return;
+      }
+      this.suggestPreview = {
+        flowId: flow.id,
+        waypoints: result.waypoints,
+        edgesUsable: result.edgesUsable,
+        elapsedMs: result.elapsedMs,
+      };
+      this.statusMessage = `Preview: ${result.waypoints.length} waypoint(s) in ${Math.round(
+        result.elapsedMs,
+      )} ms. Accept to apply.`;
+    } catch (err) {
+      this.statusMessage =
+        'Auto-route failed: ' + (err instanceof Error ? err.message : String(err));
+      this.suggestPreview = null;
+    } finally {
+      this.suggestBusy = false;
+    }
+  }
+
+  private acceptSuggestion(): void {
+    if (!this.config || !this.suggestPreview) return;
+    const { flowId, waypoints } = this.suggestPreview;
+    const prev = this.config;
+    const next: FlowmeConfig = {
+      ...prev,
+      flows: prev.flows.map((f) =>
+        f.id === flowId ? { ...f, waypoints: waypoints.map((w) => ({ x: w.x, y: w.y })) } : f,
+      ),
+    };
+    this.suggestPreview = null;
+    this.statusMessage = 'Applied suggested waypoints.';
+    this.pushPatch(prev, next, `auto-route ${flowId}`);
+  }
+
+  private cancelSuggestion(): void {
+    this.suggestPreview = null;
+    this.statusMessage = 'Suggestion dismissed.';
+  }
+
+  private renderSuggestPreview(): TemplateResult | typeof nothing {
+    if (!this.suggestPreview || !this.config) return nothing;
+    const flow = this.config.flows.find((f) => f.id === this.suggestPreview!.flowId);
+    if (!flow) return nothing;
+    const fromNode = this.config.nodes.find((n) => n.id === flow.from_node);
+    const toNode = this.config.nodes.find((n) => n.id === flow.to_node);
+    if (!fromNode || !toNode) return nothing;
+    const points: Point[] = [
+      fromNode.position,
+      ...this.suggestPreview.waypoints,
+      toNode.position,
+    ];
+    const polyline = points.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+    return html`
+      <svg class="suggest-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polyline points=${polyline} />
+      </svg>
+      ${this.suggestPreview.waypoints.map(
+        (wp) => html`
+          <div class="suggest-marker" style=${`left: ${wp.x}%; top: ${wp.y}%;`}></div>
+        `,
+      )}
+    `;
+  }
+
+  private renderSuggestBar(): TemplateResult | typeof nothing {
+    if (!this.suggestPreview) return nothing;
+    return html`
+      <div class="suggest-bar">
+        <span>Preview — ${this.suggestPreview.waypoints.length} waypoint(s)</span>
+        <button @click=${this.acceptSuggestion}>Accept</button>
+        <button class="ghost" @click=${this.cancelSuggestion}>Cancel</button>
+      </div>
+    `;
+  }
 
   // -- stage interactions --
 
@@ -746,6 +868,59 @@ export class FlowmeCardEditor extends LitElement {
       border-radius: 6px;
       font-size: 12px;
       white-space: pre-wrap;
+    }
+    .suggest-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .suggest-overlay polyline {
+      fill: none;
+      stroke: #f59e0b;
+      stroke-width: 1;
+      stroke-dasharray: 2 2;
+      vector-effect: non-scaling-stroke;
+    }
+    .suggest-marker {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #f59e0b;
+      border: 2px solid rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+    }
+    .suggest-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      font-size: 12px;
+    }
+    .suggest-bar span {
+      flex: 1;
+    }
+    .suggest-bar button {
+      font: inherit;
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: none;
+      background: #f59e0b;
+      color: #111;
+      cursor: pointer;
+    }
+    .suggest-bar button.ghost {
+      background: transparent;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.15));
+      color: var(--primary-text-color, inherit);
     }
   `;
 }

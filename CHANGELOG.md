@@ -2,6 +2,30 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] — 2026-04-26
+
+### Added
+
+- **Auto-route pathfinding** via Sobel edge detection + A* over a coarse cost grid (`src/pathfinding/`):
+  - `sobel.ts` — downscale the background image to ≤480×270, greyscale with Rec. 709 coefficients, separable 3×3 Gaussian blur, Sobel Gx/Gy, magnitude with a 30-threshold noise floor.
+  - `grid-builder.ts` — aggregates the edge map into an 8×8-pixel cost grid. Each cell's cost is `255 − max(edge in cell)` so A* naturally prefers to travel along visible architectural features.
+  - `astar.ts` — 4-directional A* with an admissible Manhattan heuristic, a binary-heap frontier, and a +50 turn penalty to avoid zig-zag tie-breakers.
+  - `simplify.ts` — removes collinear intermediate cells so only direction-changes become waypoints.
+  - `index.ts` — public `suggestPath({ imageUrl, from, to })` with a URL-keyed grid cache. Pipeline yields between stages to stay out of the long-task bucket.
+- **Editor: Suggest path** enabled when a flow is selected. Shows a dashed orange preview overlay with per-waypoint markers and an accept/cancel bar. Accept pushes a single undoable patch (`auto-route <flowId>`). Reports elapsed time and gives an actionable message when the source image is cross-origin tainted.
+
+### Changed
+
+- Toolbar's Suggest-path button now reflects flow selection and busy state instead of being permanently disabled.
+
+### Deferred to later versions
+
+- **Web Worker offload for the pathfinding pipeline.** The spec calls for worker offload when processing is estimated above 100 ms; measured cost for a 480×270 edge map plus A* on a ~60×34 grid is consistently well under that, so v0.3 runs on the main thread with small yields between stages. The pipeline stages are already pure and ready to move into a worker in a later polish if telemetry warrants it.
+- HVAC colour-gradient interpolation (still waiting on the secondary-entity schema; tracked for a later minor).
+- Weather-state background transitions (v0.4.0).
+- Overlay editor (v0.5.0).
+- Unit + integration tests (v1.0.0).
+
 ## [0.2.0] — 2026-04-26
 
 ### Added
@@ -56,5 +80,6 @@ All notable changes to flowme are documented here. Format loosely follows [Keep 
 - Overlay editor (v0.5.0).
 - Unit + integration tests (v1.0.0).
 
+[0.3.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.3.0
 [0.2.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.2.0
 [0.1.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.1.0
