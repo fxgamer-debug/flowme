@@ -9,6 +9,7 @@ import {
   pointAtProgress,
   polylineToSvgPath,
   parseSensorValue,
+  scaleSensorValue,
   debounce,
   parseAspectRatio,
 } from '../../src/utils.js';
@@ -133,6 +134,56 @@ describe('parseSensorValue', () => {
     expect(parseSensorValue(17)).toBe(17);
     expect(parseSensorValue(Number.NaN)).toBe(0);
     expect(parseSensorValue(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+});
+
+describe('scaleSensorValue', () => {
+  const energyScale = { W: 1, kW: 1000, MW: 1_000_000, mW: 1e-3 };
+
+  it('returns the value untouched when no scale map is supplied', () => {
+    const r = scaleSensorValue(2.5, 'kW', undefined);
+    expect(r.value).toBe(2.5);
+    expect(r.factor).toBe(1);
+    expect(r.matchedUnit).toBeUndefined();
+  });
+
+  it('returns the value untouched when the sensor has no unit attribute', () => {
+    const r = scaleSensorValue(2.5, undefined, energyScale);
+    expect(r.value).toBe(2.5);
+    expect(r.factor).toBe(1);
+    expect(r.matchedUnit).toBeUndefined();
+  });
+
+  it('scales kW → W (the v1.0.4 recalibration fix)', () => {
+    const r = scaleSensorValue(2.5, 'kW', energyScale);
+    expect(r.value).toBe(2500);
+    expect(r.factor).toBe(1000);
+    expect(r.matchedUnit).toBe('kW');
+  });
+
+  it('is case-insensitive so HA locales that report "KW" or "kw" still work', () => {
+    expect(scaleSensorValue(1, 'KW', energyScale).value).toBe(1000);
+    expect(scaleSensorValue(1, 'kw', energyScale).value).toBe(1000);
+    expect(scaleSensorValue(1, ' kW ', energyScale).value).toBe(1000);
+  });
+
+  it('scales MW → W and mW → W', () => {
+    expect(scaleSensorValue(1, 'MW', energyScale).value).toBe(1_000_000);
+    expect(scaleSensorValue(500, 'mW', energyScale).value).toBeCloseTo(0.5);
+  });
+
+  it('passes through unknown units (assumed to already be in base unit)', () => {
+    const r = scaleSensorValue(42, 'gigawatts-of-love', energyScale);
+    expect(r.value).toBe(42);
+    expect(r.factor).toBe(1);
+    expect(r.matchedUnit).toBeUndefined();
+  });
+
+  it('applies the W identity factor so explicitly-watts sensors log a real match', () => {
+    const r = scaleSensorValue(750, 'W', energyScale);
+    expect(r.value).toBe(750);
+    expect(r.factor).toBe(1);
+    expect(r.matchedUnit).toBe('W');
   });
 });
 

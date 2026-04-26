@@ -3,11 +3,23 @@ import { clamp } from '../utils.js';
 
 /**
  * Energy profile: dot trail, glow, watts to speed.
- * Spec §"Default flow profiles — concrete parameters → Energy".
  *
- * Speed curve: at 100W = 4000ms, at 1000W = 2000ms, at 5000W = 800ms-ish,
- * at 10000W = 500ms-ish. Clamped to [400, 8000] ms.
- *   dur_ms = clamp(8000 - log10(value/10) * 2000, 400, 8000)
+ * Speed curve (anchors, verified by `tests/unit/flow-profiles.test.ts`):
+ *   10 W    → 8000 ms   (slow dribble at idle)
+ *   100 W   → 6000 ms
+ *   1000 W  → 4000 ms
+ *   10 kW   → 2000 ms   (fast visible flow at inverter peak)
+ *   clamped to [400 ms, 8000 ms].
+ *
+ * Formula: `dur = clamp(8000 - log10(magnitude / 10) * 2000, 400, 8000)`.
+ *
+ * **Inputs are in WATTS.** The card auto-converts kW / MW / mW sensors to
+ * watts via `unit_scale` below before they reach this curve, so users with
+ * HA power sensors that natively report kW (inverters, EV chargers, large
+ * appliances) get the same animation feel as users whose sensors report W.
+ * Prior to v1.0.4 a kW sensor fed raw into this curve (e.g. `2.0` for
+ * 2 kW) produced `log10(0.2) = -0.7` and clamped to the 8000 ms ceiling,
+ * making every flow look frozen.
  */
 export const energyProfile: FlowProfile = {
   domain: 'energy',
@@ -16,10 +28,17 @@ export const energyProfile: FlowProfile = {
   shape: 'dot',
   glow: true,
   unit_label: 'W',
-  // Lowered from 10 → 1 W in v1.0.2 so real idle loads (a single LED bulb
-  // at 2 W, a router at 6 W, a fridge compressor dipping to 3 W) still
-  // render a visible flow. Users can still raise this per-flow via
-  // `threshold:` in YAML if they want to mute truly trivial values.
+  unit_scale: {
+    W: 1,
+    Wh: 1, // tolerate energy-as-power sensors, no-op conversion
+    kW: 1000,
+    kWh: 1000,
+    MW: 1_000_000,
+    mW: 1e-3,
+  },
+  // Lowered from 10 → 1 W in v1.0.2. Matches the profile's base unit
+  // (watts) — flows on a kW sensor are normalised to watts before this
+  // comparison runs, so a 0.5 kW draw is tested as 500 W ≥ 1 W ✓.
   visibility_threshold: 1,
 
   speed_curve(value: number): number {

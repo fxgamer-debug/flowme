@@ -127,9 +127,27 @@ export interface FlowProfile {
   default_color_negative: string;
   shape: FlowShape;
   glow: boolean;
-  /** Unit label, e.g. 'W', 'L/min', 'Mbps'. */
+  /** Unit label, e.g. 'W', 'L/min', 'Mbps'. This is the profile's *base*
+   *  unit — every number the `speed_curve`, `visibility_threshold` and
+   *  `describe` see is in this unit. */
   unit_label: string;
-  /** Map a sensor value to a one-cycle animation duration in milliseconds. */
+  /**
+   * Optional multiplicative scaling table from a sensor's reported
+   * `unit_of_measurement` to the profile's base unit. When set, the card
+   * auto-converts kW / MW / mW → W (etc.) before pushing the value to the
+   * renderer so users don't have to add a `value_multiplier` to every flow.
+   *
+   * Example (energy): `{ W: 1, kW: 1000, MW: 1_000_000, mW: 1e-3 }`. A
+   * sensor reporting `2.5` with `unit_of_measurement: 'kW'` is scaled to
+   * `2500` before `speed_curve(2500)` runs. Unknown / missing units leave
+   * the value untouched (assumed to already be in the base unit — keeps
+   * backward compat with v1.0.2 configs).
+   *
+   * Keys are matched case-insensitively.
+   */
+  unit_scale?: Readonly<Record<string, number>>;
+  /** Map a sensor value (in the profile's base unit) to a one-cycle
+   *  animation duration in milliseconds. */
   speed_curve: (value: number) => number;
   /**
    * Particle count per flow as a function of value. Used by shapes that

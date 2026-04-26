@@ -2,6 +2,25 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.4] — 2026-04-26
+
+Energy profile recalibration for kW-reporting power sensors.
+
+### Fixed
+
+- **Flows appeared frozen on dashboards with kW sensors.** The energy `speed_curve` is defined over watts — `dur = clamp(8000 - log10(magnitude/10) * 2000, 400, 8000)` — but if a sensor reports `2.0` with `unit_of_measurement: 'kW'` the curve received `2` instead of `2000`, producing `log10(0.2) = -0.7` and clamping to the 8000 ms ceiling. The fix adds a per-profile `unit_scale` map; the card now reads `state.attributes.unit_of_measurement`, looks it up against the profile's scale table, and multiplies the raw parsed value into the profile's base unit before calling `renderer.updateFlow`. A 2 kW grid draw now reaches the curve as 2000 W and animates at ~3000 ms as expected. Unknown or missing units pass through unchanged so v1.0.2 configs that implicitly fed watts keep working.
+
+### Added
+
+- `FlowProfile.unit_scale?: Readonly<Record<string, number>>` — declares the unit → base-unit conversion table. Energy profile ships with `{ W: 1, Wh: 1, kW: 1000, kWh: 1000, MW: 1e6, mW: 1e-3 }`. Matching is case-insensitive and trimmed so HA locales that report `KW`, `kw`, or `" kW "` all resolve correctly. Other profiles can opt in the same way when their domains have common alternate units (MB/s vs Mbps for network, °F vs °C for HVAC — not implemented yet, just the mechanism is there).
+- `scaleSensorValue(value, unitAttr, scaleMap)` utility alongside `parseSensorValue`, returning `{ value, factor, matchedUnit }` so the `[FlowMe]` debug channel can log exactly which unit was matched and what multiplier was applied next to every `updateFlow` call.
+- New unit tests: six `scaleSensorValue` cases (kW, KW, kw, MW, mW, pass-through, identity-W) and a regression test on `energyProfile.unit_scale` pinning the four primary factors so the kW bug can never silently regress.
+
+### Unchanged (for the record)
+
+- Node value display still reads the sensor's native unit via `state.attributes.unit_of_measurement` and shows the native value (`1.5 kW`, not `1500 W`) — the unit scaling only runs on the renderer-input path, not on the display path. The "1 W W" doubled-unit guard added in v1.0.2 still applies.
+- The `energy.speed_curve` formula itself is unchanged. The header comment used to claim anchor points of `100 W → 4000 ms` / `1000 W → 2000 ms`, but the code and the test-suite both always produced `6000` / `4000`. Comment rewritten to match reality (`10 W → 8000 / 100 W → 6000 / 1 kW → 4000 / 10 kW → 2000`, clamped to 400–8000 ms).
+
 ## [1.0.3] — 2026-04-26
 
 **Diagnostic build.** No rendering logic was changed from v1.0.2 — only extensive `console.warn` instrumentation prefixed `[FlowMe]` and `[FlowMe Renderer]` was added so we can see the runtime values of every relevant code path while we track down the persistent "no animation / wrong colours / doubled units" report. The next patch release will contain the actual fix once the logs identify which stage is breaking.

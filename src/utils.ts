@@ -99,6 +99,47 @@ export function parseSensorValue(raw: string | number | null | undefined): numbe
 }
 
 /**
+ * Scale a sensor value into the profile's base unit using the profile's
+ * `unit_scale` map. Matching is **exact-first, then case-insensitive** —
+ * exact is required because some SI unit pairs only differ by case
+ * (milliwatt `mW` vs megawatt `MW`, picking the wrong one is a 1e9 error).
+ * Once no exact match exists, a case-insensitive lookup helps tolerate
+ * HA locales that report `KW` or `kw` for kilowatt. An unknown or missing
+ * unit leaves the value untouched so v1.0.2 configs that implicitly fed
+ * watts keep working.
+ *
+ * Returns the scale factor alongside the scaled value so callers can log
+ * exactly which unit was matched and what multiplier was applied — this
+ * is what the `[FlowMe]` debug channel shows next to every `updateFlow`.
+ */
+export function scaleSensorValue(
+  value: number,
+  unitAttr: string | undefined,
+  scaleMap: Readonly<Record<string, number>> | undefined,
+): { value: number; factor: number; matchedUnit?: string } {
+  if (!scaleMap || !unitAttr) return { value, factor: 1 };
+  const target = unitAttr.trim();
+  if (!target) return { value, factor: 1 };
+  // Exact match first (preserves mW vs MW semantics).
+  if (Object.prototype.hasOwnProperty.call(scaleMap, target)) {
+    const factor = scaleMap[target] ?? 1;
+    return { value: value * factor, factor, matchedUnit: target };
+  }
+  // Case-insensitive fallback only if unambiguous — if the lowercased
+  // target matches multiple keys (e.g. both `MW` and `mW` would
+  // lowercase to `mw`), give up rather than guess.
+  const targetLower = target.toLowerCase();
+  const ciMatches = Object.entries(scaleMap).filter(
+    ([k]) => k.toLowerCase() === targetLower,
+  );
+  if (ciMatches.length === 1) {
+    const [k, factor] = ciMatches[0]!;
+    return { value: value * factor, factor, matchedUnit: k };
+  }
+  return { value, factor: 1 };
+}
+
+/**
  * Light debounce helper. Accumulates calls inside `wait` ms and fires once
  * with the most recent args. `cancel()` drops any pending trailing call.
  */

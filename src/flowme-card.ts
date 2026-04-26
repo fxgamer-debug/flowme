@@ -12,13 +12,13 @@ import { createRenderer } from './animation/renderer-factory.js';
 import { SvgRenderer } from './animation/svg-renderer.js';
 import type { FlowRenderer } from './animation/types.js';
 import { getProfile } from './flow-profiles/index.js';
-import { parseAspectRatio, parseSensorValue } from './utils.js';
+import { parseAspectRatio, parseSensorValue, scaleSensorValue } from './utils.js';
 import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
 import { dlog } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.3';
+const CARD_VERSION = '1.0.4';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -204,8 +204,20 @@ export class FlowmeCard extends LitElement {
       dlog('willUpdate hass-changed → pushing values for', this.config.flows.length, 'flow(s) to renderer', this.renderer.constructor.name);
       for (const flow of this.config.flows) {
         const state = this.hass.states[flow.entity];
-        const parsed = parseSensorValue(state?.state);
-        dlog('updateFlow →', flow.id, 'entity=', flow.entity, 'raw=', state?.state, 'parsed=', parsed);
+        const rawParsed = parseSensorValue(state?.state);
+        const profile = getProfile(flow.domain ?? this.config.domain);
+        const sensorUnit = state?.attributes?.['unit_of_measurement'] as string | undefined;
+        const scaled = scaleSensorValue(rawParsed, sensorUnit, profile.unit_scale);
+        dlog(
+          'updateFlow →', flow.id,
+          'entity=', flow.entity,
+          'raw=', state?.state,
+          'parsed=', rawParsed,
+          'sensorUnit=', sensorUnit ?? '(none)',
+          'matchedUnit=', scaled.matchedUnit ?? '(none → passthrough)',
+          'factor=', scaled.factor,
+          'scaledToBase(' + profile.unit_label + ')=', scaled.value,
+        );
         if (!state) {
           const key = `${flow.id}:${flow.entity}`;
           if (!this.warnedMissing.has(key)) {
@@ -223,8 +235,7 @@ export class FlowmeCard extends LitElement {
             );
           }
         }
-        const value = parseSensorValue(state?.state);
-        this.renderer.updateFlow(flow.id, value);
+        this.renderer.updateFlow(flow.id, scaled.value);
       }
     }
 

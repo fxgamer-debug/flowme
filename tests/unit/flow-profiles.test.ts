@@ -32,6 +32,21 @@ describe('energyProfile', () => {
     expect(energyProfile.describe(1000)).toBe('1.00 kW');
     expect(energyProfile.describe(2543)).toBe('2.54 kW');
   });
+
+  it('exposes a unit_scale map covering the power units HA reports in the wild', () => {
+    // Regression guard for the v1.0.4 kW-recalibration fix. A kW sensor
+    // used to feed the curve at `log10(value/10)` where `value` was in
+    // kW — so a 2 kW grid draw produced `log10(0.2) = -0.7` and clamped
+    // to the 8000 ms ceiling (every flow looked frozen). The card now
+    // multiplies by `unit_scale[kW] = 1000` before handing the value to
+    // the curve, so 2 kW reaches the curve as 2000 W and animates at a
+    // sensible speed.
+    expect(energyProfile.unit_scale).toBeDefined();
+    expect(energyProfile.unit_scale!.W).toBe(1);
+    expect(energyProfile.unit_scale!.kW).toBe(1000);
+    expect(energyProfile.unit_scale!.MW).toBe(1_000_000);
+    expect(energyProfile.unit_scale!.mW).toBeCloseTo(0.001);
+  });
 });
 
 describe('waterProfile', () => {
