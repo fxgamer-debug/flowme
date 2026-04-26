@@ -15,7 +15,8 @@ import { getProfile } from './flow-profiles/index.js';
 import { parseAspectRatio, parseSensorValue } from './utils.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '0.1.0';
+const CARD_VERSION = '0.4.0';
+const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
 console.info(
@@ -34,15 +35,32 @@ export class FlowmeCard extends LitElement {
   private readonly rendererMount: Ref<HTMLDivElement> = createRef();
   private rendererReadyFor?: FlowmeConfig;
 
+  /**
+   * Two stacked background layers for weather-aware crossfades. `activeLayer`
+   * is the one currently fully opaque; swaps happen on the inactive one so
+   * the visible image is never torn.
+   */
+  @state() private bgLayerA = '';
+  @state() private bgLayerB = '';
+  @state() private activeLayer: 'A' | 'B' = 'A';
+  private transitionTimer: number | null = null;
+  private preloadCache = new Map<string, HTMLImageElement>();
+  private lastAppliedBgUrl = '';
+
   setConfig(raw: unknown): void {
     try {
       const config = validateConfig(raw);
       this.config = config;
       this.errorMessage = undefined;
-      // if renderer was already init'd for a previous config, reinit on next update
       if (this.rendererReadyFor && this.rendererReadyFor !== config) {
         this.teardownRenderer();
       }
+      // seed both layers with the default image on first load — no crossfade
+      const initial = config.background.default;
+      this.bgLayerA = initial;
+      this.bgLayerB = '';
+      this.activeLayer = 'A';
+      this.lastAppliedBgUrl = initial;
     } catch (err) {
       const message = err instanceof FlowmeConfigError ? err.message : String(err);
       this.config = undefined;
@@ -57,6 +75,10 @@ export class FlowmeCard extends LitElement {
 
   override disconnectedCallback(): void {
     this.teardownRenderer();
+    if (this.transitionTimer !== null) {
+      window.clearTimeout(this.transitionTimer);
+      this.transitionTimer = null;
+    }
     super.disconnectedCallback();
   }
 
@@ -64,7 +86,6 @@ export class FlowmeCard extends LitElement {
     if (!this.config) return;
     const mount = this.rendererMount.value;
 
-    // initialise the renderer once the mount element is live and config valid
     if (mount && this.rendererReadyFor !== this.config) {
       this.teardownRenderer();
       this.renderer = createRenderer();
@@ -72,13 +93,16 @@ export class FlowmeCard extends LitElement {
       void this.renderer.init(mount, this.config);
     }
 
-    // push fresh sensor values on any hass update
     if (changed.has('hass') && this.renderer && this.hass) {
       for (const flow of this.config.flows) {
         const state = this.hass.states[flow.entity];
         const value = parseSensorValue(state?.state);
         this.renderer.updateFlow(flow.id, value);
       }
+    }
+
+    if (changed.has('config') || changed.has('hass')) {
+      this.syncWeatherBackground();
     }
   }
 
@@ -131,7 +155,7 @@ export class FlowmeCard extends LitElement {
 
     const aspect = parseAspectRatio(config.aspect_ratio) ?? 16 / 10;
     const paddingTop = `${(1 / aspect) * 100}%`;
-    const bgUrl = this.currentBackgroundUrl();
+    const transitionMs = config.background.transition_duration ?? DEFAULT_TRANSITION_MS;
 
     return html`
       <ha-card>
@@ -140,8 +164,12 @@ export class FlowmeCard extends LitElement {
           style=${`padding-top: ${paddingTop};`}
         >
           <div
-            class="background"
-            style=${bgUrl ? `background-image: url('${bgUrl}');` : ''}
+            class=${`background ${this.activeLayer === 'A' ? 'visible' : ''}`}
+            style=${this.buildLayerStyle(this.bgLayerA, transitionMs)}
+          ></div>
+          <div
+            class=${`background ${this.activeLayer === 'B' ? 'visible' : ''}`}
+            style=${this.buildLayerStyle(this.bgLayerB, transitionMs)}
           ></div>
           <div class="renderer-mount" ${ref(this.rendererMount)}></div>
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
@@ -151,7 +179,12 @@ export class FlowmeCard extends LitElement {
     `;
   }
 
-  private currentBackgroundUrl(): string {
+  private buildLayerStyle(url: string, transitionMs: number): string {
+    const bg = url ? `background-image: url('${url}');` : '';
+    return `${bg} transition-duration: ${transitionMs}ms;`;
+  }
+
+  private resolveTargetBackground(): string {
     const bg = this.config?.background;
     if (!bg) return '';
     if (bg.weather_entity && bg.weather_states && this.hass) {
@@ -162,6 +195,65 @@ export class FlowmeCard extends LitElement {
       }
     }
     return bg.default;
+  }
+
+  /**
+   * Swap to the target weather background if it changed. Preloads the new
+   * image first (so the crossfade doesn't fade in a blank layer), then
+   * assigns the URL to whichever layer is currently invisible and flips
+   * {@link activeLayer} to trigger the CSS opacity transition. After the
+   * transition duration elapses the old layer is cleared so it's ready for
+   * the next swap.
+   */
+  private syncWeatherBackground(): void {
+    if (!this.config) return;
+    const target = this.resolveTargetBackground();
+    if (!target) return;
+    if (target === this.lastAppliedBgUrl) return;
+
+    const transitionMs =
+      this.config.background.transition_duration ?? DEFAULT_TRANSITION_MS;
+    void this.preload(target).then(() => {
+      // config may have changed while preloading
+      if (!this.config || this.resolveTargetBackground() !== target) return;
+
+      if (this.transitionTimer !== null) {
+        window.clearTimeout(this.transitionTimer);
+      }
+
+      const incoming: 'A' | 'B' = this.activeLayer === 'A' ? 'B' : 'A';
+      if (incoming === 'A') this.bgLayerA = target;
+      else this.bgLayerB = target;
+
+      // force a frame so the inactive layer picks up the new image before we flip opacity
+      requestAnimationFrame(() => {
+        this.activeLayer = incoming;
+        this.lastAppliedBgUrl = target;
+        this.transitionTimer = window.setTimeout(() => {
+          // clear the now-hidden layer so it can accept the next swap without flash
+          if (this.activeLayer === 'A') this.bgLayerB = '';
+          else this.bgLayerA = '';
+          this.transitionTimer = null;
+        }, transitionMs + 50);
+      });
+    });
+  }
+
+  private preload(url: string): Promise<void> {
+    if (!url) return Promise.resolve();
+    const cached = this.preloadCache.get(url);
+    if (cached?.complete && cached.naturalWidth > 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        this.preloadCache.set(url, img);
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = url;
+      this.preloadCache.set(url, img);
+    });
   }
 
   private renderNodeHandle(node: NodeConfig): TemplateResult {
@@ -234,6 +326,12 @@ export class FlowmeCard extends LitElement {
       background-position: center;
       background-repeat: no-repeat;
       background-color: var(--ha-card-background, rgba(0, 0, 0, 0.04));
+      opacity: 0;
+      transition-property: opacity;
+      transition-timing-function: ease-in-out;
+    }
+    .background.visible {
+      opacity: 1;
     }
     .renderer-mount {
       position: absolute;

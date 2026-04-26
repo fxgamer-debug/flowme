@@ -183,3 +183,70 @@ export function setFlowEntity(
   for (const f of next.flows) if (f.id === flowId) f.entity = entity;
   return next;
 }
+
+export function setBackgroundDefault(config: FlowmeConfig, url: string): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.background.default = url;
+  return next;
+}
+
+export function setWeatherEntity(
+  config: FlowmeConfig,
+  entity: string | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  if (entity && entity.length) next.background.weather_entity = entity;
+  else delete next.background.weather_entity;
+  return next;
+}
+
+export function setTransitionDuration(
+  config: FlowmeConfig,
+  ms: number | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  if (ms === undefined || !Number.isFinite(ms)) delete next.background.transition_duration;
+  else next.background.transition_duration = Math.max(0, Math.floor(ms));
+  return next;
+}
+
+export function setWeatherStateImage(
+  config: FlowmeConfig,
+  stateKey: string,
+  url: string,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.background.weather_states ??= {};
+  next.background.weather_states[stateKey] = url;
+  return next;
+}
+
+export function deleteWeatherState(
+  config: FlowmeConfig,
+  stateKey: string,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  if (next.background.weather_states) {
+    delete next.background.weather_states[stateKey];
+    if (Object.keys(next.background.weather_states).length === 0) {
+      delete next.background.weather_states;
+    }
+  }
+  return next;
+}
+
+export function renameWeatherState(
+  config: FlowmeConfig,
+  oldKey: string,
+  newKey: string,
+): FlowmeConfig {
+  if (oldKey === newKey) return config;
+  const next = cloneConfig(config);
+  const map = next.background.weather_states;
+  if (!map || !(oldKey in map)) return config;
+  const url = map[oldKey];
+  if (url === undefined) return config;
+  delete map[oldKey];
+  map[newKey] = url;
+  return next;
+}

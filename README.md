@@ -2,7 +2,7 @@
 
 A generic Home Assistant custom Lovelace card that overlays animated flow lines and interactive elements on top of a user-supplied background image. Unlike existing energy-flow cards, flowme is **multi-domain** (energy, water, network, HVAC, gas, generic) and uses **arbitrary user-defined paths** drawn directly on your own background photo via a visual drag-and-drop editor.
 
-> Status: **v0.3.0** — all six domain flow profiles, Houdini Paint renderer with SVG fallback, full drag-and-drop editor, and one-click auto-routing via Sobel + A*.
+> Status: **v0.4.0** — all six domain flow profiles, Houdini Paint renderer with SVG fallback, full drag-and-drop editor, one-click auto-routing via Sobel + A*, and weather-aware background crossfades.
 
 ## Why flowme
 

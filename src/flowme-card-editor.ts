@@ -13,9 +13,15 @@ import {
   deleteFlow,
   deleteNode,
   deleteWaypoint,
+  deleteWeatherState,
   insertWaypoint,
   moveNode,
   moveWaypoint,
+  renameWeatherState,
+  setBackgroundDefault,
+  setTransitionDuration,
+  setWeatherEntity,
+  setWeatherStateImage,
   snapToGrid,
 } from './editor/commands.js';
 import './editor/toolbar.js';
@@ -142,6 +148,7 @@ export class FlowmeCardEditor extends LitElement {
         </div>
         ${this.renderSuggestBar()}
         ${this.renderInspector()}
+        ${this.renderWeatherPanel()}
         ${this.errorMessage ? html`<pre class="error">${this.errorMessage}</pre>` : nothing}
       </div>
     `;
@@ -267,6 +274,181 @@ export class FlowmeCardEditor extends LitElement {
     }
     return nothing;
   }
+
+  // -- weather backgrounds panel --
+
+  private static readonly KNOWN_WEATHER_STATES = [
+    'clear-night',
+    'cloudy',
+    'exceptional',
+    'fog',
+    'hail',
+    'lightning',
+    'lightning-rainy',
+    'partlycloudy',
+    'pouring',
+    'rainy',
+    'snowy',
+    'snowy-rainy',
+    'sunny',
+    'windy',
+    'windy-variant',
+  ] as const;
+
+  private renderWeatherPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    const bg = this.config.background;
+    const stateEntries = Object.entries(bg.weather_states ?? {});
+    return html`
+      <details class="weather-panel" ?open=${stateEntries.length > 0 || !!bg.weather_entity}>
+        <summary>Backgrounds &amp; weather</summary>
+        <div class="weather-body">
+          <label>
+            Default image URL
+            <input
+              type="text"
+              .value=${bg.default}
+              @change=${this.onDefaultBgChange}
+              placeholder="/local/flowme/house.jpg"
+            />
+            ${bg.default
+              ? html`<img class="weather-thumb" src=${bg.default} alt="default background" />`
+              : nothing}
+          </label>
+          <label>
+            Weather entity (optional)
+            <input
+              type="text"
+              .value=${bg.weather_entity ?? ''}
+              list="flowme-weather-entities"
+              @change=${this.onWeatherEntityChange}
+              placeholder="weather.home"
+            />
+          </label>
+          <datalist id="flowme-weather-entities">
+            ${this.weatherEntityOptions().map(
+              (id) => html`<option value=${id}></option>`,
+            )}
+          </datalist>
+          <label>
+            Transition duration (ms)
+            <input
+              type="number"
+              min="0"
+              step="100"
+              .value=${String(bg.transition_duration ?? 2000)}
+              @change=${this.onTransitionChange}
+            />
+          </label>
+          <div class="weather-states">
+            <div class="weather-states-header">
+              <span>State</span>
+              <span>Image URL</span>
+              <span></span>
+            </div>
+            ${stateEntries.map(
+              ([key, url]) => html`
+                <div class="weather-row" data-key=${key}>
+                  <input
+                    type="text"
+                    list="flowme-weather-states"
+                    .value=${key}
+                    @change=${(e: Event) => this.onWeatherStateKeyChange(key, e)}
+                  />
+                  <input
+                    type="text"
+                    .value=${url}
+                    @change=${(e: Event) => this.onWeatherStateUrlChange(key, e)}
+                    placeholder="/local/flowme/rainy.jpg"
+                  />
+                  <div class="weather-row-end">
+                    ${url
+                      ? html`<img class="weather-thumb" src=${url} alt=${key} />`
+                      : nothing}
+                    <button class="ghost" @click=${() => this.onWeatherStateRemove(key)}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              `,
+            )}
+            <datalist id="flowme-weather-states">
+              ${FlowmeCardEditor.KNOWN_WEATHER_STATES.map(
+                (s) => html`<option value=${s}></option>`,
+              )}
+            </datalist>
+            <button class="add-state" @click=${this.onWeatherStateAdd}>+ Add weather state</button>
+          </div>
+        </div>
+      </details>
+    `;
+  }
+
+  private weatherEntityOptions(): string[] {
+    if (!this.hass) return [];
+    return Object.keys(this.hass.states)
+      .filter((id) => id.startsWith('weather.'))
+      .sort();
+  }
+
+  private onDefaultBgChange = (event: Event): void => {
+    if (!this.config) return;
+    const value = (event.target as HTMLInputElement).value;
+    const prev = this.config;
+    const next = setBackgroundDefault(prev, value);
+    this.pushPatch(prev, next, 'edit default background');
+  };
+
+  private onWeatherEntityChange = (event: Event): void => {
+    if (!this.config) return;
+    const value = (event.target as HTMLInputElement).value.trim();
+    const prev = this.config;
+    const next = setWeatherEntity(prev, value || undefined);
+    this.pushPatch(prev, next, 'edit weather entity');
+  };
+
+  private onTransitionChange = (event: Event): void => {
+    if (!this.config) return;
+    const raw = (event.target as HTMLInputElement).value;
+    const parsed = Number(raw);
+    const prev = this.config;
+    const next = setTransitionDuration(prev, Number.isFinite(parsed) ? parsed : undefined);
+    this.pushPatch(prev, next, 'edit transition duration');
+  };
+
+  private onWeatherStateKeyChange(oldKey: string, event: Event): void {
+    if (!this.config) return;
+    const newKey = (event.target as HTMLInputElement).value.trim();
+    if (!newKey || newKey === oldKey) return;
+    const prev = this.config;
+    const next = renameWeatherState(prev, oldKey, newKey);
+    if (next === prev) return;
+    this.pushPatch(prev, next, `rename weather state ${oldKey}→${newKey}`);
+  }
+
+  private onWeatherStateUrlChange(key: string, event: Event): void {
+    if (!this.config) return;
+    const url = (event.target as HTMLInputElement).value;
+    const prev = this.config;
+    const next = setWeatherStateImage(prev, key, url);
+    this.pushPatch(prev, next, `edit weather image ${key}`);
+  }
+
+  private onWeatherStateRemove = (key: string): void => {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = deleteWeatherState(prev, key);
+    this.pushPatch(prev, next, `remove weather state ${key}`);
+  };
+
+  private onWeatherStateAdd = (): void => {
+    if (!this.config) return;
+    const existing = new Set(Object.keys(this.config.background.weather_states ?? {}));
+    const candidate = FlowmeCardEditor.KNOWN_WEATHER_STATES.find((s) => !existing.has(s)) ?? 'custom';
+    const prev = this.config;
+    const next = setWeatherStateImage(prev, candidate, '');
+    this.pushPatch(prev, next, `add weather state ${candidate}`);
+  };
 
   // -- toolbar --
 
@@ -921,6 +1103,108 @@ export class FlowmeCardEditor extends LitElement {
       background: transparent;
       border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.15));
       color: var(--primary-text-color, inherit);
+    }
+    .weather-panel {
+      margin: 0 12px 12px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
+      border-radius: 8px;
+      background: var(--secondary-background-color, rgba(255, 255, 255, 0.04));
+    }
+    .weather-panel summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .weather-panel summary::-webkit-details-marker {
+      display: none;
+    }
+    .weather-panel summary::before {
+      content: '▸ ';
+      font-size: 10px;
+      margin-right: 2px;
+    }
+    .weather-panel[open] summary::before {
+      content: '▾ ';
+    }
+    .weather-body {
+      padding: 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .weather-body label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+    }
+    .weather-body input[type='text'],
+    .weather-body input[type='number'] {
+      font: inherit;
+      padding: 4px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      background: var(--card-background-color, #1a1a1a);
+      color: var(--primary-text-color, #fff);
+    }
+    .weather-thumb {
+      margin-top: 4px;
+      width: 72px;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .weather-states {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .weather-states-header {
+      display: grid;
+      grid-template-columns: 1fr 2fr auto;
+      gap: 8px;
+      font-size: 11px;
+      opacity: 0.7;
+    }
+    .weather-row {
+      display: grid;
+      grid-template-columns: 1fr 2fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .weather-row-end {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .weather-row-end .weather-thumb {
+      margin-top: 0;
+    }
+    .weather-row-end button {
+      font: inherit;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.15));
+      background: transparent;
+      color: var(--primary-text-color, inherit);
+      cursor: pointer;
+    }
+    .add-state {
+      align-self: flex-start;
+      font: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.15));
+      background: var(--secondary-background-color, rgba(255, 255, 255, 0.05));
+      color: var(--primary-text-color, inherit);
+      cursor: pointer;
     }
   `;
 }

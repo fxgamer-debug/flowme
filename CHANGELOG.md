@@ -2,6 +2,25 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] — 2026-04-26
+
+### Added
+
+- **Weather-aware background transitions.** The card now renders two stacked background `<div>` layers and crossfades between them whenever the resolved background URL changes. The incoming image is preloaded via `new Image()` before the opacity flip to avoid a blank frame; the old layer is cleared on a timer after the transition completes so it's ready for the next swap. `background.transition_duration` is respected (default 2000 ms).
+- **Editor: Backgrounds & weather panel.** New collapsible `<details>` panel in the editor for the default image URL, the weather entity (autocompleted from `weather.*` entities in `hass`), the transition duration, and an editable table of `state → image URL` rows with thumbnail previews. New rows pick the next unused known weather state (sunny, cloudy, rainy, …). Every edit pushes one undoable patch with a descriptive label.
+- New editor command helpers: `setBackgroundDefault`, `setWeatherEntity`, `setTransitionDuration`, `setWeatherStateImage`, `deleteWeatherState`, `renameWeatherState`.
+
+### Changed
+
+- Card version banner bumped to 0.4.0.
+
+### Deferred to later versions
+
+- Actual in-card image upload. HA's filesystem upload is out of scope for a Lovelace card; users still place images under `/local/` or `/hacsfiles/` as usual and reference them by URL — the panel just makes the mapping discoverable instead of requiring raw YAML.
+- HVAC colour-gradient interpolation (still tracked, deferred until the secondary-entity schema work).
+- Overlay editor (v0.5.0).
+- Unit + integration tests (v1.0.0).
+
 ## [0.3.0] — 2026-04-26
 
 ### Added
@@ -80,6 +99,7 @@ All notable changes to flowme are documented here. Format loosely follows [Keep 
 - Overlay editor (v0.5.0).
 - Unit + integration tests (v1.0.0).
 
+[0.4.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.4.0
 [0.3.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.3.0
 [0.2.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.2.0
 [0.1.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.1.0
