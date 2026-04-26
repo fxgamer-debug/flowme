@@ -2,9 +2,9 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## v1.0.3-debug — 2026-04-26
+## [1.0.3] — 2026-04-26
 
-**Diagnostic prerelease. Not a normal release.** Install this build only if you are helping debug the v1.0.2 "no animation / wrong colours" report. No rendering logic was changed — only extensive `console.warn` instrumentation prefixed `[FlowMe]` and `[FlowMe Renderer]` was added so we can see the runtime values of every relevant code path.
+**Diagnostic build.** No rendering logic was changed from v1.0.2 — only extensive `console.warn` instrumentation prefixed `[FlowMe]` and `[FlowMe Renderer]` was added so we can see the runtime values of every relevant code path while we track down the persistent "no animation / wrong colours / doubled units" report. The next patch release will contain the actual fix once the logs identify which stage is breaking.
 
 ### Added
 
@@ -22,11 +22,11 @@ All notable changes to flowme are documented here. Format loosely follows [Keep 
 
 ### Workflow
 
-- `.github/workflows/release.yml` now auto-detects hyphenated tags (e.g. `v1.0.3-debug`) and publishes them as GitHub prereleases so they don't appear as the default install in HACS.
+- `.github/workflows/release.yml` now auto-detects hyphenated tags (e.g. `v1.1.0-beta`) and publishes them as GitHub prereleases — kept for future use even though v1.0.x remains full-release only.
 
 ### Next step
 
-After installing this build, reload the dashboard with DevTools open, filter the console by `[FlowMe]`, and share the full output. The log points above are designed to pinpoint exactly one of: wrong renderer chosen, entity values not reaching the card, `applyFlow` hidden by threshold, `<animateMotion dur="...">` not updated, or `<mpath href="#flowme-path-*">` failing to resolve inside the shadow root. The next build (`v1.0.4`) will contain the actual fix.
+After installing this build, reload the dashboard with DevTools open, filter the console by `[FlowMe]`, and share the full output. The log points above are designed to pinpoint exactly one of: wrong renderer chosen, entity values not reaching the card, `applyFlow` hidden by threshold, `<animateMotion dur="...">` not updated, or `<mpath href="#flowme-path-*">` failing to resolve inside the shadow root. The next release will contain the actual fix.
 
 ## [1.0.2] — 2026-04-26
 

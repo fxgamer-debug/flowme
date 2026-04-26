@@ -3903,7 +3903,7 @@ var os = Object.defineProperty, rs = Object.getOwnPropertyDescriptor, j = (e, t,
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && os(t, i, s), s;
 };
-const as = "1.0.3-debug", ge = 2e3;
+const as = "1.0.3", ge = 2e3;
 console.info(
   `%c flowme %c v${as} `,
   "color: white; background: #4ADE80; font-weight: 700;",
