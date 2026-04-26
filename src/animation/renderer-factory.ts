@@ -21,13 +21,13 @@ export function createRenderer(): FlowRenderer {
   const override = readRendererOverride();
   const kind: FlowRendererKind = override ?? 'svg';
 
+  // eslint-disable-next-line no-console
   console.info(
     `[flowme] using ${kind} renderer${override ? ' (forced via ?flowme_renderer)' : ''}`,
   );
 
   if (kind === 'houdini') {
     if (!hasHoudiniSupport()) {
-      // eslint-disable-next-line no-console
       console.warn(
         '[flowme] ?flowme_renderer=houdini requested but CSS.paintWorklet / registerProperty is not available — falling back to SVG',
       );

@@ -121,7 +121,7 @@ describe('flowme-card smoke test (happy-dom)', () => {
           attributes: { unit_of_measurement: 'W' },
         },
       },
-    } as HomeAssistant;
+    } as unknown as HomeAssistant;
     document.body.appendChild(card);
     await card.updateComplete;
     const html = card.shadowRoot!.innerHTML;
@@ -155,7 +155,7 @@ describe('flowme-card smoke test (happy-dom)', () => {
           attributes: {},
         },
       },
-    } as HomeAssistant;
+    } as unknown as HomeAssistant;
     document.body.appendChild(card);
     await card.updateComplete;
     expect(card.shadowRoot!.innerHTML).toContain('camera-placeholder');
