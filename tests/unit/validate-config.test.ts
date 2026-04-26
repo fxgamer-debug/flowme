@@ -60,6 +60,31 @@ describe('validateConfig — happy path', () => {
     expect(cfg.background.weather_entity).toBe('weather.home');
   });
 
+  it('treats flow.waypoints as optional (straight line when omitted)', () => {
+    const raw = {
+      ...minimalConfig(),
+      flows: [
+        { id: 'f1', from_node: 'a', to_node: 'b', entity: 'sensor.x' },
+      ],
+    };
+    const cfg = validateConfig(raw);
+    expect(cfg.flows[0]?.waypoints).toEqual([]);
+  });
+
+  it('accepts omitted background (renders neutral placeholder)', () => {
+    const { background: _omit, ...rest } = minimalConfig();
+    const cfg = validateConfig(rest);
+    expect(cfg.background.default).toBe('');
+  });
+
+  it('accepts an empty string for background.default', () => {
+    const cfg = validateConfig({
+      ...minimalConfig(),
+      background: { default: '' },
+    });
+    expect(cfg.background.default).toBe('');
+  });
+
   it('accepts overlays of every supported type', () => {
     const raw = {
       ...minimalConfig(),

@@ -294,6 +294,68 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
+  /**
+   * Render an <ha-entity-picker> bound to `value` with an onChange callback
+   * receiving the chosen entity id (or empty string). Falls back to a plain
+   * <input> with a <datalist> of matching entities when the picker element
+   * isn't registered yet (happens in some HA versions before card helpers
+   * load). The picker fires `value-changed`; the input fires `change`.
+   */
+  private renderEntityPicker(
+    value: string,
+    onChange: (entityId: string) => void,
+    opts?: { includeDomains?: string[]; placeholder?: string },
+  ): TemplateResult {
+    const hasPicker =
+      typeof window !== 'undefined' &&
+      !!window.customElements &&
+      !!window.customElements.get('ha-entity-picker');
+    const domains = opts?.includeDomains ?? [];
+    const placeholder = opts?.placeholder ?? 'entity.id';
+
+    if (hasPicker) {
+      const handler = (e: CustomEvent<{ value?: string }>) => {
+        e.stopPropagation();
+        onChange((e.detail?.value ?? '').trim());
+      };
+      return html`
+        <ha-entity-picker
+          allow-custom-entity
+          .hass=${this.hass}
+          .value=${value}
+          .includeDomains=${domains}
+          @value-changed=${handler}
+        ></ha-entity-picker>
+      `;
+    }
+
+    // Fallback: datalist of same-domain entities from hass.states.
+    const states = this.hass?.states ?? {};
+    const listId = `flowme-entities-${Math.random().toString(36).slice(2, 8)}`;
+    const options = Object.keys(states)
+      .filter((id) => {
+        if (domains.length === 0) return true;
+        const domain = id.split('.')[0];
+        return !!domain && domains.includes(domain);
+      })
+      .sort();
+    const handler = (e: Event) => {
+      onChange((e.target as HTMLInputElement).value.trim());
+    };
+    return html`
+      <input
+        type="text"
+        list=${listId}
+        placeholder=${placeholder}
+        .value=${value}
+        @change=${handler}
+      />
+      <datalist id=${listId}>
+        ${options.map((id) => html`<option value=${id}></option>`)}
+      </datalist>
+    `;
+  }
+
   private renderInspector(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     if (this.selectedNodeId) {
@@ -312,12 +374,11 @@ export class FlowmeCardEditor extends LitElement {
           </label>
           <label>
             Entity
-            <input
-              type="text"
-              placeholder="sensor.example"
-              .value=${node.entity ?? ''}
-              @change=${(e: Event) => this.onNodeEntityChange(node.id, e)}
-            />
+            ${this.renderEntityPicker(
+              node.entity ?? '',
+              (value) => this.setNodeEntity(node.id, value),
+              { includeDomains: ['sensor', 'binary_sensor', 'input_number', 'number'] },
+            )}
           </label>
           <button class="danger" @click=${() => this.removeNode(node.id)}>Delete node</button>
         </div>
@@ -332,9 +393,14 @@ export class FlowmeCardEditor extends LitElement {
           <div class="row">
             <span>${flow.from_node} → ${flow.to_node}</span>
           </div>
-          <div class="row">
-            <span>Entity: <code>${flow.entity}</code></span>
-          </div>
+          <label>
+            Entity
+            ${this.renderEntityPicker(
+              flow.entity,
+              (value) => this.setFlowEntity(flow.id, value),
+              { includeDomains: ['sensor', 'input_number', 'number'] },
+            )}
+          </label>
           <div class="row">
             <span>${flow.waypoints.length} waypoint(s)</span>
           </div>
@@ -370,12 +436,14 @@ export class FlowmeCardEditor extends LitElement {
           ? html`
               <label>
                 Entity
-                <input
-                  type="text"
-                  placeholder=${this.entityPlaceholderFor(overlay.type)}
-                  .value=${overlay.entity ?? ''}
-                  @change=${(e: Event) => this.onOverlayEntityChange(overlay.id, e)}
-                />
+                ${this.renderEntityPicker(
+                  overlay.entity ?? '',
+                  (value) => this.setOverlayEntityValue(overlay.id, value),
+                  {
+                    includeDomains: this.includeDomainsForOverlay(overlay.type),
+                    placeholder: this.entityPlaceholderFor(overlay.type),
+                  },
+                )}
               </label>
             `
           : nothing}
@@ -513,19 +581,12 @@ export class FlowmeCardEditor extends LitElement {
           </label>
           <label>
             Weather entity (optional)
-            <input
-              type="text"
-              .value=${bg.weather_entity ?? ''}
-              list="flowme-weather-entities"
-              @change=${this.onWeatherEntityChange}
-              placeholder="weather.home"
-            />
-          </label>
-          <datalist id="flowme-weather-entities">
-            ${this.weatherEntityOptions().map(
-              (id) => html`<option value=${id}></option>`,
+            ${this.renderEntityPicker(
+              bg.weather_entity ?? '',
+              (value) => this.setWeatherEntityValue(value),
+              { includeDomains: ['weather'], placeholder: 'weather.home' },
             )}
-          </datalist>
+          </label>
           <label>
             Transition duration (ms)
             <input
@@ -580,13 +641,6 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
-  private weatherEntityOptions(): string[] {
-    if (!this.hass) return [];
-    return Object.keys(this.hass.states)
-      .filter((id) => id.startsWith('weather.'))
-      .sort();
-  }
-
   private onDefaultBgChange = (event: Event): void => {
     if (!this.config) return;
     const value = (event.target as HTMLInputElement).value;
@@ -595,13 +649,13 @@ export class FlowmeCardEditor extends LitElement {
     this.pushPatch(prev, next, 'edit default background');
   };
 
-  private onWeatherEntityChange = (event: Event): void => {
+  private setWeatherEntityValue(value: string): void {
     if (!this.config) return;
-    const value = (event.target as HTMLInputElement).value.trim();
+    const trimmed = value.trim();
     const prev = this.config;
-    const next = setWeatherEntity(prev, value || undefined);
+    const next = setWeatherEntity(prev, trimmed || undefined);
     this.pushPatch(prev, next, 'edit weather entity');
-  };
+  }
 
   private onTransitionChange = (event: Event): void => {
     if (!this.config) return;
@@ -1109,17 +1163,31 @@ export class FlowmeCardEditor extends LitElement {
     this.pushPatch(prev, next, `rename ${nodeId}`);
   }
 
-  private onNodeEntityChange(nodeId: string, event: Event): void {
+  private setNodeEntity(nodeId: string, value: string): void {
     if (!this.config) return;
-    const value = (event.target as HTMLInputElement).value;
     const prev = this.config;
+    const trimmed = value.trim();
     const next = {
       ...prev,
       nodes: prev.nodes.map((n) =>
-        n.id === nodeId ? { ...n, entity: value ? value : undefined } : n,
+        n.id === nodeId ? { ...n, entity: trimmed ? trimmed : undefined } : n,
       ),
     };
     this.pushPatch(prev, next, `edit entity of ${nodeId}`);
+  }
+
+  private setFlowEntity(flowId: string, value: string): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const trimmed = value.trim();
+    if (!trimmed) return; // flow entity is required — ignore empty submit
+    const next = {
+      ...prev,
+      flows: prev.flows.map((f) =>
+        f.id === flowId ? { ...f, entity: trimmed } : f,
+      ),
+    };
+    this.pushPatch(prev, next, `edit entity of ${flowId}`);
   }
 
   private onOverlayTypeChange(id: string, event: Event): void {
@@ -1131,12 +1199,27 @@ export class FlowmeCardEditor extends LitElement {
     this.pushPatch(prev, next, `change overlay ${id} type`);
   }
 
-  private onOverlayEntityChange(id: string, event: Event): void {
+  private setOverlayEntityValue(id: string, value: string): void {
     if (!this.config) return;
-    const value = (event.target as HTMLInputElement).value.trim();
+    const trimmed = value.trim();
     const prev = this.config;
-    const next = setOverlayEntity(prev, id, value || undefined);
+    const next = setOverlayEntity(prev, id, trimmed || undefined);
     this.pushPatch(prev, next, `edit overlay ${id} entity`);
+  }
+
+  private includeDomainsForOverlay(type: OverlayType): string[] {
+    switch (type) {
+      case 'switch':
+        return ['switch', 'light', 'input_boolean', 'fan', 'cover'];
+      case 'sensor':
+        return ['sensor', 'binary_sensor', 'input_number', 'number'];
+      case 'camera':
+        return ['camera'];
+      case 'button':
+        return ['script', 'automation', 'button', 'input_button'];
+      default:
+        return [];
+    }
   }
 
   private onOverlayLabelChange(id: string, event: Event): void {

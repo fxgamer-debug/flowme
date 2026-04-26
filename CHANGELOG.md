@@ -2,6 +2,31 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.1] — 2026-04-26
+
+First bugfix based on feedback from initial HA deploy.
+
+### Fixed
+
+- **HA Sections-view "does not fully support resizing" warning** — `flowme-card` now implements both `getLayoutOptions()` and `getGridOptions()` returning sensible grid bounds derived from the configured `aspect_ratio`. `getCardSize()` was also tightened to match the card's actual aspect rather than always returning 5.
+- **Flows now support a straight line from source to sink** — `flow.waypoints` is optional in YAML. Omit it entirely for a straight line; the validator normalises `undefined` → `[]` and the renderer already handled two-point paths.
+- **`background.default` is optional** — omit it (or set `""`) and the card renders with a neutral placeholder. The stub config returned from `getStubConfig()` now ships with an empty background so the card works immediately after adding it to a dashboard, without the user first having to copy any image into `/config/www/flowme/`.
+- **Silent "no flow visible" state** — the card now logs a clear `[flowme]` console warning (once per flow/entity pair) when a flow's entity is missing from `hass.states` or is in the `unavailable` / `unknown` state. This makes it obvious why a flow isn't animating.
+
+### Changed
+
+- **Editor entity inputs → `<ha-entity-picker>`** — every entity field in the visual editor (node entity, flow entity, overlay entity, weather entity) now uses HA's native entity picker with a domain filter:
+  - Node entity: `sensor`, `binary_sensor`, `input_number`, `number`
+  - Flow entity: `sensor`, `input_number`, `number`
+  - Overlay entity: filtered by overlay type (switches get `switch/light/input_boolean/fan/cover`, sensors get `sensor/binary_sensor/input_number/number`, cameras get `camera`, buttons get `script/automation/button/input_button`)
+  - Weather entity: `weather` only
+  - Falls back to a plain `<input>` with a `<datalist>` of matching entities on HA versions where `ha-entity-picker` hasn't registered yet.
+- **Flow inspector now lets you edit the flow's entity** — it used to display it read-only.
+
+### Tests
+
+- Added cases for waypoints-optional, background-optional, and the new `getLayoutOptions` / `getGridOptions` surface.
+
 ## [1.0.0] — 2026-04-26
 
 First stable release. All six domain profiles, full editor, auto-routing, weather backgrounds, interactive overlays — plus the test suite, docs and release tooling required for public distribution.

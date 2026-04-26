@@ -97,11 +97,16 @@ function validateFlow(
     fail(`${path}.entity`, 'must be a non-empty entity id');
   }
 
+  // waypoints is optional — omit → straight line. When present it must be an
+  // array of valid positions.
   const wpRaw = f['waypoints'];
-  if (!Array.isArray(wpRaw)) fail(`${path}.waypoints`, 'must be an array (may be empty)');
-  const waypoints = (wpRaw as unknown[]).map((wp, wi) =>
-    validatePosition(wp, `${path}.waypoints[${wi}]`),
-  );
+  let waypoints: NodePosition[] = [];
+  if (wpRaw !== undefined) {
+    if (!Array.isArray(wpRaw)) fail(`${path}.waypoints`, 'must be an array (may be empty or omitted)');
+    waypoints = (wpRaw as unknown[]).map((wp, wi) =>
+      validatePosition(wp, `${path}.waypoints[${wi}]`),
+    );
+  }
 
   const flow: FlowConfig = {
     id: idStr,
@@ -140,10 +145,18 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     fail('domain', `must be one of ${FLOW_DOMAINS.join(', ')}`);
   }
 
+  // background and background.default are both optional. An omitted default
+  // renders a neutral placeholder so the card works out of the box without
+  // requiring the user to copy any image into /config/www first.
   const bgRaw = c['background'];
-  if (!bgRaw || typeof bgRaw !== 'object') fail('background', 'must be an object');
-  const bg = bgRaw as Record<string, unknown>;
-  const defaultImg = validateUrlScheme(bg['default'], 'background.default');
+  if (bgRaw !== undefined && (bgRaw === null || typeof bgRaw !== 'object')) {
+    fail('background', 'must be an object when provided');
+  }
+  const bg = (bgRaw ?? {}) as Record<string, unknown>;
+  const defaultImg =
+    bg['default'] === undefined || bg['default'] === ''
+      ? ''
+      : validateUrlScheme(bg['default'], 'background.default');
 
   const background: FlowmeConfig['background'] = { default: defaultImg };
   if (bg['weather_entity'] !== undefined) {

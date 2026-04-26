@@ -43,7 +43,11 @@ export interface FlowConfig {
   to_node: string;
   /** Sensor entity providing the flow value (typically a number). */
   entity: string;
-  /** Intermediate waypoints the flow passes through, in order. */
+  /**
+   * Intermediate waypoints the flow passes through, in order. Optional in
+   * YAML — when omitted the flow renders as a straight line from
+   * `from_node` to `to_node`. The validator normalises undefined → [].
+   */
   waypoints: NodePosition[];
   /** Override the card-level domain for this flow. */
   domain?: FlowDomain;

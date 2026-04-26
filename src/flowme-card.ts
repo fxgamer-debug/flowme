@@ -16,7 +16,7 @@ import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.0';
+const CARD_VERSION = '1.0.1';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -47,6 +47,11 @@ export class FlowmeCard extends LitElement {
   private transitionTimer: number | null = null;
   private preloadCache = new Map<string, HTMLImageElement>();
   private lastAppliedBgUrl = '';
+  /**
+   * Set of `${flowId}:${entityId}` we've already warned about missing data for.
+   * Keeps console noise under control when a sensor is permanently stale.
+   */
+  private warnedMissing = new Set<string>();
 
   setConfig(raw: unknown): void {
     try {
@@ -97,6 +102,23 @@ export class FlowmeCard extends LitElement {
     if (changed.has('hass') && this.renderer && this.hass) {
       for (const flow of this.config.flows) {
         const state = this.hass.states[flow.entity];
+        if (!state) {
+          const key = `${flow.id}:${flow.entity}`;
+          if (!this.warnedMissing.has(key)) {
+            this.warnedMissing.add(key);
+            console.warn(
+              `[flowme] flow "${flow.id}" references entity "${flow.entity}" but it is not present in hass.states — check spelling / domain permissions`,
+            );
+          }
+        } else if (state.state === 'unavailable' || state.state === 'unknown') {
+          const key = `${flow.id}:${flow.entity}:unavailable`;
+          if (!this.warnedMissing.has(key)) {
+            this.warnedMissing.add(key);
+            console.warn(
+              `[flowme] flow "${flow.id}" entity "${flow.entity}" is currently ${state.state} — no flow will render until it reports a number`,
+            );
+          }
+        }
         const value = parseSensorValue(state?.state);
         this.renderer.updateFlow(flow.id, value);
       }
@@ -108,7 +130,31 @@ export class FlowmeCard extends LitElement {
   }
 
   getCardSize(): number {
-    return 5;
+    // Legacy Masonry-view size, in "rows" where one row is ~50 px. A 16:10
+    // aspect card at a typical 500 px width is ~312 px tall ≈ 6 rows.
+    const aspect = parseAspectRatio(this.config?.aspect_ratio) ?? 16 / 10;
+    return Math.max(3, Math.round(10 / aspect) + 1);
+  }
+
+  /**
+   * Modern HA Sections/Grid view layout. Without this, HA shows the
+   * "This card does not fully support resizing yet" banner. We advertise a
+   * full-width default and allow resizing within reasonable bounds.
+   */
+  getLayoutOptions(): Record<string, number | string> {
+    const aspect = parseAspectRatio(this.config?.aspect_ratio) ?? 16 / 10;
+    return {
+      grid_columns: 4,
+      grid_rows: Math.max(2, Math.round(4 / aspect) + 1),
+      grid_min_columns: 2,
+      grid_min_rows: 2,
+      grid_max_columns: 4,
+    };
+  }
+
+  /** Alias kept for HA versions that look for `getGridOptions` instead. */
+  getGridOptions(): Record<string, number | string> {
+    return this.getLayoutOptions();
   }
 
   static getConfigElement(): HTMLElement {
@@ -116,11 +162,16 @@ export class FlowmeCard extends LitElement {
   }
 
   static getStubConfig(): FlowmeConfig {
+    // Uses an empty background so the card renders immediately without the
+    // user first needing to copy any image into /config/www/flowme/.
+    // Waypoints are omitted — a straight line renders fine and the user can
+    // click the flow to add bends. Replace `sensor.example_power` with a real
+    // numeric entity to see particles animate.
     return {
       type: 'custom:flowme-card',
       domain: 'energy',
       background: {
-        default: '/local/flowme/example-house.jpg',
+        default: '',
       },
       nodes: [
         { id: 'source', position: { x: 20, y: 30 }, label: 'Source' },
@@ -132,7 +183,7 @@ export class FlowmeCard extends LitElement {
           from_node: 'source',
           to_node: 'sink',
           entity: 'sensor.example_power',
-          waypoints: [{ x: 80, y: 30 }],
+          waypoints: [],
         },
       ],
     };

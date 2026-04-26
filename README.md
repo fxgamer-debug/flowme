@@ -2,7 +2,7 @@
 
 A generic Home Assistant custom Lovelace card that overlays **animated flow lines** and **interactive overlays** on top of a user-supplied background image. Unlike existing single-domain energy-flow cards, flowme is **multi-domain** (energy, water, network, HVAC, gas, generic) and uses **arbitrary user-defined paths** drawn directly on your own background photo via a visual drag-and-drop editor.
 
-> Status: **v1.0.0** — all six domain flow profiles, Houdini Paint renderer with SVG fallback, full drag-and-drop editor with undo/redo, one-click auto-routing via Sobel + A\*, weather-aware background crossfades, interactive overlays (sensor, switch, button, camera, custom card), 125+ unit/smoke tests, strict config validation, signed GitHub releases.
+> Status: **v1.0.1** — all six domain flow profiles, Houdini Paint renderer with SVG fallback, full drag-and-drop editor with undo/redo, one-click auto-routing via Sobel + A\*, weather-aware background crossfades, interactive overlays (sensor, switch, button, camera, custom card), HA Sections-view grid layout hints, native `<ha-entity-picker>` in the editor, 129 unit/smoke tests, strict config validation, signed GitHub releases.
 
 - **Tested on** Home Assistant **2026.4.x**.
 - **Minimum** Home Assistant version declared to HACS: **2024.1.0**.
@@ -89,7 +89,7 @@ Drop that into a dashboard, point `entity` at a real power sensor, then click th
 |----------------------|--------------------------------------------------------------|----------|-----------------------------------------------------------------------------------|
 | `type`               | `"custom:flowme-card"`                                       | yes      | Lovelace discriminator.                                                           |
 | `domain`             | `"energy"` · `"water"` · `"network"` · `"hvac"` · `"gas"` · `"generic"` | yes      | Selects the flow profile (particle shape, colour, speed curve, unit label).       |
-| `background`         | `Background`                                                 | yes      | See below.                                                                        |
+| `background`         | `Background`                                                 | no       | See below. Omit entirely for a neutral placeholder.                               |
 | `nodes`              | `Node[]`                                                     | yes      | At least one node.                                                                |
 | `flows`              | `Flow[]`                                                     | yes      | May be empty.                                                                     |
 | `overlays`           | `Overlay[]`                                                  | no       | Interactive overlays on top of the background.                                    |
@@ -101,7 +101,7 @@ Drop that into a dashboard, point `entity` at a real power sensor, then click th
 
 | Key                   | Type                       | Description                                                                 |
 |-----------------------|----------------------------|-----------------------------------------------------------------------------|
-| `default`             | URL string                 | Base image. Must begin with `/local/`, `/api/`, `/hacsfiles/`, `https://` or `http://`. |
+| `default`             | URL string                 | Base image. Optional — omit or set `""` to render a neutral placeholder. When set, must begin with `/local/`, `/api/`, `/hacsfiles/`, `https://` or `http://`. |
 | `weather_entity`      | entity id                  | Optional. A `weather.*` entity whose `state` drives image swaps.            |
 | `weather_states`      | `{ state: url }` object    | Map state strings (`sunny`, `rainy`, …) to alternate images.                |
 | `transition_duration` | number (ms)                | Crossfade duration, default `2000`.                                         |
@@ -127,7 +127,7 @@ Drop that into a dashboard, point `entity` at a real power sensor, then click th
 | `from_node`         | node id                       | Must resolve to an existing node.                               |
 | `to_node`           | node id                       | Must resolve to an existing node.                               |
 | `entity`            | entity id                     | The sensor feeding this flow's magnitude.                       |
-| `waypoints`         | `Position[]` (may be empty)   | Percent-space intermediate points.                              |
+| `waypoints`         | `Position[]` (optional)       | Percent-space intermediate points. Omit or set `[]` for a straight line from `from_node` to `to_node`. |
 | `domain`            | domain enum                   | Optional per-flow override of the card-level domain.            |
 | `color_positive`    | CSS colour                    | Optional override of the profile default.                       |
 | `color_negative`    | CSS colour                    | Optional override for negative values.                          |

@@ -99,4 +99,22 @@ describe('flowme-card smoke test (happy-dom)', () => {
     expect(stub.type).toBe('custom:flowme-card');
     expect(Array.isArray(stub.nodes)).toBe(true);
   });
+
+  it('getLayoutOptions + getGridOptions return grid hints so HA stops warning about resizing', () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      getLayoutOptions(): Record<string, unknown>;
+      getGridOptions(): Record<string, unknown>;
+    };
+    card.setConfig(MINIMAL_CONFIG);
+    const layout = card.getLayoutOptions();
+    expect(layout).toMatchObject({
+      grid_columns: expect.any(Number),
+      grid_rows: expect.any(Number),
+      grid_min_columns: expect.any(Number),
+      grid_min_rows: expect.any(Number),
+    });
+    // getGridOptions is the older alias — ensure parity.
+    expect(card.getGridOptions()).toEqual(layout);
+  });
 });
