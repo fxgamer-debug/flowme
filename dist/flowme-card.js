@@ -3731,7 +3731,7 @@ var Xn = Object.defineProperty, Yn = Object.getOwnPropertyDescriptor, H = (e, t,
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Xn(t, i, s), s;
 };
-const Zn = "0.5.0", ue = 2e3;
+const Zn = "1.0.0", ue = 2e3;
 console.info(
   `%c flowme %c v${Zn} `,
   "color: white; background: #4ADE80; font-weight: 700;",

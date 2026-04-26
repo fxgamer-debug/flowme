@@ -2,6 +2,59 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0] — 2026-04-26
+
+First stable release. All six domain profiles, full editor, auto-routing, weather backgrounds, interactive overlays — plus the test suite, docs and release tooling required for public distribution.
+
+### Added
+
+- **Test suite** — 125 unit + smoke tests across 8 files, running in Vitest + happy-dom:
+  - `utils.test.ts` — clamp, lerp, percent/pixel conversion, path length, progress sampling, SVG path building, sensor value parsing, debounce (including cancel), aspect-ratio parsing.
+  - `flow-profiles.test.ts` — spec-exact speed curves + describe formatting for all six domain profiles (energy, water, network, HVAC, gas, generic) including their clamping, `getProfile()` domain dispatch.
+  - `pathfinding.test.ts` — `buildCostGrid` (edge-to-cost mapping + min-cost clamp + OOB behaviour), `findPath` (uniform grid straight line, start===end, OOB endpoints, cheap-corridor preference, turn-penalty straight-line tie break), `simplifyCollinear` (empty/short paths, straight run collapse, L-shape elbow preservation, zig-zag preservation).
+  - `undo-stack.test.ts` — push / undo / redo / no-op when prev===next / redo-clears-on-new-push / 100-deep cap / no-op on empty stacks / clear + fan-out to multiple subscribers.
+  - `url-scan.test.ts` — every disallowed scheme (`javascript:`, `vbscript:`, `data:`, `file:`), case-insensitive prefix match, recursive array walk, recursive nested-object walk, cycle safety via `WeakSet`, clean-config happy path, `assertSafeCardConfig` throw behaviour.
+  - `validate-config.test.ts` — happy paths for minimal + full configs + full-overlay configs, failure branches for: non-object root, wrong `type`, unknown domain, missing nodes, duplicate node/overlay ids, out-of-range positions, flows pointing at unknown nodes, `speed_multiplier` out of range, bad `aspect_ratio`, disallowed URL prefixes, every overlay-schema rule (unknown type, missing entity, card_config only on custom, unsafe URL scheme inside card_config, bad `size`, unknown `tap_action`).
+  - `editor-commands.test.ts` — clamp/snap helpers, id generators, node move/add/delete (with cascade to flows), label set/clear, flow add/delete, waypoint insert clamp/move/delete, every overlay command (add/move/delete/setSize/setType/setEntity/setLabel/setTapAction/setCardConfig), background + weather commands (setDefault, transition duration, setWeatherStateImage, deleteWeatherState, renameWeatherState).
+  - `flowme-card.smoke.test.ts` — registers the custom element, mounts in happy-dom with a stub hass, asserts the shadow DOM contains the expected structure, asserts validation errors surface cleanly, verifies static `getConfigElement()` / `getStubConfig()` return valid values.
+- **Release workflow** `.github/workflows/release.yml`. Triggered on any `v*` tag push:
+  - Runs lint + type-check + type-check:tests + vitest + build.
+  - Verifies the tag version matches `package.json` AND `CARD_VERSION` in `src/flowme-card.ts`.
+  - Computes SHA-256 checksums for the built bundle and source map.
+  - Extracts the matching CHANGELOG section and publishes a GitHub Release with the bundle, source map, and checksum files attached.
+- **CI upgrade** — `ci.yml` now additionally type-checks the test directory and runs the full test suite on every push and PR.
+- **Full README** — complete config reference (top-level, `Background`, `Node`, `Flow`, `Overlay`), per-domain YAML examples for all six domains, security model explanation, troubleshooting section covering invalid configs, CORS-tainted canvas on `Suggest path`, stalled animations, HACS compatibility errors.
+- **TESTING.md** — manual pre-release checklist covering automated baseline, visual smoke test in a real HA instance, renderer selection, editor UX, HACS install flow, release integrity, security sanity.
+- **HACS.md** — submission checklist for the default-repository PR.
+- **Minimum HA version** `"2024.1.0"` declared in `hacs.json`. Tested on 2026.4.x.
+- **`npm run check`** one-shot script: `lint → type-check → type-check:tests → test → build`.
+- **`npm run test:coverage`** using `@vitest/coverage-v8`.
+- **Dev-dep security** bumped to patched versions: vitest 2.1.9, @vitest/coverage-v8 2.1.9, vite 5.4.21, happy-dom 20.9.0. All critical CVEs resolved; remaining esbuild dev-server moderate only affects `vite` dev-server (we use `vite build` in CI).
+
+### Changed
+
+- Version bumped to **1.0.0** in `package.json` and `CARD_VERSION` banner.
+- README's "Status" line rewritten to reflect v1.0.0 scope and supported HA versions.
+
+### Removed
+
+- Nothing — v1.0.0 is strictly additive over v0.5.0.
+
+### Deferred to v1.1+
+
+- HVAC temperature-gradient colour interpolation (still waiting on the secondary-entity schema).
+- Editor multi-select + **"Suggest path from exactly two selected nodes"**.
+- Real-browser end-to-end tests via Playwright (the happy-dom smoke test covers the critical register/mount/error-surface flow; Playwright tracked for a later minor).
+- Ripple / toast / keyboard activation feedback on overlay taps.
+- Standalone `npm run dev` demo page with a mock `hass`.
+- Full screenshot set for the HACS submission (user-supplied content).
+
+### Post-release policy
+
+From v1.0.0 onward, `main` is protected: all changes land via PR. The direct-to-`main` workflow used during phases 1–5 is retired.
+
+---
+
 ## [0.5.0] — 2026-04-26
 
 ### Added

@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Full verification (lint, type-check, tests, build)
+        run: |
+          npm run lint
+          npm run type-check
+          npm run type-check:tests
+          npm run test
+          npm run build
+
+      - name: Confirm tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+
+      - name: Confirm CARD_VERSION matches tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          if ! grep -q "const CARD_VERSION = '$TAG';" src/flowme-card.ts; then
+            echo "::error::CARD_VERSION in src/flowme-card.ts does not match tag v$TAG"
+            exit 1
+          fi
+
+      - name: Compute SHA-256 checksums for dist assets
+        run: |
+          cd dist
+          sha256sum flowme-card.js > flowme-card.js.sha256
+          sha256sum flowme-card.js.map > flowme-card.js.map.sha256
+
+      - name: Extract changelog section for this tag
+        id: changelog
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          # grab everything from "## v$TAG" up to (but not including) the next "## v" heading
+          awk -v tag="v$TAG" '
+            $0 ~ "^## "tag"( |$)" { flag=1; next }
+            flag && /^## v/ { exit }
+            flag { print }
+          ' CHANGELOG.md > .release-notes.md
+          if [ ! -s .release-notes.md ]; then
+            echo "No changelog entry found for v$TAG" > .release-notes.md
+          fi
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          cat .release-notes.md >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: flowme ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.notes }}
+          files: |
+            dist/flowme-card.js
+            dist/flowme-card.js.map
+            dist/flowme-card.js.sha256
+            dist/flowme-card.js.map.sha256
+          draft: false
+          prerelease: false

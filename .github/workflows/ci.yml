@@ -23,8 +23,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Type check
+      - name: Type check (src)
         run: npm run type-check
+
+      - name: Type check (tests)
+        run: npm run type-check:tests
+
+      - name: Unit + smoke tests
+        run: npm run test
 
       - name: Build
         run: npm run build
