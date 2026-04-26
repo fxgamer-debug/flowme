@@ -2,6 +2,32 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## v1.0.3-debug — 2026-04-26
+
+**Diagnostic prerelease. Not a normal release.** Install this build only if you are helping debug the v1.0.2 "no animation / wrong colours" report. No rendering logic was changed — only extensive `console.warn` instrumentation prefixed `[FlowMe]` and `[FlowMe Renderer]` was added so we can see the runtime values of every relevant code path.
+
+### Added
+
+- `src/debug-log.ts` — single `dlog()` channel so every diagnostic message is greppable by the `[FlowMe]` tag in the Home Assistant browser console.
+- `setConfig()` dumps the full validated config and a flow/node/overlay summary.
+- The `hass` property setter now logs (a) the hardcoded watch-list of the user's five solar/grid/battery/load sensors and (b) every flow-entity value resolved from `hass.states`.
+- `willUpdate` logs each `updateFlow(flowId, entity, raw, parsed)` call as values are pushed to the renderer.
+- `firstUpdated` schedules three timed inspections: `t+0ms` shadow root + `<svg>` presence, `t+2000ms` first `animateMotion` element with its `dur` and `<mpath href>` resolution check, `t+3000ms` a 2 KB slice of the full shadow DOM HTML.
+- `createRenderer` logs the chosen renderer class, whether `?flowme_renderer=` was set, whether `CSS.paintWorklet` is available, and whether both Houdini prerequisites (`paintWorklet` + `registerProperty`) are present.
+- `SvgRenderer.init` logs the incoming config, the container bounding rect, and which kind of root (`ShadowRoot` vs `Document`) the `<svg>` was appended to.
+- `SvgRenderer.buildSkeleton` logs every flow-group append with `pathId`, the resolved `d` attribute, the shape, and a 200-char slice of the group's `outerHTML`.
+- `SvgRenderer.applyFlow` logs the computed `visible` decision (value / magnitude / threshold) and, when visible, the resolved `domain`, `shape`, raw speed-curve output, dur ms, direction, and final colour (including all colour-source candidates so we can see which one "won").
+- `SvgRenderer.applyParticles` logs the first particle's installed `animateMotion` dur, mpath target, and a slice of its outerHTML, then a summary `SVG flow created` line with path `d` and particle count.
+- `renderOverlayHost` logs each overlay's type, id, entity, position, size, and current entity state.
+
+### Workflow
+
+- `.github/workflows/release.yml` now auto-detects hyphenated tags (e.g. `v1.0.3-debug`) and publishes them as GitHub prereleases so they don't appear as the default install in HACS.
+
+### Next step
+
+After installing this build, reload the dashboard with DevTools open, filter the console by `[FlowMe]`, and share the full output. The log points above are designed to pinpoint exactly one of: wrong renderer chosen, entity values not reaching the card, `applyFlow` hidden by threshold, `<animateMotion dur="...">` not updated, or `<mpath href="#flowme-path-*">` failing to resolve inside the shadow root. The next build (`v1.0.4`) will contain the actual fix.
+
 ## [1.0.2] — 2026-04-26
 
 Second bugfix after first real-world dashboard deploy.

@@ -72,6 +72,16 @@ jobs:
           cat .release-notes.md >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+      - name: Detect prerelease (tags with a hyphen, e.g. v1.0.3-debug)
+        id: prerelease
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          if [[ "$TAG" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -83,4 +93,4 @@ jobs:
             dist/flowme-card.js.sha256
             dist/flowme-card.js.map.sha256
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}

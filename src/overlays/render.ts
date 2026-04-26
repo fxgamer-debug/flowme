@@ -2,6 +2,7 @@ import { html, nothing, type TemplateResult } from 'lit';
 
 import type { HomeAssistant, OverlayConfig, TapActionKind } from '../types.js';
 import { parseSensorValue } from '../utils.js';
+import { dlog } from '../debug-log.js';
 
 /**
  * Default tap action for each overlay type when the user hasn't set one.
@@ -89,6 +90,7 @@ export function renderOverlayHost(
   overlay: OverlayConfig,
   hass: HomeAssistant | undefined,
 ): TemplateResult {
+  dlog('renderOverlayHost →', overlay.type, 'id=', overlay.id, 'entity=', overlay.entity ?? '(none)', 'position=', overlay.position, 'size=', overlay.size, 'entity-state=', overlay.entity ? hass?.states[overlay.entity]?.state : '(n/a)');
   const action = defaultTapAction(overlay);
   const interactive = action !== 'none';
   const onTap = (ev: Event) => handleOverlayTap(overlay, hass, ev);

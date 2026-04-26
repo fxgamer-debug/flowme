@@ -15,9 +15,10 @@ import { getProfile } from './flow-profiles/index.js';
 import { parseAspectRatio, parseSensorValue } from './utils.js';
 import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
+import { dlog } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.2';
+const CARD_VERSION = '1.0.3-debug';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -27,9 +28,44 @@ console.info(
   'color: #4ADE80; background: #111; font-weight: 700;',
 );
 
+/** Fixed list the user explicitly requested in the debug spec. Logged on
+ *  every hass update regardless of whether these entities are wired into
+ *  the card — so we can rule out entity naming mismatches immediately. */
+const DEBUG_WATCH_ENTITIES = [
+  'sensor.sirbu_dumitra_pv_string_1_power',
+  'sensor.sirbu_dumitra_pv_string_2_power',
+  'sensor.sirbu_dumitra_grid_power',
+  'sensor.sirbu_dumitra_battery_power',
+  'sensor.sirbu_dumitra_load_power',
+] as const;
+
 @customElement('flowme-card')
 export class FlowmeCard extends LitElement {
-  @property({ attribute: false }) hass?: HomeAssistant;
+  private _hass?: HomeAssistant;
+
+  @property({ attribute: false })
+  get hass(): HomeAssistant | undefined {
+    return this._hass;
+  }
+  set hass(value: HomeAssistant | undefined) {
+    const prev = this._hass;
+    this._hass = value;
+    if (value) {
+      const watched: Record<string, string | undefined> = {};
+      for (const id of DEBUG_WATCH_ENTITIES) {
+        watched[id] = value.states[id]?.state;
+      }
+      const flowEntities: Record<string, string | undefined> = {};
+      for (const flow of this.config?.flows ?? []) {
+        flowEntities[flow.entity] = value.states[flow.entity]?.state;
+      }
+      dlog('hass setter called. hardcoded watch:', watched, '| flow-entity values:', flowEntities);
+    } else {
+      dlog('hass setter called with undefined');
+    }
+    this.requestUpdate('hass', prev);
+  }
+
   @state() private config?: FlowmeConfig;
   @state() private errorMessage?: string;
 
@@ -62,8 +98,10 @@ export class FlowmeCard extends LitElement {
   private warnedMissing = new Set<string>();
 
   setConfig(raw: unknown): void {
+    dlog('setConfig called:', JSON.parse(JSON.stringify(raw ?? null)));
     try {
       const config = validateConfig(raw);
+      dlog('setConfig validated → flows=', config.flows.length, 'nodes=', config.nodes.length, 'overlays=', config.overlays?.length ?? 0);
       this.config = config;
       this.errorMessage = undefined;
       if (this.rendererReadyFor && this.rendererReadyFor !== config) {
@@ -85,6 +123,35 @@ export class FlowmeCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    dlog('connectedCallback — shadowRoot present?', !!this.shadowRoot, 'config present?', !!this.config, 'hass present?', !!this._hass);
+  }
+
+  override firstUpdated(): void {
+    dlog('firstUpdated — shadowRoot children count=', this.shadowRoot?.children.length ?? 0);
+    dlog('firstUpdated — SVG element found?', !!this.shadowRoot?.querySelector('svg'));
+
+    window.setTimeout(() => {
+      const sr = this.shadowRoot;
+      const anim = sr?.querySelector('animateMotion');
+      dlog('t+2000ms — animateMotion element:', anim ? anim.outerHTML : '(none found)');
+      dlog('t+2000ms — animateMotion.dur=', anim?.getAttribute('dur') ?? '(no dur)');
+      const allAnims = sr?.querySelectorAll('animateMotion');
+      dlog('t+2000ms — total animateMotion elements=', allAnims?.length ?? 0);
+      // Verify the <mpath href="#..."> references resolve to actual paths
+      // in the same shadow root. Chrome historically had bugs with
+      // cross-scope fragment refs inside SMIL.
+      allAnims?.forEach((a, i) => {
+        const mpath = a.querySelector('mpath');
+        const href = mpath?.getAttribute('href') ?? mpath?.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+        const resolved = href && sr ? sr.querySelector(href) : null;
+        dlog(`t+2000ms — animateMotion[${i}] mpath href=${href} resolved=${!!resolved}`);
+      });
+    }, 2000);
+
+    window.setTimeout(() => {
+      const html = this.shadowRoot?.innerHTML ?? '';
+      dlog('t+3000ms — shadow DOM HTML (first 2000 chars):\n' + html.slice(0, 2000));
+    }, 3000);
   }
 
   override disconnectedCallback(): void {
@@ -134,8 +201,11 @@ export class FlowmeCard extends LitElement {
     }
 
     if (changed.has('hass') && this.renderer && this.hass) {
+      dlog('willUpdate hass-changed → pushing values for', this.config.flows.length, 'flow(s) to renderer', this.renderer.constructor.name);
       for (const flow of this.config.flows) {
         const state = this.hass.states[flow.entity];
+        const parsed = parseSensorValue(state?.state);
+        dlog('updateFlow →', flow.id, 'entity=', flow.entity, 'raw=', state?.state, 'parsed=', parsed);
         if (!state) {
           const key = `${flow.id}:${flow.entity}`;
           if (!this.warnedMissing.has(key)) {
@@ -263,7 +333,10 @@ export class FlowmeCard extends LitElement {
           ></div>
           <div class="renderer-mount" ${ref(this.rendererMount)}></div>
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
-          ${(config.overlays ?? []).map((o) => renderOverlayHost(o, this.hass))}
+          ${(config.overlays ?? []).map((o) => {
+            dlog('rendering overlay →', o.type, 'entity=', o.entity ?? '(none)', 'position=', o.position, 'size=', o.size);
+            return renderOverlayHost(o, this.hass);
+          })}
         </div>
       </ha-card>
     `;

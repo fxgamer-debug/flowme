@@ -1,6 +1,7 @@
 import type { FlowRenderer, FlowRendererKind } from './types.js';
 import { SvgRenderer } from './svg-renderer.js';
 import { HoudiniRenderer } from './houdini-renderer.js';
+import { dlog } from '../debug-log.js';
 
 /**
  * Pick the best renderer available.
@@ -20,17 +21,19 @@ import { HoudiniRenderer } from './houdini-renderer.js';
 export function createRenderer(): FlowRenderer {
   const override = readRendererOverride();
   const kind: FlowRendererKind = override ?? 'svg';
+  const houdiniAvailable = hasHoudiniSupport();
 
-  // eslint-disable-next-line no-console
-  console.info(
-    `[flowme] using ${kind} renderer${override ? ' (forced via ?flowme_renderer)' : ''}`,
+  dlog(
+    'renderer selected:',
+    kind === 'houdini' ? 'HoudiniRenderer' : 'SvgRenderer',
+    '| override=', override ?? '(none)',
+    '| Houdini available:', houdiniAvailable,
+    '| paintWorklet in CSS?', typeof CSS !== 'undefined' && 'paintWorklet' in CSS,
   );
 
   if (kind === 'houdini') {
-    if (!hasHoudiniSupport()) {
-      console.warn(
-        '[flowme] ?flowme_renderer=houdini requested but CSS.paintWorklet / registerProperty is not available — falling back to SVG',
-      );
+    if (!houdiniAvailable) {
+      dlog('?flowme_renderer=houdini requested but unsupported — falling back to SVG');
       return new SvgRenderer();
     }
     return new HoudiniRenderer();

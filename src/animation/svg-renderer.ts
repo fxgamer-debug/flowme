@@ -8,6 +8,12 @@ import {
   pathLengthPercent,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
+import { dlog } from '../debug-log.js';
+
+const RLOG = '[FlowMe Renderer]';
+function rlog(...args: unknown[]): void {
+  console.warn(RLOG, ...args);
+}
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
@@ -80,6 +86,8 @@ export class SvgRenderer implements FlowRenderer {
   private applyUpdate = debounce(() => this.flushUpdates(), 200);
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
+    rlog('init called — container:', container, '| container size:', container.getBoundingClientRect(), '| flows:', config.flows.length, '| nodes:', config.nodes.length);
+    rlog('init config flows:', config.flows.map((f) => ({ id: f.id, entity: f.entity, from: f.from_node, to: f.to_node, waypoints: f.waypoints.length, domain: f.domain })));
     this.container = container;
     this.config = config;
     this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
@@ -94,6 +102,7 @@ export class SvgRenderer implements FlowRenderer {
     svg.style.overflow = 'visible';
     this.svg = svg;
     container.appendChild(svg);
+    rlog('<svg> element appended to container. Parent shadow-root?', (container.getRootNode() as ShadowRoot | Document).constructor.name);
 
     this.buildSkeleton();
     this.resizeObserver = new ResizeObserver(() => this.onResize());
@@ -101,11 +110,11 @@ export class SvgRenderer implements FlowRenderer {
   }
 
   updateFlow(flowId: string, value: number): void {
-    if (!this.flowsById.has(flowId)) return;
-    if (DEBUG) {
-      // eslint-disable-next-line no-console
-      console.debug(`[flowme][svg] updateFlow(${flowId}) value=${value}`);
+    if (!this.flowsById.has(flowId)) {
+      rlog('updateFlow called for UNKNOWN flowId:', flowId);
+      return;
     }
+    rlog('updateFlow:', flowId, 'value=', value, '→ queued, will flush in 200ms');
     this.latestValues.set(flowId, value);
     this.applyUpdate();
   }
@@ -205,7 +214,16 @@ export class SvgRenderer implements FlowRenderer {
 
       this.svg.appendChild(group);
       this.flowNodes.set(flow.id, dom);
+      const dAttr = path.getAttribute('d') ?? '';
+      rlog(
+        'flow element appended:', flow.id,
+        '| pathId=', pathId,
+        '| d=', dAttr,
+        '| shape=', shape,
+        '| group outerHTML[0..200]=', group.outerHTML.slice(0, 200),
+      );
     }
+    rlog('buildSkeleton complete. flowNodes map size=', this.flowNodes.size, '| <svg> children=', this.svg.children.length);
   }
 
   private onResize(): void {
@@ -235,34 +253,49 @@ export class SvgRenderer implements FlowRenderer {
   private applyFlow(flowId: string, value: number): void {
     const flow = this.flowsById.get(flowId);
     const dom = this.flowNodes.get(flowId);
-    if (!flow || !dom) return;
+    if (!flow || !dom) {
+      rlog('applyFlow SKIP (unknown flow or no DOM):', flowId, 'hasFlow?', !!flow, 'hasDom?', !!dom);
+      return;
+    }
 
     const profile = this.profileFor(flow);
     const threshold = DEBUG ? 0 : flow.threshold ?? profile.visibility_threshold;
     const magnitude = Math.abs(value);
     const visible = DEBUG || magnitude >= threshold;
 
+    rlog('applyFlow:', flowId, 'value=', value, '| magnitude=', magnitude, '| threshold=', threshold, '| visible=', visible, '| DEBUG=', DEBUG);
+
     if (!visible) {
       this.setGroupVisible(dom, false);
+      rlog('applyFlow → flow', flowId, 'hidden (below threshold). No animation will run.');
       return;
     }
     this.setGroupVisible(dom, true);
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
+    const rawSpeed = profile.speed_curve(magnitude);
     const durMs = DEBUG
       ? DEBUG_DUR_MS
-      : Math.max(50, profile.speed_curve(magnitude) * speedMultiplier);
+      : Math.max(50, rawSpeed * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
-    if (DEBUG) {
-      // eslint-disable-next-line no-console
-      console.debug(
-        `[flowme][svg] applyFlow(${flowId}) dur=${durMs}ms dir=${direction} shape=${dom.shape}`,
-      );
-    }
     const color =
       direction > 0
         ? flow.color_positive ?? profile.default_color_positive
         : flow.color_negative ?? profile.default_color_negative;
+
+    rlog(
+      'applyFlow → computed:', flowId,
+      '| domain=', flow.domain ?? this.config?.domain ?? '(default)',
+      '| shape=', dom.shape,
+      '| rawSpeedCurve(mag)=', rawSpeed,
+      '| speedMult=', speedMultiplier,
+      '| dur=', durMs, 'ms',
+      '| direction=', direction,
+      '| color=', color,
+      '| flow.color_positive=', flow.color_positive,
+      '| flow.color_negative=', flow.color_negative,
+      '| profile.default_color_positive=', profile.default_color_positive,
+    );
 
     switch (dom.shape) {
       case 'wave':
@@ -317,10 +350,10 @@ export class SvgRenderer implements FlowRenderer {
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    rlog('applyParticles:', dom.pathId, '| kind=', kind, '| count=', dom.particles.length, '| dur=', durStr, '| color=', color, '| direction=', direction);
     for (let i = 0; i < dom.particles.length; i++) {
       const p = dom.particles[i];
       if (!p) continue;
-      // update visual colour
       if (kind === 'dot') {
         p.shape.setAttribute('fill', color);
       } else {
@@ -328,7 +361,6 @@ export class SvgRenderer implements FlowRenderer {
       }
       if (profile.glow) (p.shape as unknown as HTMLElement).style.color = color;
 
-      // replace animateMotion to force dur refresh
       const fresh = document.createElementNS(SVG_NS, 'animateMotion');
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
@@ -348,7 +380,19 @@ export class SvgRenderer implements FlowRenderer {
       p.animateMotion.replaceWith(fresh);
       p.animateMotion = fresh;
       p.shape.appendChild(fresh);
+
+      if (i === 0) {
+        // log the first particle only to avoid console flooding on high-count flows
+        rlog(
+          'animateMotion[0] installed on', dom.pathId,
+          '| dur=', fresh.getAttribute('dur'),
+          '| mpath href=#' + dom.pathId,
+          '| element outerHTML[0..200]=', fresh.outerHTML.slice(0, 200),
+          '| parent shape outerHTML[0..200]=', p.shape.outerHTML.slice(0, 200),
+        );
+      }
     }
+    dlog('SVG flow created:', dom.pathId, 'pathD=', dom.path.getAttribute('d'), 'dur=', durStr, 'particles=', dom.particles.length);
   }
 
   private applyWave(
