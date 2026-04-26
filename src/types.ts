@@ -92,16 +92,29 @@ export interface FlowmeConfig {
   edit_mode_password?: string;
 }
 
+export type FlowShape = 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';
+
 export interface FlowProfile {
   domain: FlowDomain;
   default_color_positive: string;
   default_color_negative: string;
-  shape: 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';
+  shape: FlowShape;
   glow: boolean;
   /** Unit label, e.g. 'W', 'L/min', 'Mbps'. */
   unit_label: string;
   /** Map a sensor value to a one-cycle animation duration in milliseconds. */
   speed_curve: (value: number) => number;
+  /**
+   * Particle count per flow as a function of value. Used by shapes that
+   * encode intensity via density rather than speed (e.g. network packets).
+   * Defaults to a constant 3 when omitted.
+   */
+  particle_count_curve?: (value: number) => number;
+  /**
+   * Wave amplitude in px as a function of value. Used by shape='wave' only.
+   * Defaults to a constant 4 px when omitted.
+   */
+  wave_amplitude_curve?: (value: number) => number;
   /** Flows with absolute value below this are hidden. */
   visibility_threshold: number;
   /** Human-readable value rendering. e.g. 1200 -> "1.2 kW". */

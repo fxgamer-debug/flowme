@@ -1,29 +1,55 @@
-import type { FlowConfig, FlowmeConfig, FlowProfile } from '../types.js';
+import type { FlowConfig, FlowmeConfig, FlowProfile, FlowShape } from '../types.js';
 import { getProfile } from '../flow-profiles/index.js';
-import { debounce, polylineToSvgPath } from '../utils.js';
+import {
+  debounce,
+  percentToPixel,
+  polylineToSvgPath,
+  pointAtProgress,
+  pathLengthPercent,
+} from '../utils.js';
 import type { FlowRenderer } from './types.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
-const DEFAULT_DOTS_PER_FLOW = 3;
+const DEFAULT_PARTICLE_COUNT = 3;
 const DOT_RADIUS = 5; // px
+const SQUARE_SIZE = 9; // px
 const STROKE_WIDTH = 2; // px
+const WAVE_STROKE_WIDTH = 8; // px
+const PULSE_MAX_RADIUS = 14; // px
 
 interface FlowDomNodes {
   group: SVGGElement;
   path: SVGPathElement;
-  dotSlots: Array<{ circle: SVGCircleElement; animateMotion: SVGAnimateMotionElement }>;
   pathId: string;
+  shape: FlowShape;
+  /** Dots / squares: particles moved via animateMotion. */
+  particles: Array<{ shape: SVGGraphicsElement; animateMotion: SVGAnimateMotionElement }>;
+  /** Wave: a visible dashed stroke on the same path. */
+  waveStroke?: SVGUseElement;
+  /** Pulse: stationary circles placed along path, each with its own animation. */
+  pulseCircles?: Array<{
+    circle: SVGCircleElement;
+    animateRadius: SVGAnimateElement;
+    animateOpacity: SVGAnimateElement;
+  }>;
 }
 
 /**
- * v0.1 renderer: native SVG with `animateMotion` elements.
+ * SVG-based flow renderer.
  *
- * Known quirk (spec §Animation system → svg-renderer): `animateMotion` `dur`
- * changes don't take effect on some browsers. Work around by replacing the
- * `<animateMotion>` element in the DOM when duration changes. Calls are
- * debounced (200 ms) so rapid sensor updates don't thrash.
+ * - shape='dot'     → N circles travelling along the path (animateMotion).
+ * - shape='square'  → N squares travelling along the path.
+ * - shape='wave'    → thick stroked path with repeating dash pattern,
+ *                     animated via stroke-dashoffset (approximation of the
+ *                     spec's sinusoidal displacement; the Houdini renderer
+ *                     does proper sinusoids).
+ * - shape='pulse'   → stationary circles at N evenly spaced points, each
+ *                     scaling from 0 → MAX radius while fading out.
+ *
+ * Rapid updates are debounced (200 ms). animateMotion dur changes are
+ * handled by replacing the <animateMotion> element (spec workaround).
  */
 export class SvgRenderer implements FlowRenderer {
   private container: HTMLElement | null = null;
@@ -80,7 +106,6 @@ export class SvgRenderer implements FlowRenderer {
   private containerSize(): { width: number; height: number } {
     if (!this.container) return { width: 0, height: 0 };
     const rect = this.container.getBoundingClientRect();
-    // avoid zero-size SVGs during initial layout
     return { width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
   }
 
@@ -92,12 +117,15 @@ export class SvgRenderer implements FlowRenderer {
     const defs = document.createElementNS(SVG_NS, 'defs');
     this.svg.appendChild(defs);
 
+    const nodesById = new Map(this.config.nodes.map((n) => [n.id, n]));
+
     for (const flow of this.config.flows) {
-      const nodesById = new Map(this.config.nodes.map((n) => [n.id, n]));
       const fromNode = nodesById.get(flow.from_node);
       const toNode = nodesById.get(flow.to_node);
       if (!fromNode || !toNode) continue;
 
+      const profile = this.profileFor(flow);
+      const shape = profile.shape;
       const points = [fromNode.position, ...flow.waypoints, toNode.position];
       const pathId = `flowme-path-${flow.id}`;
 
@@ -105,52 +133,56 @@ export class SvgRenderer implements FlowRenderer {
       path.setAttribute('id', pathId);
       path.setAttribute('d', polylineToSvgPath(points, size));
       path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', this.strokeColorFor(flow));
-      path.setAttribute('stroke-width', String(STROKE_WIDTH));
-      path.setAttribute('stroke-opacity', '0.25');
-      path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('stroke-linejoin', 'round');
       defs.appendChild(path);
 
       const group = document.createElementNS(SVG_NS, 'g');
       group.setAttribute('data-flow-id', flow.id);
 
-      // visible outline — reuse the same path visually
       const outline = document.createElementNS(SVG_NS, 'use');
       outline.setAttributeNS(XLINK_NS, 'href', `#${pathId}`);
       outline.setAttribute('href', `#${pathId}`);
+      outline.setAttribute('stroke', this.primaryColor(flow));
+      outline.setAttribute('stroke-opacity', '0.2');
+      outline.setAttribute('stroke-width', String(STROKE_WIDTH));
+      outline.setAttribute('stroke-linecap', 'round');
+      outline.setAttribute('stroke-linejoin', 'round');
+      outline.setAttribute('fill', 'none');
       group.appendChild(outline);
 
-      const profile = this.profileFor(flow);
-      const dotColor = this.dotColorFor(flow, 1);
-      const dotSlots: FlowDomNodes['dotSlots'] = [];
-      for (let i = 0; i < DEFAULT_DOTS_PER_FLOW; i++) {
-        const circle = document.createElementNS(SVG_NS, 'circle');
-        circle.setAttribute('r', String(DOT_RADIUS));
-        circle.setAttribute('fill', dotColor);
-        circle.setAttribute('opacity', '0');
-        if (profile.glow) {
-          circle.setAttribute('filter', 'drop-shadow(0 0 6px currentColor)');
-          (circle as unknown as HTMLElement).style.color = dotColor;
-        }
-        const animateMotion = document.createElementNS(SVG_NS, 'animateMotion');
-        animateMotion.setAttribute('repeatCount', 'indefinite');
-        animateMotion.setAttribute('dur', '2s');
-        animateMotion.setAttribute(
-          'begin',
-          `${((-2 * i) / DEFAULT_DOTS_PER_FLOW).toFixed(3)}s`,
-        );
-        const mpath = document.createElementNS(SVG_NS, 'mpath');
-        mpath.setAttributeNS(XLINK_NS, 'href', `#${pathId}`);
-        mpath.setAttribute('href', `#${pathId}`);
-        animateMotion.appendChild(mpath);
-        circle.appendChild(animateMotion);
-        group.appendChild(circle);
-        dotSlots.push({ circle, animateMotion });
+      const dom: FlowDomNodes = {
+        group,
+        path,
+        pathId,
+        shape,
+        particles: [],
+      };
+
+      if (shape === 'wave') {
+        const stroke = document.createElementNS(SVG_NS, 'use');
+        stroke.setAttributeNS(XLINK_NS, 'href', `#${pathId}`);
+        stroke.setAttribute('href', `#${pathId}`);
+        stroke.setAttribute('stroke', this.primaryColor(flow));
+        stroke.setAttribute('stroke-width', String(WAVE_STROKE_WIDTH));
+        stroke.setAttribute('stroke-opacity', '0.9');
+        stroke.setAttribute('stroke-linecap', 'round');
+        stroke.setAttribute('stroke-linejoin', 'round');
+        stroke.setAttribute('fill', 'none');
+        stroke.setAttribute('stroke-dasharray', '14 10');
+        stroke.setAttribute('stroke-dashoffset', '0');
+        stroke.setAttribute('opacity', '0');
+        // CSS animation on dashoffset — configured per-flow in update().
+        group.appendChild(stroke);
+        dom.waveStroke = stroke;
+      } else if (shape === 'pulse') {
+        dom.pulseCircles = [];
+        // placeholder — we build actual circles in update() once we know particle count
+      } else {
+        // dot / square / gradient (gradient falls back to dot visually in SVG)
+        // initial particles built in update() once value known
       }
 
       this.svg.appendChild(group);
-      this.flowNodes.set(flow.id, { group, path, dotSlots, pathId });
+      this.flowNodes.set(flow.id, dom);
     }
   }
 
@@ -158,7 +190,6 @@ export class SvgRenderer implements FlowRenderer {
     if (!this.svg || !this.config) return;
     const size = this.containerSize();
     this.svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
-    // regenerate path d's against the new size
     const nodesById = new Map(this.config.nodes.map((n) => [n.id, n]));
     for (const flow of this.config.flows) {
       const dom = this.flowNodes.get(flow.id);
@@ -168,6 +199,8 @@ export class SvgRenderer implements FlowRenderer {
       if (!fromNode || !toNode) continue;
       const points = [fromNode.position, ...flow.waypoints, toNode.position];
       dom.path.setAttribute('d', polylineToSvgPath(points, size));
+      // pulse circles are positioned in viewBox space and need repositioning
+      if (dom.shape === 'pulse') this.applyFlow(flow.id, this.latestValues.get(flow.id) ?? 0);
     }
   }
 
@@ -187,34 +220,92 @@ export class SvgRenderer implements FlowRenderer {
     const magnitude = Math.abs(value);
     const visible = magnitude >= threshold;
 
-    // hide dots entirely if below threshold
-    const opacity = visible ? '1' : '0';
-    for (const slot of dom.dotSlots) {
-      slot.circle.setAttribute('opacity', opacity);
+    if (!visible) {
+      this.setGroupVisible(dom, false);
+      return;
     }
-    if (!visible) return;
+    this.setGroupVisible(dom, true);
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    const durMs = profile.speed_curve(magnitude) * speedMultiplier;
-    const durStr = `${(durMs / 1000).toFixed(3)}s`;
-
+    const durMs = Math.max(50, profile.speed_curve(magnitude) * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
-    const colorSource = direction > 0
-      ? flow.color_positive ?? profile.default_color_positive
-      : flow.color_negative ?? profile.default_color_negative;
+    const color =
+      direction > 0
+        ? flow.color_positive ?? profile.default_color_positive
+        : flow.color_negative ?? profile.default_color_negative;
 
-    for (let i = 0; i < dom.dotSlots.length; i++) {
-      const slot = dom.dotSlots[i];
-      if (!slot) continue;
-      slot.circle.setAttribute('fill', colorSource);
-      if (profile.glow) (slot.circle as unknown as HTMLElement).style.color = colorSource;
-      // spec workaround: replace animateMotion element so browsers pick up new dur reliably
+    switch (dom.shape) {
+      case 'wave':
+        this.applyWave(dom, profile, durMs, color, direction);
+        break;
+      case 'pulse':
+        this.applyPulse(dom, flow, profile, value, durMs, color);
+        break;
+      case 'square':
+        this.applyParticles(dom, flow, profile, value, durMs, color, direction, 'square');
+        break;
+      case 'gradient':
+      case 'dot':
+      default:
+        this.applyParticles(dom, flow, profile, value, durMs, color, direction, 'dot');
+        break;
+    }
+  }
+
+  private setGroupVisible(dom: FlowDomNodes, visible: boolean): void {
+    const op = visible ? '1' : '0';
+    for (const p of dom.particles) p.shape.setAttribute('opacity', op);
+    if (dom.waveStroke) dom.waveStroke.setAttribute('opacity', visible ? '0.9' : '0');
+    if (dom.pulseCircles) {
+      for (const p of dom.pulseCircles) p.circle.setAttribute('opacity', op);
+    }
+  }
+
+  private applyParticles(
+    dom: FlowDomNodes,
+    _flow: FlowConfig,
+    profile: FlowProfile,
+    value: number,
+    durMs: number,
+    color: string,
+    direction: number,
+    kind: 'dot' | 'square',
+  ): void {
+    const desired = Math.max(
+      1,
+      Math.round(
+        profile.particle_count_curve ? profile.particle_count_curve(value) : DEFAULT_PARTICLE_COUNT,
+      ),
+    );
+    // rebuild particle set if count changed
+    if (dom.particles.length !== desired) {
+      for (const p of dom.particles) p.shape.remove();
+      dom.particles = [];
+      for (let i = 0; i < desired; i++) {
+        dom.particles.push(this.makeParticle(dom, kind, color, profile.glow));
+      }
+    }
+
+    const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    for (let i = 0; i < dom.particles.length; i++) {
+      const p = dom.particles[i];
+      if (!p) continue;
+      // update visual colour
+      if (kind === 'dot') {
+        p.shape.setAttribute('fill', color);
+      } else {
+        p.shape.setAttribute('fill', color);
+      }
+      if (profile.glow) (p.shape as unknown as HTMLElement).style.color = color;
+
+      // replace animateMotion to force dur refresh
       const fresh = document.createElementNS(SVG_NS, 'animateMotion');
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
+      fresh.setAttribute('rotate', 'auto');
       fresh.setAttribute(
         'begin',
-        `${((-durMs * i) / (dom.dotSlots.length * 1000)).toFixed(3)}s`,
+        `${((-durMs * i) / (dom.particles.length * 1000)).toFixed(3)}s`,
       );
       if (direction < 0) {
         fresh.setAttribute('keyPoints', '1;0');
@@ -224,25 +315,155 @@ export class SvgRenderer implements FlowRenderer {
       mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
       mpath.setAttribute('href', `#${dom.pathId}`);
       fresh.appendChild(mpath);
-      slot.animateMotion.replaceWith(fresh);
-      slot.animateMotion = fresh;
-      slot.circle.appendChild(fresh);
+      p.animateMotion.replaceWith(fresh);
+      p.animateMotion = fresh;
+      p.shape.appendChild(fresh);
     }
+  }
+
+  private applyWave(
+    dom: FlowDomNodes,
+    _profile: FlowProfile,
+    durMs: number,
+    color: string,
+    direction: number,
+  ): void {
+    const stroke = dom.waveStroke;
+    if (!stroke) return;
+    stroke.setAttribute('stroke', color);
+    // animate stroke-dashoffset via inline <animate>
+    const existing = stroke.querySelector('animate');
+    if (existing) existing.remove();
+    const anim = document.createElementNS(SVG_NS, 'animate');
+    anim.setAttribute('attributeName', 'stroke-dashoffset');
+    anim.setAttribute('from', direction > 0 ? '0' : '-24');
+    anim.setAttribute('to', direction > 0 ? '-24' : '0');
+    anim.setAttribute('dur', `${(durMs / 1000).toFixed(3)}s`);
+    anim.setAttribute('repeatCount', 'indefinite');
+    stroke.appendChild(anim);
+  }
+
+  private applyPulse(
+    dom: FlowDomNodes,
+    flow: FlowConfig,
+    profile: FlowProfile,
+    value: number,
+    durMs: number,
+    color: string,
+  ): void {
+    if (!this.svg) return;
+    const group = dom.group;
+    const nodesById = new Map(this.config?.nodes.map((n) => [n.id, n]) ?? []);
+    const fromNode = nodesById.get(flow.from_node);
+    const toNode = nodesById.get(flow.to_node);
+    if (!fromNode || !toNode) return;
+    const points = [fromNode.position, ...flow.waypoints, toNode.position];
+    const totalLenPct = pathLengthPercent(points);
+    const pulseCount = Math.max(
+      2,
+      Math.round(
+        profile.particle_count_curve
+          ? profile.particle_count_curve(value)
+          : Math.max(3, Math.floor(totalLenPct / 15)),
+      ),
+    );
+    const size = this.containerSize();
+
+    // rebuild when count changes
+    if (!dom.pulseCircles || dom.pulseCircles.length !== pulseCount) {
+      if (dom.pulseCircles) for (const p of dom.pulseCircles) p.circle.remove();
+      dom.pulseCircles = [];
+      for (let i = 0; i < pulseCount; i++) {
+        const circle = document.createElementNS(SVG_NS, 'circle');
+        circle.setAttribute('r', '0');
+        circle.setAttribute('fill', color);
+        circle.setAttribute('opacity', '0');
+        if (profile.glow) circle.setAttribute('filter', 'drop-shadow(0 0 6px currentColor)');
+        (circle as unknown as HTMLElement).style.color = color;
+
+        const animR = document.createElementNS(SVG_NS, 'animate');
+        animR.setAttribute('attributeName', 'r');
+        animR.setAttribute('values', `0;${PULSE_MAX_RADIUS};0`);
+        animR.setAttribute('repeatCount', 'indefinite');
+        circle.appendChild(animR);
+
+        const animO = document.createElementNS(SVG_NS, 'animate');
+        animO.setAttribute('attributeName', 'opacity');
+        animO.setAttribute('values', '0;1;0');
+        animO.setAttribute('repeatCount', 'indefinite');
+        circle.appendChild(animO);
+
+        group.appendChild(circle);
+        dom.pulseCircles.push({ circle, animateRadius: animR, animateOpacity: animO });
+      }
+    }
+
+    for (let i = 0; i < dom.pulseCircles.length; i++) {
+      const p = dom.pulseCircles[i];
+      if (!p) continue;
+      const progress = (i + 0.5) / dom.pulseCircles.length;
+      const pt = pointAtProgress(points, progress);
+      const px = percentToPixel(pt, size);
+      p.circle.setAttribute('cx', px.x.toFixed(2));
+      p.circle.setAttribute('cy', px.y.toFixed(2));
+      p.circle.setAttribute('fill', color);
+      (p.circle as unknown as HTMLElement).style.color = color;
+
+      const durStr = `${(durMs / 1000).toFixed(3)}s`;
+      const begin = `${((-durMs * i) / (dom.pulseCircles.length * 1000)).toFixed(3)}s`;
+      p.animateRadius.setAttribute('dur', durStr);
+      p.animateRadius.setAttribute('begin', begin);
+      p.animateOpacity.setAttribute('dur', durStr);
+      p.animateOpacity.setAttribute('begin', begin);
+    }
+  }
+
+  private makeParticle(
+    dom: FlowDomNodes,
+    kind: 'dot' | 'square',
+    color: string,
+    glow: boolean,
+  ): { shape: SVGGraphicsElement; animateMotion: SVGAnimateMotionElement } {
+    let shape: SVGGraphicsElement;
+    if (kind === 'square') {
+      const rect = document.createElementNS(SVG_NS, 'rect');
+      rect.setAttribute('width', String(SQUARE_SIZE));
+      rect.setAttribute('height', String(SQUARE_SIZE));
+      rect.setAttribute('x', String(-SQUARE_SIZE / 2));
+      rect.setAttribute('y', String(-SQUARE_SIZE / 2));
+      rect.setAttribute('rx', '1.5');
+      rect.setAttribute('fill', color);
+      rect.setAttribute('opacity', '0');
+      shape = rect;
+    } else {
+      const circle = document.createElementNS(SVG_NS, 'circle');
+      circle.setAttribute('r', String(DOT_RADIUS));
+      circle.setAttribute('fill', color);
+      circle.setAttribute('opacity', '0');
+      shape = circle;
+    }
+    if (glow) {
+      shape.setAttribute('filter', 'drop-shadow(0 0 6px currentColor)');
+      (shape as unknown as HTMLElement).style.color = color;
+    }
+    const animateMotion = document.createElementNS(SVG_NS, 'animateMotion');
+    animateMotion.setAttribute('repeatCount', 'indefinite');
+    animateMotion.setAttribute('dur', '2s');
+    const mpath = document.createElementNS(SVG_NS, 'mpath');
+    mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
+    mpath.setAttribute('href', `#${dom.pathId}`);
+    animateMotion.appendChild(mpath);
+    shape.appendChild(animateMotion);
+    dom.group.appendChild(shape);
+    return { shape, animateMotion };
   }
 
   private profileFor(flow: FlowConfig): FlowProfile {
     return getProfile(flow.domain ?? this.config?.domain);
   }
 
-  private strokeColorFor(flow: FlowConfig): string {
+  private primaryColor(flow: FlowConfig): string {
     const profile = this.profileFor(flow);
     return flow.color_positive ?? profile.default_color_positive;
-  }
-
-  private dotColorFor(flow: FlowConfig, sign: number): string {
-    const profile = this.profileFor(flow);
-    return sign >= 0
-      ? flow.color_positive ?? profile.default_color_positive
-      : flow.color_negative ?? profile.default_color_negative;
   }
 }

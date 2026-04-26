@@ -1,9 +1,11 @@
 import type { FlowProfile } from '../types.js';
 
 /**
- * Generic fallback profile. Used when no domain matches, and also stands in
- * for the other five domains in v0.1 until v0.2 ships them with their own
- * spec-accurate parameters.
+ * Generic fallback profile. Used when no domain matches (should be rare —
+ * every config validates its domain first).
+ * Spec §"Default flow profiles → Generic".
+ *
+ *   dur_ms = max(1000, 5000 - v * 4)
  */
 export const genericProfile: FlowProfile = {
   domain: 'generic',

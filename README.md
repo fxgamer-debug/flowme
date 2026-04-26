@@ -2,15 +2,15 @@
 
 A generic Home Assistant custom Lovelace card that overlays animated flow lines and interactive elements on top of a user-supplied background image. Unlike existing energy-flow cards, flowme is **multi-domain** (energy, water, network, HVAC, gas, generic) and uses **arbitrary user-defined paths** drawn directly on your own background photo via a visual drag-and-drop editor.
 
-> Status: **v0.1.0 MVP** — energy domain, SVG-based animation, minimal editor. Multi-domain, Houdini renderer, visual drag editor, auto-route pathfinding, weather transitions and overlays land in v0.2 through v1.0.
+> Status: **v0.2.0** — all six domain flow profiles, Houdini Paint renderer with SVG fallback, full drag-and-drop editor with undo/redo, waypoint insertion, and snap-to-grid.
 
 ## Why flowme
 
-- **Visual coordinate editor** — drag handles on the actual background image, no YAML coordinate editing. Undo/redo with `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` (v0.2).
+- **Visual coordinate editor** — drag nodes and waypoints on the actual background image, no YAML coordinate editing. Undo/redo with `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z`. Shift-drag snaps to an 8% grid; Shift-click a flow segment to insert a waypoint.
 - **Auto-routing via image analysis** — one-click "Suggest path" runs Sobel edge detection on your background and A* pathfinding to follow visible architectural features (v0.3).
-- **Houdini Paint API animation** with progressive enhancement to SVG `animateMotion` fallback for browsers without Houdini support (v0.2).
+- **Houdini Paint API animation** with progressive enhancement to SVG `animateMotion` fallback for browsers without Houdini support. Append `?flowme_renderer=svg` to the dashboard URL to force the fallback for debugging.
 
-## Installation (pre-HACS, v0.1.0)
+## Installation (pre-HACS)
 
 1. Download `dist/flowme-card.js` from this repo.
 2. Copy it into your HA `/config/www/community/flowme/` directory.
@@ -51,14 +51,14 @@ Drop it into a dashboard, point `entity` at a real power sensor, and you'll see 
 
 ## Supported domains
 
-| domain   | shape  | unit   | status    |
-|----------|--------|--------|-----------|
-| energy   | dot    | W      | v0.1.0    |
-| water    | wave   | L/min  | v0.2.0    |
-| network  | square | Mbps   | v0.2.0    |
-| hvac     | wave   | CFM    | v0.2.0    |
-| gas      | pulse  | m³/h   | v0.2.0    |
-| generic  | dot    | —      | v0.2.0    |
+| domain   | shape  | unit   | status |
+|----------|--------|--------|--------|
+| energy   | dot    | W      | v0.1.0 |
+| water    | wave   | L/min  | v0.2.0 |
+| network  | square | Mbps   | v0.2.0 |
+| hvac     | wave   | CFM    | v0.2.0 (static colour — temperature-gradient colour deferred) |
+| gas      | pulse  | m³/h   | v0.2.0 |
+| generic  | dot    | —      | v0.2.0 |
 
 ## Roadmap
 

@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
+// Single-file library build for HACS distribution.
+// The Paint Worklet source is imported as ?raw text and inlined into
+// flowme-card.js, then loaded at runtime via a Blob URL. This keeps the
+// entire card as one file and avoids HACS having to ship a second asset.
 export default defineConfig({
   resolve: {
     alias: {
@@ -15,12 +19,7 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        inlineDynamicImports: false,
-        manualChunks(id: string) {
-          if (id.includes('flowme-painter')) return 'flowme-painter';
-          return undefined;
-        },
-        chunkFileNames: '[name].js',
+        inlineDynamicImports: true,
         assetFileNames: '[name][extname]',
       },
     },
