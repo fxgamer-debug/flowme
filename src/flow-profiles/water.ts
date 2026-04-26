@@ -1,25 +1,32 @@
 import type { FlowProfile } from '../types.js';
-import { clamp } from '../utils.js';
+import { logCurveDuration } from '../utils.js';
 
 /**
  * Water profile: continuous wave-like fluid effect on a thick line.
- * Spec §"Default flow profiles → Water".
  *
- * Speed: `dur_ms = clamp(6000 - v*200, 800, 6000)` for v in L/min.
- * Wave amplitude is a constant 4px (spec).
+ * Residential calibration (v1.0.5):
+ *   speed_range_min = 0.5 L/min  (drip / low-flow bathroom tap)
+ *   speed_range_max = 50 L/min   (shower + washing machine combined)
+ * Wave amplitude is a constant 4 px.
  */
 export const waterProfile: FlowProfile = {
   domain: 'water',
   default_color_positive: '#3B82F6',
-  default_color_negative: '#3B82F6',
+  // v1.0.5: previously identical to positive, meaning bidirectional water
+  // flows (mains supply vs greywater return) were visually indistinguishable
+  // except for the direction of motion along the path. Cyan sits in the
+  // same domain family so negative still reads as "water", just flipped.
+  default_color_negative: '#06B6D4',
   shape: 'wave',
   glow: false,
   unit_label: 'L/min',
+  speed_range_min: 0.5,
+  speed_range_max: 50,
   visibility_threshold: 0.5,
+  burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    const magnitude = Math.abs(value);
-    return clamp(6000 - magnitude * 200, 800, 6000);
+    return logCurveDuration(value, 0.5, 50);
   },
 
   wave_amplitude_curve(_value: number): number {

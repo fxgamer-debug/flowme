@@ -43,6 +43,15 @@ const STROKE_WIDTH = 2; // px
 const WAVE_STROKE_WIDTH = 8; // px
 const PULSE_MAX_RADIUS = 14; // px
 
+/** v1.0.5 burst mode. When a flow's magnitude stays at or above
+ *  `BURST_TRIGGER_RATIO × speed_range_max` for at least
+ *  `BURST_SUSTAIN_MS` ms, the particle count for that flow is multiplied
+ *  by the profile's `burst_density_multiplier` (default 1.5) and capped
+ *  at `BURST_MAX_PARTICLES`. Drops below the ratio reset the timer. */
+const BURST_TRIGGER_RATIO = 0.9;
+const BURST_SUSTAIN_MS = 5000;
+const BURST_MAX_PARTICLES = 20;
+
 interface FlowDomNodes {
   group: SVGGElement;
   path: SVGPathElement;
@@ -84,6 +93,12 @@ export class SvgRenderer implements FlowRenderer {
   private flowsById = new Map<string, FlowConfig>();
   private latestValues = new Map<string, number>();
   private applyUpdate = debounce(() => this.flushUpdates(), 200);
+  /** First timestamp (ms, `performance.now`) at which a flow's magnitude
+   *  crossed the burst trigger ratio. Null when below the ratio. */
+  private burstEnteredAt = new Map<string, number>();
+  /** Currently-active burst flows. Used to fire exactly one transition
+   *  log per enter / exit (not once per applyFlow call). */
+  private burstActive = new Set<string>();
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     rlog('init called — container:', container, '| container size:', container.getBoundingClientRect(), '| flows:', config.flows.length, '| nodes:', config.nodes.length);
@@ -130,6 +145,8 @@ export class SvgRenderer implements FlowRenderer {
     this.flowNodes.clear();
     this.flowsById.clear();
     this.latestValues.clear();
+    this.burstEnteredAt.clear();
+    this.burstActive.clear();
   }
 
   // -- internal --
@@ -283,6 +300,8 @@ export class SvgRenderer implements FlowRenderer {
         ? flow.color_positive ?? profile.default_color_positive
         : flow.color_negative ?? profile.default_color_negative;
 
+    const burstMultiplier = this.updateBurstState(flowId, magnitude, profile);
+
     rlog(
       'applyFlow → computed:', flowId,
       '| domain=', flow.domain ?? this.config?.domain ?? '(default)',
@@ -292,6 +311,7 @@ export class SvgRenderer implements FlowRenderer {
       '| dur=', durMs, 'ms',
       '| direction=', direction,
       '| color=', color,
+      '| burstMultiplier=', burstMultiplier,
       '| flow.color_positive=', flow.color_positive,
       '| flow.color_negative=', flow.color_negative,
       '| profile.default_color_positive=', profile.default_color_positive,
@@ -299,20 +319,73 @@ export class SvgRenderer implements FlowRenderer {
 
     switch (dom.shape) {
       case 'wave':
+        // Wave shape has no particles — burst is a no-op for it until we add
+        // an amplitude boost. Keep signature unchanged.
         this.applyWave(dom, profile, durMs, color, direction);
         break;
       case 'pulse':
-        this.applyPulse(dom, flow, profile, value, durMs, color);
+        this.applyPulse(dom, flow, profile, value, durMs, color, burstMultiplier);
         break;
       case 'square':
-        this.applyParticles(dom, flow, profile, value, durMs, color, direction, 'square');
+        this.applyParticles(dom, flow, profile, value, durMs, color, direction, 'square', burstMultiplier);
         break;
       case 'gradient':
       case 'dot':
       default:
-        this.applyParticles(dom, flow, profile, value, durMs, color, direction, 'dot');
+        this.applyParticles(dom, flow, profile, value, durMs, color, direction, 'dot', burstMultiplier);
         break;
     }
+  }
+
+  /**
+   * Track whether a flow has sustained ≥ 90 % of its profile's
+   * `speed_range_max` for at least 5 s. Return the particle-count
+   * multiplier to apply right now (1 outside burst, profile's
+   * `burst_density_multiplier` inside — default 1.5).
+   */
+  private updateBurstState(
+    flowId: string,
+    magnitude: number,
+    profile: FlowProfile,
+  ): number {
+    const peak = profile.speed_range_max;
+    const trigger = peak * BURST_TRIGGER_RATIO;
+    const aboveTrigger = magnitude >= trigger;
+    const now = performance.now();
+
+    if (!aboveTrigger) {
+      if (this.burstActive.has(flowId)) {
+        rlog('burst EXIT:', flowId, 'magnitude=', magnitude, 'droppedBelow=', trigger.toFixed(2));
+        this.burstActive.delete(flowId);
+      }
+      this.burstEnteredAt.delete(flowId);
+      return 1;
+    }
+
+    let enteredAt = this.burstEnteredAt.get(flowId);
+    if (enteredAt === undefined) {
+      enteredAt = now;
+      this.burstEnteredAt.set(flowId, enteredAt);
+    }
+    const elapsed = now - enteredAt;
+    if (elapsed < BURST_SUSTAIN_MS) {
+      rlog(
+        'burst PENDING:', flowId, 'magnitude=', magnitude, '| above', trigger.toFixed(2),
+        'for', Math.round(elapsed), 'ms of', BURST_SUSTAIN_MS,
+      );
+      return 1;
+    }
+    const multiplier = profile.burst_density_multiplier ?? 1.5;
+    if (!this.burstActive.has(flowId)) {
+      rlog(
+        'burst ENTER:', flowId,
+        '| sustained ≥', (BURST_TRIGGER_RATIO * 100).toFixed(0) + '%',
+        'of peak', peak,
+        'for', Math.round(elapsed), 'ms → density ×' + multiplier,
+      );
+      this.burstActive.add(flowId);
+    }
+    return multiplier;
   }
 
   private setGroupVisible(dom: FlowDomNodes, visible: boolean): void {
@@ -333,13 +406,21 @@ export class SvgRenderer implements FlowRenderer {
     color: string,
     direction: number,
     kind: 'dot' | 'square',
+    burstMultiplier: number,
   ): void {
-    const desired = Math.max(
+    const base = Math.max(
       1,
       Math.round(
         profile.particle_count_curve ? profile.particle_count_curve(value) : DEFAULT_PARTICLE_COUNT,
       ),
     );
+    const desired = Math.min(
+      BURST_MAX_PARTICLES,
+      Math.max(1, Math.round(base * burstMultiplier)),
+    );
+    if (burstMultiplier !== 1) {
+      rlog('applyParticles burst → base=', base, '× mult=', burstMultiplier, '→ final=', desired);
+    }
     // rebuild particle set if count changed
     if (dom.particles.length !== desired) {
       for (const p of dom.particles) p.shape.remove();
@@ -424,6 +505,7 @@ export class SvgRenderer implements FlowRenderer {
     value: number,
     durMs: number,
     color: string,
+    burstMultiplier: number,
   ): void {
     if (!this.svg) return;
     const group = dom.group;
@@ -433,7 +515,7 @@ export class SvgRenderer implements FlowRenderer {
     if (!fromNode || !toNode) return;
     const points = [fromNode.position, ...flow.waypoints, toNode.position];
     const totalLenPct = pathLengthPercent(points);
-    const pulseCount = Math.max(
+    const basePulseCount = Math.max(
       2,
       Math.round(
         profile.particle_count_curve
@@ -441,6 +523,13 @@ export class SvgRenderer implements FlowRenderer {
           : Math.max(3, Math.floor(totalLenPct / 15)),
       ),
     );
+    const pulseCount = Math.min(
+      BURST_MAX_PARTICLES,
+      Math.max(2, Math.round(basePulseCount * burstMultiplier)),
+    );
+    if (burstMultiplier !== 1) {
+      rlog('applyPulse burst → base=', basePulseCount, '× mult=', burstMultiplier, '→ final=', pulseCount);
+    }
     const size = this.containerSize();
 
     // rebuild when count changes

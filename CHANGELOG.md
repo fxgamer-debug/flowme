@@ -2,6 +2,77 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.5] — 2026-04-26
+
+Residential recalibration: every domain now shares one logarithmic speed curve, bounded between a visibly-alive slowest duration and a brisk fastest, with a new burst-density mode for saturated flows.
+
+### Changed — unified speed curve
+
+All profiles now use a single shape function, `logCurveDuration(value, domain_min, domain_max, 4500, 600)`, parameterised per domain:
+
+```
+speed_factor = log10(value / domain_min) / log10(domain_max / domain_min)
+duration_ms  = 4500 - speed_factor * (4500 - 600)
+```
+
+At or below `domain_min` → 4500 ms (slowest *visible* duration — still a living pulse, never the 8000 ms frozen look of v1.0.2). At or above `domain_max` → 600 ms (brisk without blurring). Logarithmic mid-range spreads evenly across each domain's residential operating envelope.
+
+Per-domain calibration:
+
+| Domain   | `speed_range_min` | `speed_range_max` | Typical residential coverage |
+| -------- | ----------------- | ----------------- | ---------------------------- |
+| Energy   | 50 W              | 10 000 W          | Idle-load cut-off → whole-house peak / EV charging |
+| Water    | 0.5 L/min         | 50 L/min          | Dripping tap → shower + washing machine |
+| Network  | 0.1 Mbps          | 10 000 Mbps       | Background chatter → 10 Gbps fibre |
+| HVAC     | 10 CFM            | 2000 CFM          | Fan-off threshold → max residential ducted |
+| Gas      | 0.01 m³/h         | 10 m³/h           | Pilot light → full central heating + cooker |
+| Generic  | 1                 | 1000              | Sensible middle-ground for unknown domains |
+
+Each profile's `visibility_threshold` defaults to its `speed_range_min`, so flows below the interesting range are hidden altogether (v1.0.4 had these drifting apart, which left 2 W LED bulbs drawing frozen-looking flows on the energy profile).
+
+Custom per-flow `speed_multiplier` still applies on top of the curve output.
+
+### Added — burst-density mode
+
+When a flow's absolute magnitude stays at or above `0.9 × speed_range_max` for **≥ 5 seconds**, its particle count is multiplied by `profile.burst_density_multiplier` (default 1.5) and capped at 20 particles. Dropping below the 90% ratio resets the timer immediately. Implemented in `SvgRenderer.updateBurstState` with per-flow `burstEnteredAt` / `burstActive` tracking and a single `[FlowMe Renderer] burst ENTER / EXIT / PENDING` log per transition (not per `applyFlow`). Applies to `dot`, `square`, and `pulse` shapes; `wave` is a no-op until we add an amplitude boost.
+
+### Added — APIs
+
+- `logCurveDuration(value, domainMin, domainMax, maxDurationMs=4500, minDurationMs=600)` exported from `src/utils.ts`.
+- `UNIVERSAL_MAX_DURATION_MS = 4500` and `UNIVERSAL_MIN_DURATION_MS = 600` constants for external tooling that wants the same bounds.
+- `FlowProfile.speed_range_min: number` and `speed_range_max: number` (both required on every profile going forward).
+- `FlowProfile.burst_density_multiplier?: number` (optional, defaults to 1.5, set to 1 to disable for a profile).
+
+### Changed — debug logs preserved and expanded
+
+All v1.0.3 `[FlowMe]` / `[FlowMe Renderer]` logs remain. Added:
+
+- `applyFlow` log now includes `burstMultiplier` next to `dur` / `color` / `speedMult`.
+- `updateBurstState` emits `burst PENDING` / `burst ENTER` / `burst EXIT` transitions with the exact magnitude, trigger ratio, and sustain time.
+- `applyParticles` / `applyPulse` log the base / multiplier / final particle count when burst is active.
+
+Per user instruction, the full debug channel stays in place until explicit removal.
+
+### Fixed — distinct direction colours on water / gas / generic
+
+Before v1.0.5 the `water`, `gas`, and `generic` profiles shipped with identical `default_color_positive` and `default_color_negative`, so a bidirectional sensor's sign flip was visible only via the direction-of-travel animation — and on `pulse` shapes (gas) it was invisible altogether because pulse is a symmetric expanding circle. Each negative colour is now distinct but kept inside the same domain-family palette:
+
+| Domain  | Positive | Negative (new) | Rationale |
+| ------- | -------- | -------------- | --------- |
+| Water   | `#3B82F6` blue | `#06B6D4` cyan | Still reads as "water", clearly flipped |
+| Gas     | `#FB923C` orange | `#A16207` dark amber | Warm/combustion family, unambiguous reverse |
+| Generic | `#A78BFA` violet | `#34D399` emerald | Maximum-contrast pair for arbitrary bidirectional sensors |
+
+`energy`, `hvac`, and `network` already shipped with distinct positive/negative colours and are unchanged.
+
+### Tests
+
+- Rewrote `tests/unit/flow-profiles.test.ts`: 20+ anchor-point tests across every profile driven by a shared `expectedDuration()` reference implementation, so any drift in the universal shape function lights the whole suite up. Explicit `speed_range_min` / `speed_range_max` / `burst_density_multiplier` declarations are also pinned.
+- Added 5 dedicated tests for `logCurveDuration` covering clamp-low, clamp-high, log-midpoint, custom bounds, and defensive nonsense-range handling.
+- Added 2 regression tests pinning distinct positive/negative colour pairs for every profile (both that they differ at all, and that the specific v1.0.5 choices for water/gas/generic don't silently drift).
+
+139 → 152 tests. All pass.
+
 ## [1.0.4] — 2026-04-26
 
 Energy profile recalibration for kW-reporting power sensors.

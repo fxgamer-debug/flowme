@@ -1,18 +1,17 @@
 import type { FlowProfile } from '../types.js';
-import { clamp } from '../utils.js';
+import { clamp, logCurveDuration } from '../utils.js';
 
 /**
  * HVAC profile: wavy ribbon lines with amplitude proportional to CFM.
- * Spec §"Default flow profiles → HVAC".
  *
- * Speed: `dur_ms = clamp(5000 - v*10, 600, 5000)` for v in CFM.
- * Amplitude: scales with CFM, clamped to [2, 10] px.
+ * Residential calibration (v1.0.5):
+ *   speed_range_min =   10 CFM   (below this the fan is basically off)
+ *   speed_range_max = 2000 CFM   (max residential ducted system)
+ * Amplitude scales linearly with CFM, clamped to [2, 10] px.
  *
- * Deviation from spec: the "colour shifts from blue to red based on
- * temperature differential between source and destination nodes" feature
- * depends on reading secondary entities and is deferred to a later version
- * once the node-level secondary-entity support lands in the config schema.
- * For v0.2 we use a single lavender tone.
+ * Deferred feature: colour shift based on temperature differential between
+ * source and destination nodes (needs node-level secondary entities in the
+ * config schema).
  */
 export const hvacProfile: FlowProfile = {
   domain: 'hvac',
@@ -21,11 +20,13 @@ export const hvacProfile: FlowProfile = {
   shape: 'wave',
   glow: false,
   unit_label: 'CFM',
+  speed_range_min: 10,
+  speed_range_max: 2000,
   visibility_threshold: 10,
+  burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    const magnitude = Math.abs(value);
-    return clamp(5000 - magnitude * 10, 600, 5000);
+    return logCurveDuration(value, 10, 2000);
   },
 
   wave_amplitude_curve(value: number): number {

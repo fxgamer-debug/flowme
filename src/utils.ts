@@ -98,6 +98,47 @@ export function parseSensorValue(raw: string | number | null | undefined): numbe
   return Number.isFinite(n) ? n : 0;
 }
 
+/** v1.0.5 universal speed-curve bounds. Every profile uses the same
+ *  shape function and only varies the per-domain `domain_min` / `domain_max`
+ *  calibration. Residential dashboards need the slowest visible flow to
+ *  still feel alive (hence 4500 ms — not 8000 ms like pre-1.0.5) and the
+ *  fastest to look brisk without blurring (600 ms). */
+export const UNIVERSAL_MAX_DURATION_MS = 4500;
+export const UNIVERSAL_MIN_DURATION_MS = 600;
+
+/**
+ * Shared logarithmic speed-curve shape. Produces a one-cycle animation
+ * duration in milliseconds given a sensor value and the profile's
+ * calibration range.
+ *
+ *   speed_factor = log10(value / domain_min) / log10(domain_max / domain_min)
+ *   duration_ms  = max_duration - speed_factor * (max_duration - min_duration)
+ *
+ * Clamped so values at or below `domainMin` produce `maxDurationMs` (slowest
+ * visible flow), and values at or above `domainMax` produce `minDurationMs`
+ * (fastest). Logarithmic scaling means mid-range values spread out evenly
+ * across the dashboard's residential operating envelope rather than
+ * clustering at one extreme, which is what happens with a linear curve.
+ */
+export function logCurveDuration(
+  value: number,
+  domainMin: number,
+  domainMax: number,
+  maxDurationMs: number = UNIVERSAL_MAX_DURATION_MS,
+  minDurationMs: number = UNIVERSAL_MIN_DURATION_MS,
+): number {
+  const magnitude = Math.abs(value);
+  if (!(domainMax > domainMin) || domainMin <= 0) {
+    // Defensive — shouldn't happen for well-formed profiles.
+    return maxDurationMs;
+  }
+  if (magnitude <= domainMin) return maxDurationMs;
+  if (magnitude >= domainMax) return minDurationMs;
+  const speedFactor =
+    Math.log10(magnitude / domainMin) / Math.log10(domainMax / domainMin);
+  return maxDurationMs - speedFactor * (maxDurationMs - minDurationMs);
+}
+
 /**
  * Scale a sensor value into the profile's base unit using the profile's
  * `unit_scale` map. Matching is **exact-first, then case-insensitive** —

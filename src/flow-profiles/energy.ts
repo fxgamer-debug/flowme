@@ -1,25 +1,27 @@
 import type { FlowProfile } from '../types.js';
-import { clamp } from '../utils.js';
+import { logCurveDuration } from '../utils.js';
 
 /**
  * Energy profile: dot trail, glow, watts to speed.
  *
- * Speed curve (anchors, verified by `tests/unit/flow-profiles.test.ts`):
- *   10 W    → 8000 ms   (slow dribble at idle)
- *   100 W   → 6000 ms
- *   1000 W  → 4000 ms
- *   10 kW   → 2000 ms   (fast visible flow at inverter peak)
- *   clamped to [400 ms, 8000 ms].
+ * **Calibrated for residential loads** (v1.0.5). The universal log-curve
+ * shape maps the calibration range `[speed_range_min, speed_range_max]`
+ * to the universal duration bounds `[4500 ms, 600 ms]`. For energy:
  *
- * Formula: `dur = clamp(8000 - log10(magnitude / 10) * 2000, 400, 8000)`.
+ *   speed_range_min = 50 W     (hides small idle loads — bulbs, routers)
+ *   speed_range_max = 10 000 W (whole-house peak — EV charging, showers)
  *
- * **Inputs are in WATTS.** The card auto-converts kW / MW / mW sensors to
- * watts via `unit_scale` below before they reach this curve, so users with
- * HA power sensors that natively report kW (inverters, EV chargers, large
- * appliances) get the same animation feel as users whose sensors report W.
- * Prior to v1.0.4 a kW sensor fed raw into this curve (e.g. `2.0` for
- * 2 kW) produced `log10(0.2) = -0.7` and clamped to the 8000 ms ceiling,
- * making every flow look frozen.
+ * Resulting anchor points:
+ *   ≤ 50 W     → 4500 ms (slowest visible flow; a living pulse, not static)
+ *     100 W    → ~3950 ms
+ *     500 W    → ~2720 ms
+ *     1 000 W  → ~2180 ms
+ *     5 000 W  → ~1185 ms
+ *   ≥ 10 000 W → 600 ms (fastest)
+ *   ≥ 9 000 W sustained → burst density (1.5× particles) after 5 s
+ *
+ * Inputs are always WATTS. kW / MW / mW sensors are auto-scaled via
+ * `unit_scale` before they reach the curve (v1.0.4+).
  */
 export const energyProfile: FlowProfile = {
   domain: 'energy',
@@ -30,22 +32,23 @@ export const energyProfile: FlowProfile = {
   unit_label: 'W',
   unit_scale: {
     W: 1,
-    Wh: 1, // tolerate energy-as-power sensors, no-op conversion
+    Wh: 1,
     kW: 1000,
     kWh: 1000,
     MW: 1_000_000,
     mW: 1e-3,
   },
-  // Lowered from 10 → 1 W in v1.0.2. Matches the profile's base unit
-  // (watts) — flows on a kW sensor are normalised to watts before this
-  // comparison runs, so a 0.5 kW draw is tested as 500 W ≥ 1 W ✓.
-  visibility_threshold: 1,
+  speed_range_min: 50,
+  speed_range_max: 10_000,
+  // Defaults to speed_range_min — sensors reporting below 50 W are
+  // considered idle / noise and the flow is hidden. Users who want to
+  // show phantom-load flows (e.g. a 6 W router) can set a lower per-flow
+  // `threshold:` in YAML.
+  visibility_threshold: 50,
+  burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    const magnitude = Math.abs(value);
-    if (magnitude <= 0) return 8000;
-    const raw = 8000 - Math.log10(magnitude / 10) * 2000;
-    return clamp(raw, 400, 8000);
+    return logCurveDuration(value, 50, 10_000);
   },
 
   describe(value: number): string {

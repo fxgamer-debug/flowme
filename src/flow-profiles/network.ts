@@ -1,11 +1,15 @@
 import type { FlowProfile } from '../types.js';
-import { clamp } from '../utils.js';
+import { clamp, logCurveDuration } from '../utils.js';
 
 /**
- * Network profile: discrete square packets. Speed is constant 1500 ms per
- * packet; density varies with throughput. Spec §"Default flow profiles → Network".
+ * Network profile: discrete square packets. Both speed and density scale
+ * with throughput — residential ISPs span four decades (0.1 Mbps lurking
+ * background traffic → 10 000 Mbps fibre peak), so the universal log curve
+ * is particularly well suited here.
  *
- *   packet_count = clamp(1 + log10(value + 1) * 4, 1, 20)
+ * Residential calibration (v1.0.5):
+ *   speed_range_min = 0.1 Mbps     (idle background chatter)
+ *   speed_range_max = 10 000 Mbps  (10 Gbps — high-end residential fibre)
  */
 export const networkProfile: FlowProfile = {
   domain: 'network',
@@ -14,10 +18,13 @@ export const networkProfile: FlowProfile = {
   shape: 'square',
   glow: false,
   unit_label: 'Mbps',
+  speed_range_min: 0.1,
+  speed_range_max: 10_000,
   visibility_threshold: 0.1,
+  burst_density_multiplier: 1.5,
 
-  speed_curve(_value: number): number {
-    return 1500;
+  speed_curve(value: number): number {
+    return logCurveDuration(value, 0.1, 10_000);
   },
 
   particle_count_curve(value: number): number {

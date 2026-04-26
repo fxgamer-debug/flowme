@@ -146,8 +146,35 @@ export interface FlowProfile {
    * Keys are matched case-insensitively.
    */
   unit_scale?: Readonly<Record<string, number>>;
+  /**
+   * Value (in `unit_label`) at which the animation reaches the universal
+   * *slowest* visible duration (4500 ms). Values at or below this are
+   * animated at the slowest speed. The `visibility_threshold` also
+   * defaults to this value — sensor readings below it are considered noise
+   * and the flow is hidden altogether. v1.0.5+.
+   */
+  speed_range_min: number;
+  /**
+   * Value (in `unit_label`) at which the animation reaches the universal
+   * *fastest* duration (600 ms). Values above this saturate — they stay
+   * pinned at 600 ms but can trigger burst-density mode (see
+   * `burst_density_multiplier`). Should reflect the *typical residential
+   * peak* for the domain, not the absolute physical maximum. v1.0.5+.
+   */
+  speed_range_max: number;
+  /**
+   * When a flow stays above 90% of `speed_range_max` for ≥ 5 s, particle
+   * count is multiplied by this factor (capped at 20 particles). Lets
+   * flows look visibly more intense at saturation when they can no longer
+   * get any faster. Defaults to 1.5. Set to 1 to disable burst mode for
+   * a profile. v1.0.5+.
+   */
+  burst_density_multiplier?: number;
   /** Map a sensor value (in the profile's base unit) to a one-cycle
-   *  animation duration in milliseconds. */
+   *  animation duration in milliseconds. Profiles should implement this
+   *  via `logCurveDuration(value, speed_range_min, speed_range_max)` to
+   *  get the universal shape; they may deviate if their domain has an
+   *  inherently different feel (e.g. network treats speed as a constant). */
   speed_curve: (value: number) => number;
   /**
    * Particle count per flow as a function of value. Used by shapes that
