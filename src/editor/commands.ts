@@ -1,4 +1,12 @@
-import type { FlowConfig, FlowmeConfig, NodeConfig, NodePosition } from '../types.js';
+import type {
+  FlowConfig,
+  FlowmeConfig,
+  NodeConfig,
+  NodePosition,
+  OverlayConfig,
+  OverlayType,
+  TapActionKind,
+} from '../types.js';
 
 /** Deep-ish clone that preserves only the shapes we care about. */
 function cloneConfig(config: FlowmeConfig): FlowmeConfig {
@@ -230,6 +238,144 @@ export function deleteWeatherState(
     delete next.background.weather_states[stateKey];
     if (Object.keys(next.background.weather_states).length === 0) {
       delete next.background.weather_states;
+    }
+  }
+  return next;
+}
+
+export function nextOverlayId(config: FlowmeConfig): string {
+  const existing = new Set((config.overlays ?? []).map((o) => o.id));
+  for (let i = 1; i < 10_000; i++) {
+    const candidate = `overlay_${i}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `overlay_${Date.now()}`;
+}
+
+export function addOverlay(
+  config: FlowmeConfig,
+  overlay: Omit<OverlayConfig, 'id'> & { id?: string },
+): { config: FlowmeConfig; overlay: OverlayConfig } {
+  const next = cloneConfig(config);
+  const id = overlay.id ?? nextOverlayId(config);
+  const created: OverlayConfig = {
+    ...overlay,
+    id,
+    position: {
+      x: clampPercent(overlay.position.x),
+      y: clampPercent(overlay.position.y),
+    },
+  };
+  next.overlays = [...(next.overlays ?? []), created];
+  return { config: next, overlay: created };
+}
+
+export function deleteOverlay(config: FlowmeConfig, overlayId: string): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.overlays = (next.overlays ?? []).filter((o) => o.id !== overlayId);
+  if (next.overlays.length === 0) delete next.overlays;
+  return next;
+}
+
+export function moveOverlay(
+  config: FlowmeConfig,
+  overlayId: string,
+  position: NodePosition,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const o of next.overlays ?? []) {
+    if (o.id === overlayId) {
+      o.position = { x: clampPercent(position.x), y: clampPercent(position.y) };
+    }
+  }
+  return next;
+}
+
+export function setOverlaySize(
+  config: FlowmeConfig,
+  overlayId: string,
+  size: { width: number; height: number },
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  const w = Math.max(2, Math.min(100, size.width));
+  const h = Math.max(2, Math.min(100, size.height));
+  for (const o of next.overlays ?? []) {
+    if (o.id === overlayId) o.size = { width: w, height: h };
+  }
+  return next;
+}
+
+export function setOverlayType(
+  config: FlowmeConfig,
+  overlayId: string,
+  type: OverlayType,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const o of next.overlays ?? []) {
+    if (o.id === overlayId) {
+      o.type = type;
+      // clear incompatible fields when switching away from custom
+      if (type !== 'custom') delete o.card_config;
+    }
+  }
+  return next;
+}
+
+export function setOverlayEntity(
+  config: FlowmeConfig,
+  overlayId: string,
+  entity: string | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const o of next.overlays ?? []) {
+    if (o.id === overlayId) {
+      if (entity && entity.length) o.entity = entity;
+      else delete o.entity;
+    }
+  }
+  return next;
+}
+
+export function setOverlayLabel(
+  config: FlowmeConfig,
+  overlayId: string,
+  label: string | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const o of next.overlays ?? []) {
+    if (o.id === overlayId) {
+      if (label && label.length) o.label = label;
+      else delete o.label;
+    }
+  }
+  return next;
+}
+
+export function setOverlayTapAction(
+  config: FlowmeConfig,
+  overlayId: string,
+  action: TapActionKind | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const o of next.overlays ?? []) {
+    if (o.id === overlayId) {
+      if (action) o.tap_action = { action };
+      else delete o.tap_action;
+    }
+  }
+  return next;
+}
+
+export function setOverlayCardConfig(
+  config: FlowmeConfig,
+  overlayId: string,
+  cardConfig: Record<string, unknown> | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const o of next.overlays ?? []) {
+    if (o.id === overlayId) {
+      if (cardConfig) o.card_config = cardConfig;
+      else delete o.card_config;
     }
   }
   return next;

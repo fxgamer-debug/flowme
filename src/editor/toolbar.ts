@@ -4,6 +4,7 @@ import { customElement, property } from 'lit/decorators.js';
 export type ToolbarAction =
   | 'add-node'
   | 'add-flow'
+  | 'add-overlay'
   | 'suggest-path'
   | 'undo'
   | 'redo'
@@ -69,6 +70,7 @@ export class FlowmeEditorToolbar extends LitElement {
     return html`
       <button @click=${() => this.fire('add-node')} title="Add node">+ Node</button>
       <button @click=${() => this.fire('add-flow')} title="Add flow">+ Flow</button>
+      <button @click=${() => this.fire('add-overlay')} title="Add overlay">+ Overlay</button>
       <button
         @click=${() => this.fire('suggest-path')}
         ?disabled=${this.suggestPathDisabled}

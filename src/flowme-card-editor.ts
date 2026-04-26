@@ -2,23 +2,42 @@ import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 
-import type { FlowmeConfig, FlowConfig, HomeAssistant, NodeConfig, NodePosition } from './types.js';
+import type {
+  FlowmeConfig,
+  FlowConfig,
+  HomeAssistant,
+  NodeConfig,
+  NodePosition,
+  OverlayConfig,
+  OverlayType,
+  TapActionKind,
+} from './types.js';
+import { OVERLAY_TYPES, TAP_ACTIONS } from './types.js';
 import { validateConfig } from './validate-config.js';
 import { parseAspectRatio } from './utils.js';
 import { UndoStack } from './editor/undo-stack.js';
 import {
   addFlow,
   addNode,
+  addOverlay,
   clampPercent,
   deleteFlow,
   deleteNode,
+  deleteOverlay,
   deleteWaypoint,
   deleteWeatherState,
   insertWaypoint,
   moveNode,
+  moveOverlay,
   moveWaypoint,
   renameWeatherState,
   setBackgroundDefault,
+  setOverlayCardConfig,
+  setOverlayEntity,
+  setOverlayLabel,
+  setOverlaySize,
+  setOverlayTapAction,
+  setOverlayType,
   setTransitionDuration,
   setWeatherEntity,
   setWeatherStateImage,
@@ -31,9 +50,16 @@ import type { Point } from './pathfinding/types.js';
 
 type DragTarget =
   | { kind: 'node'; id: string }
-  | { kind: 'waypoint'; flowId: string; index: number };
+  | { kind: 'waypoint'; flowId: string; index: number }
+  | { kind: 'overlay'; id: string }
+  | { kind: 'overlay-resize'; id: string; startSize: { width: number; height: number }; startPx: { x: number; y: number } };
 
-type PendingAction = null | { kind: 'add-node' } | { kind: 'add-flow'; step: 'pick-from' } | { kind: 'add-flow'; step: 'pick-to'; fromId: string };
+type PendingAction =
+  | null
+  | { kind: 'add-node' }
+  | { kind: 'add-overlay'; overlayType: OverlayType }
+  | { kind: 'add-flow'; step: 'pick-from' }
+  | { kind: 'add-flow'; step: 'pick-to'; fromId: string };
 
 interface SuggestPreview {
   flowId: string;
@@ -63,6 +89,9 @@ export class FlowmeCardEditor extends LitElement {
   @state() private previewMode = false;
   @state() private selectedNodeId: string | null = null;
   @state() private selectedFlowId: string | null = null;
+  @state() private selectedOverlayId: string | null = null;
+  @state() private customConfigDraft = '';
+  @state() private customConfigError = '';
   @state() private statusMessage = '';
   @state() private errorMessage = '';
   @state() private canUndo = false;
@@ -129,7 +158,13 @@ export class FlowmeCardEditor extends LitElement {
         ></flowme-editor-toolbar>
         ${this.statusMessage ? html`<div class="status">${this.statusMessage}</div>` : nothing}
         <div
-          class=${`stage ${this.pending?.kind === 'add-node' ? 'mode-add-node' : ''}`}
+          class=${`stage ${
+            this.pending?.kind === 'add-node'
+              ? 'mode-add-node'
+              : this.pending?.kind === 'add-overlay'
+                ? 'mode-add-overlay'
+                : ''
+          }`}
           style=${`padding-top: ${paddingTop};`}
           @click=${this.onStageClick}
           @contextmenu=${this.onStageContextMenu}
@@ -143,6 +178,7 @@ export class FlowmeCardEditor extends LitElement {
             ${this.config.flows.map((f) => this.renderFlowConnector(f))}
           </svg>
           ${this.config.flows.map((f) => this.renderWaypointHandles(f))}
+          ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
           ${this.config.nodes.map((n) => this.renderHandle(n))}
           ${this.renderSuggestPreview()}
         </div>
@@ -202,6 +238,40 @@ export class FlowmeCardEditor extends LitElement {
         ></div>
       `,
     );
+  }
+
+  private renderOverlayHandle(overlay: OverlayConfig): TemplateResult {
+    const selected = overlay.id === this.selectedOverlayId;
+    const w = overlay.size?.width ?? 14;
+    const h = overlay.size?.height ?? 8;
+    return html`
+      <div
+        class=${`overlay-handle ${selected ? 'selected' : ''} overlay-${overlay.type}`}
+        data-overlay-id=${overlay.id}
+        style=${`left: ${overlay.position.x}%; top: ${overlay.position.y}%; width: ${w}%; height: ${h}%;`}
+        @pointerdown=${this.onHandlePointerDown}
+        @pointermove=${this.onHandlePointerMove}
+        @pointerup=${this.onHandlePointerUp}
+        @pointercancel=${this.onHandlePointerUp}
+        @click=${this.onOverlayClick}
+        @contextmenu=${this.onOverlayContextMenu}
+      >
+        <div class="overlay-label-chip">
+          ${overlay.label ?? overlay.entity ?? overlay.type}
+          <span class="overlay-type-badge">${overlay.type}</span>
+        </div>
+        ${selected
+          ? html`<div
+              class="overlay-resize"
+              data-overlay-id=${overlay.id}
+              @pointerdown=${this.onOverlayResizePointerDown}
+              @pointermove=${this.onHandlePointerMove}
+              @pointerup=${this.onHandlePointerUp}
+              @pointercancel=${this.onHandlePointerUp}
+            ></div>`
+          : nothing}
+      </div>
+    `;
   }
 
   private renderHandle(node: NodeConfig): TemplateResult {
@@ -272,7 +342,133 @@ export class FlowmeCardEditor extends LitElement {
         </div>
       `;
     }
+    if (this.selectedOverlayId) {
+      const overlay = (this.config.overlays ?? []).find((o) => o.id === this.selectedOverlayId);
+      if (!overlay) return nothing;
+      return this.renderOverlayInspector(overlay);
+    }
     return nothing;
+  }
+
+  private renderOverlayInspector(overlay: OverlayConfig): TemplateResult {
+    const size = overlay.size ?? { width: 14, height: 8 };
+    const tap = overlay.tap_action?.action ?? '';
+    return html`
+      <div class="inspector overlay-inspector">
+        <h4>Overlay: ${overlay.id}</h4>
+        <label>
+          Type
+          <select @change=${(e: Event) => this.onOverlayTypeChange(overlay.id, e)}>
+            ${OVERLAY_TYPES.map(
+              (t) => html`
+                <option value=${t} ?selected=${t === overlay.type}>${t}</option>
+              `,
+            )}
+          </select>
+        </label>
+        ${overlay.type !== 'custom'
+          ? html`
+              <label>
+                Entity
+                <input
+                  type="text"
+                  placeholder=${this.entityPlaceholderFor(overlay.type)}
+                  .value=${overlay.entity ?? ''}
+                  @change=${(e: Event) => this.onOverlayEntityChange(overlay.id, e)}
+                />
+              </label>
+            `
+          : nothing}
+        <label>
+          Label
+          <input
+            type="text"
+            .value=${overlay.label ?? ''}
+            @change=${(e: Event) => this.onOverlayLabelChange(overlay.id, e)}
+          />
+        </label>
+        <div class="row size-row">
+          <label>
+            Width %
+            <input
+              type="number"
+              min="2"
+              max="100"
+              step="0.5"
+              .value=${String(size.width)}
+              @change=${(e: Event) => this.onOverlaySizeChange(overlay.id, 'width', e)}
+            />
+          </label>
+          <label>
+            Height %
+            <input
+              type="number"
+              min="2"
+              max="100"
+              step="0.5"
+              .value=${String(size.height)}
+              @change=${(e: Event) => this.onOverlaySizeChange(overlay.id, 'height', e)}
+            />
+          </label>
+        </div>
+        <label>
+          Tap action
+          <select @change=${(e: Event) => this.onOverlayTapActionChange(overlay.id, e)}>
+            <option value="" ?selected=${!tap}>default</option>
+            ${TAP_ACTIONS.map(
+              (a) => html`<option value=${a} ?selected=${a === tap}>${a}</option>`,
+            )}
+          </select>
+        </label>
+        ${overlay.type === 'custom' ? this.renderCustomConfigEditor(overlay) : nothing}
+        <button class="danger" @click=${() => this.removeOverlay(overlay.id)}>Delete overlay</button>
+      </div>
+    `;
+  }
+
+  private renderCustomConfigEditor(overlay: OverlayConfig): TemplateResult {
+    const jsonValue =
+      this.customConfigDraft ||
+      JSON.stringify(overlay.card_config ?? { type: 'entity', entity: '' }, null, 2);
+    return html`
+      <label>
+        Card config (JSON)
+        <textarea
+          rows="8"
+          spellcheck="false"
+          .value=${jsonValue}
+          @input=${(e: Event) => {
+            this.customConfigDraft = (e.target as HTMLTextAreaElement).value;
+            this.customConfigError = '';
+          }}
+        ></textarea>
+      </label>
+      ${this.customConfigError
+        ? html`<div class="custom-config-error">${this.customConfigError}</div>`
+        : nothing}
+      <div class="row">
+        <button @click=${() => this.applyCustomConfig(overlay.id)}>Apply card config</button>
+      </div>
+      <p class="hint-sub">
+        URLs must not use javascript:, vbscript:, data: or file: schemes — flowme rejects
+        these when the overlay is saved.
+      </p>
+    `;
+  }
+
+  private entityPlaceholderFor(type: OverlayType): string {
+    switch (type) {
+      case 'sensor':
+        return 'sensor.indoor_temperature';
+      case 'switch':
+        return 'switch.porch_light';
+      case 'camera':
+        return 'camera.front_door';
+      case 'button':
+        return 'script.bedtime';
+      default:
+        return 'entity.id';
+    }
   }
 
   // -- weather backgrounds panel --
@@ -462,6 +658,21 @@ export class FlowmeCardEditor extends LitElement {
         this.pending = { kind: 'add-flow', step: 'pick-from' };
         this.statusMessage = 'Click the source node.';
         break;
+      case 'add-overlay': {
+        const choice = window.prompt(
+          `Overlay type? One of: ${OVERLAY_TYPES.join(', ')}`,
+          'sensor',
+        );
+        if (!choice) break;
+        const trimmed = choice.trim().toLowerCase();
+        if (!OVERLAY_TYPES.includes(trimmed as OverlayType)) {
+          this.statusMessage = `Unknown overlay type "${choice}".`;
+          break;
+        }
+        this.pending = { kind: 'add-overlay', overlayType: trimmed as OverlayType };
+        this.statusMessage = `Click anywhere on the background to drop a ${trimmed} overlay.`;
+        break;
+      }
       case 'suggest-path':
         void this.runSuggestPath();
         break;
@@ -611,6 +822,29 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
+    if (this.pending?.kind === 'add-overlay') {
+      const pos = this.pointerToPercent(event);
+      if (!pos) return;
+      const overlayType = this.pending.overlayType;
+      const seed: Omit<OverlayConfig, 'id'> & { id?: string } = {
+        type: overlayType,
+        position: pos,
+        size: overlayType === 'camera' ? { width: 22, height: 15 } : { width: 14, height: 8 },
+      };
+      if (overlayType === 'custom') {
+        seed.card_config = { type: 'entity', entity: '' };
+      }
+      const prev = this.config;
+      const { config: next, overlay } = addOverlay(prev, seed);
+      this.selectedOverlayId = overlay.id;
+      this.selectedNodeId = null;
+      this.selectedFlowId = null;
+      this.pushPatch(prev, next, `add overlay ${overlay.id}`);
+      this.pending = null;
+      this.statusMessage = `Added overlay ${overlay.id}. Drag to reposition, corner to resize.`;
+      return;
+    }
+
     if (this.pending?.kind === 'add-flow') {
       if (this.pending.step === 'pick-from') {
         // must click a node; stage clicks don't count
@@ -621,6 +855,9 @@ export class FlowmeCardEditor extends LitElement {
 
     this.selectedNodeId = null;
     this.selectedFlowId = null;
+    this.selectedOverlayId = null;
+    this.customConfigDraft = '';
+    this.customConfigError = '';
   };
 
   private onStageContextMenu = (event: MouseEvent): void => {
@@ -684,6 +921,52 @@ export class FlowmeCardEditor extends LitElement {
 
     this.selectedNodeId = nodeId;
     this.selectedFlowId = null;
+    this.selectedOverlayId = null;
+  };
+
+  private onOverlayClick = (event: MouseEvent): void => {
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    const id = target.dataset['overlayId'];
+    if (!id) return;
+    this.selectedOverlayId = id;
+    this.selectedNodeId = null;
+    this.selectedFlowId = null;
+    this.customConfigDraft = '';
+    this.customConfigError = '';
+  };
+
+  private onOverlayContextMenu = (event: MouseEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    const id = target.dataset['overlayId'];
+    if (!id) return;
+    if (window.confirm(`Delete overlay ${id}?`)) {
+      this.removeOverlay(id);
+    }
+  };
+
+  private onOverlayResizePointerDown = (event: PointerEvent): void => {
+    if (this.previewMode) return;
+    if (!this.config) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const el = event.currentTarget as HTMLElement;
+    const id = el.dataset['overlayId'];
+    if (!id) return;
+    const overlay = (this.config.overlays ?? []).find((o) => o.id === id);
+    if (!overlay) return;
+    const startSize = { ...(overlay.size ?? { width: 14, height: 8 }) };
+    el.setPointerCapture(event.pointerId);
+    this.dragPointerId = event.pointerId;
+    this.dragTarget = {
+      kind: 'overlay-resize',
+      id,
+      startSize,
+      startPx: { x: event.clientX, y: event.clientY },
+    };
+    this.dragStartConfig = this.config;
   };
 
   private onNodeContextMenu = (event: MouseEvent): void => {
@@ -724,9 +1007,12 @@ export class FlowmeCardEditor extends LitElement {
     const waypointIndexRaw = el.dataset['waypointIndex'];
     const flowId = el.dataset['flowId'];
     const nodeId = el.dataset['nodeId'];
+    const overlayId = el.dataset['overlayId'];
 
     let target: DragTarget | null = null;
     if (nodeId) target = { kind: 'node', id: nodeId };
+    else if (overlayId && !el.classList.contains('overlay-resize'))
+      target = { kind: 'overlay', id: overlayId };
     else if (flowId && waypointIndexRaw !== undefined) {
       target = { kind: 'waypoint', flowId, index: Number(waypointIndexRaw) };
     }
@@ -742,18 +1028,38 @@ export class FlowmeCardEditor extends LitElement {
 
   private onHandlePointerMove = (event: PointerEvent): void => {
     if (this.dragPointerId !== event.pointerId || !this.dragTarget || !this.config) return;
+    const target = this.dragTarget;
+    this.dragShiftHeld = event.shiftKey;
+
+    if (target.kind === 'overlay-resize') {
+      const stage = this.stageRef.value;
+      if (!stage) return;
+      const rect = stage.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dxPct = ((event.clientX - target.startPx.x) / rect.width) * 100;
+      const dyPct = ((event.clientY - target.startPx.y) / rect.height) * 100;
+      let w = target.startSize.width + dxPct;
+      let h = target.startSize.height + dyPct;
+      if (this.dragShiftHeld) {
+        w = Math.round(w);
+        h = Math.round(h);
+      }
+      this.config = setOverlaySize(this.config, target.id, { width: w, height: h });
+      return;
+    }
+
     const pos = this.pointerToPercent(event);
     if (!pos) return;
-    this.dragShiftHeld = event.shiftKey;
     const snapped = this.dragShiftHeld
       ? { x: clampPercent(snapToGrid(pos.x)), y: clampPercent(snapToGrid(pos.y)) }
       : pos;
 
     // live preview — update this.config directly, no patch pushed
-    const target = this.dragTarget;
     if (target.kind === 'node') {
       this.config = moveNode(this.config, target.id, snapped);
-    } else {
+    } else if (target.kind === 'overlay') {
+      this.config = moveOverlay(this.config, target.id, snapped);
+    } else if (target.kind === 'waypoint') {
       this.config = moveWaypoint(this.config, target.flowId, target.index, snapped);
     }
   };
@@ -773,10 +1079,20 @@ export class FlowmeCardEditor extends LitElement {
     if (!startConfig || !endConfig || !target) return;
     if (startConfig === endConfig) return;
 
-    const description =
-      target.kind === 'node'
-        ? `move node ${target.id}`
-        : `move waypoint ${target.index} of ${target.flowId}`;
+    let description: string;
+    switch (target.kind) {
+      case 'node':
+        description = `move node ${target.id}`;
+        break;
+      case 'overlay':
+        description = `move overlay ${target.id}`;
+        break;
+      case 'overlay-resize':
+        description = `resize overlay ${target.id}`;
+        break;
+      default:
+        description = `move waypoint ${target.index} of ${target.flowId}`;
+    }
     this.pushPatch(startConfig, endConfig, description);
   };
 
@@ -804,6 +1120,94 @@ export class FlowmeCardEditor extends LitElement {
       ),
     };
     this.pushPatch(prev, next, `edit entity of ${nodeId}`);
+  }
+
+  private onOverlayTypeChange(id: string, event: Event): void {
+    if (!this.config) return;
+    const value = (event.target as HTMLSelectElement).value as OverlayType;
+    const prev = this.config;
+    const next = setOverlayType(prev, id, value);
+    this.customConfigDraft = '';
+    this.pushPatch(prev, next, `change overlay ${id} type`);
+  }
+
+  private onOverlayEntityChange(id: string, event: Event): void {
+    if (!this.config) return;
+    const value = (event.target as HTMLInputElement).value.trim();
+    const prev = this.config;
+    const next = setOverlayEntity(prev, id, value || undefined);
+    this.pushPatch(prev, next, `edit overlay ${id} entity`);
+  }
+
+  private onOverlayLabelChange(id: string, event: Event): void {
+    if (!this.config) return;
+    const value = (event.target as HTMLInputElement).value;
+    const prev = this.config;
+    const next = setOverlayLabel(prev, id, value || undefined);
+    this.pushPatch(prev, next, `edit overlay ${id} label`);
+  }
+
+  private onOverlaySizeChange(id: string, which: 'width' | 'height', event: Event): void {
+    if (!this.config) return;
+    const overlay = (this.config.overlays ?? []).find((o) => o.id === id);
+    if (!overlay) return;
+    const current = overlay.size ?? { width: 14, height: 8 };
+    const raw = Number((event.target as HTMLInputElement).value);
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    const prev = this.config;
+    const next = setOverlaySize(prev, id, { ...current, [which]: raw });
+    this.pushPatch(prev, next, `resize overlay ${id}`);
+  }
+
+  private onOverlayTapActionChange(id: string, event: Event): void {
+    if (!this.config) return;
+    const value = (event.target as HTMLSelectElement).value;
+    const prev = this.config;
+    const next = setOverlayTapAction(prev, id, (value || undefined) as TapActionKind | undefined);
+    this.pushPatch(prev, next, `edit overlay ${id} tap action`);
+  }
+
+  private applyCustomConfig(overlayId: string): void {
+    if (!this.config) return;
+    const raw = this.customConfigDraft.trim();
+    if (!raw) {
+      this.customConfigError = 'Config is empty.';
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      this.customConfigError = 'Invalid JSON: ' + (err instanceof Error ? err.message : String(err));
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      this.customConfigError = 'Top-level value must be a JSON object.';
+      return;
+    }
+    const prev = this.config;
+    try {
+      const next = setOverlayCardConfig(prev, overlayId, parsed as Record<string, unknown>);
+      // let validateConfig (inside pushPatch) run the url-scan to double-check
+      const validated = validateConfig(next);
+      this.errorMessage = '';
+      this.customConfigError = '';
+      this.customConfigDraft = '';
+      this.undoStack.push({ prev, next: validated, description: `edit overlay ${overlayId} card config` });
+      this.commitToHa(validated);
+    } catch (err) {
+      this.customConfigError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  private removeOverlay(overlayId: string): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = deleteOverlay(prev, overlayId);
+    this.selectedOverlayId = null;
+    this.customConfigDraft = '';
+    this.customConfigError = '';
+    this.pushPatch(prev, next, `delete overlay ${overlayId}`);
   }
 
   private removeNode(nodeId: string): void {
@@ -916,7 +1320,8 @@ export class FlowmeCardEditor extends LitElement {
       background: var(--ha-card-background, #111);
       touch-action: none;
     }
-    .stage.mode-add-node {
+    .stage.mode-add-node,
+    .stage.mode-add-overlay {
       cursor: copy;
     }
     .background {
@@ -989,6 +1394,108 @@ export class FlowmeCardEditor extends LitElement {
     }
     .waypoint:active {
       cursor: grabbing;
+    }
+    .overlay-handle {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      border: 1px dashed rgba(255, 255, 255, 0.5);
+      border-radius: 6px;
+      background: rgba(3, 169, 244, 0.08);
+      cursor: grab;
+      touch-action: none;
+      box-sizing: border-box;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      overflow: visible;
+    }
+    .overlay-handle.selected {
+      border-color: var(--primary-color, #03a9f4);
+      border-style: solid;
+      box-shadow: 0 0 0 2px rgba(3, 169, 244, 0.25);
+    }
+    .overlay-handle:active {
+      cursor: grabbing;
+    }
+    .overlay-label-chip {
+      position: absolute;
+      top: -18px;
+      left: 0;
+      background: rgba(17, 17, 17, 0.8);
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      pointer-events: none;
+    }
+    .overlay-type-badge {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 1px 5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      font-size: 9px;
+      letter-spacing: 0.03em;
+    }
+    .overlay-resize {
+      position: absolute;
+      right: -5px;
+      bottom: -5px;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      background: var(--primary-color, #03a9f4);
+      border: 2px solid rgba(255, 255, 255, 0.9);
+      cursor: nwse-resize;
+    }
+    .overlay-inspector select,
+    .overlay-inspector textarea {
+      font: inherit;
+      padding: 4px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      background: var(--card-background-color, #1a1a1a);
+      color: var(--primary-text-color, #fff);
+    }
+    .overlay-inspector textarea {
+      font-family: var(--code-font-family, ui-monospace, monospace);
+      font-size: 12px;
+      width: 100%;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+    .overlay-inspector .size-row {
+      display: flex;
+      gap: 8px;
+    }
+    .overlay-inspector .size-row label {
+      flex: 1;
+    }
+    .overlay-inspector button {
+      font: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.15));
+      background: var(--secondary-background-color, rgba(255, 255, 255, 0.06));
+      color: var(--primary-text-color, inherit);
+      cursor: pointer;
+    }
+    .custom-config-error {
+      color: var(--error-color, #f44336);
+      background: rgba(244, 67, 54, 0.08);
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .hint-sub {
+      font-size: 11px;
+      opacity: 0.65;
+      margin: 0;
     }
     .inspector {
       margin: 0 12px 12px;

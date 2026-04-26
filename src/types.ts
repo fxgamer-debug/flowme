@@ -57,11 +57,34 @@ export interface FlowConfig {
   speed_multiplier?: number;
 }
 
+export const OVERLAY_TYPES = ['sensor', 'switch', 'camera', 'button', 'custom'] as const;
+export type OverlayType = (typeof OVERLAY_TYPES)[number];
+
+export const TAP_ACTIONS = ['toggle', 'more-info', 'none'] as const;
+export type TapActionKind = (typeof TAP_ACTIONS)[number];
+
+export interface TapActionConfig {
+  action: TapActionKind;
+}
+
 export interface OverlayConfig {
-  type: 'sensor' | 'switch' | 'camera' | 'button' | 'custom';
+  /** Stable identifier. Auto-assigned if omitted during migration. */
+  id: string;
+  type: OverlayType;
   position: NodePosition;
   entity?: string;
+  label?: string;
+  /** Size in percentages of the card container. Defaults to 10×6. */
   size?: { width: number; height: number };
+  /**
+   * What happens when the overlay is tapped. Defaults per type:
+   *   switch  → toggle
+   *   button  → toggle (if entity set) else none
+   *   sensor  → more-info
+   *   camera  → more-info
+   *   custom  → whatever the embedded card decides
+   */
+  tap_action?: TapActionConfig;
   /** Full HA card config, only used when type === 'custom'. */
   card_config?: Record<string, unknown>;
 }
@@ -139,6 +162,12 @@ export interface HomeAssistant {
   themes?: unknown;
   language?: string;
   locale?: unknown;
+  /** Service dispatcher — not always present in tests, hence optional. */
+  callService?: (
+    domain: string,
+    service: string,
+    serviceData?: Record<string, unknown>,
+  ) => Promise<unknown>;
   /** Loose — different HA versions have different shapes. */
   [key: string]: unknown;
 }

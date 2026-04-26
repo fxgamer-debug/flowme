@@ -1,5 +1,14 @@
-import type { FlowmeConfig, NodeConfig, FlowConfig, NodePosition } from './types.js';
-import { FLOW_DOMAINS } from './types.js';
+import type {
+  FlowmeConfig,
+  NodeConfig,
+  FlowConfig,
+  NodePosition,
+  OverlayConfig,
+  OverlayType,
+  TapActionKind,
+} from './types.js';
+import { FLOW_DOMAINS, OVERLAY_TYPES, TAP_ACTIONS } from './types.js';
+import { findUnsafeUrls } from './overlays/url-scan.js';
 
 export class FlowmeConfigError extends Error {
   override name = 'FlowmeConfigError';
@@ -199,11 +208,105 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     config.edit_mode_password = c['edit_mode_password'] as string;
   }
 
-  // overlays validated minimally for v0.1 — full validation in v0.5 when editor supports them
   if (c['overlays'] !== undefined) {
     if (!Array.isArray(c['overlays'])) fail('overlays', 'must be an array');
-    config.overlays = c['overlays'] as FlowmeConfig['overlays'];
+    const seenOverlayIds = new Set<string>();
+    config.overlays = (c['overlays'] as unknown[]).map((o, i) =>
+      validateOverlay(o, i, seenOverlayIds),
+    );
   }
 
   return config;
+}
+
+function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): OverlayConfig {
+  const path = `overlays[${idx}]`;
+  if (!raw || typeof raw !== 'object') fail(path, 'must be an object');
+  const o = raw as Record<string, unknown>;
+
+  const type = o['type'];
+  if (typeof type !== 'string' || !OVERLAY_TYPES.includes(type as OverlayType)) {
+    fail(`${path}.type`, `must be one of ${OVERLAY_TYPES.join(', ')}`);
+  }
+
+  const id = o['id'];
+  if (typeof id !== 'string' || !id.length) fail(`${path}.id`, 'must be a non-empty string');
+  if (seenIds.has(id)) fail(`${path}.id`, `duplicate overlay id "${id}"`);
+  seenIds.add(id);
+
+  const position = validatePosition(o['position'], `${path}.position`);
+
+  const overlay: OverlayConfig = {
+    id,
+    type: type as OverlayType,
+    position,
+  };
+
+  if (o['entity'] !== undefined) {
+    if (typeof o['entity'] !== 'string' || !o['entity'].length) {
+      fail(`${path}.entity`, 'must be a non-empty entity id');
+    }
+    overlay.entity = o['entity'] as string;
+  }
+
+  // entity is required for non-custom overlays
+  if ((type === 'sensor' || type === 'switch' || type === 'camera') && !overlay.entity) {
+    fail(`${path}.entity`, `is required for overlay type "${type}"`);
+  }
+
+  if (o['label'] !== undefined) {
+    if (typeof o['label'] !== 'string') fail(`${path}.label`, 'must be a string');
+    overlay.label = o['label'] as string;
+  }
+
+  if (o['size'] !== undefined) {
+    const s = o['size'];
+    if (!s || typeof s !== 'object') fail(`${path}.size`, 'must be an object with width and height');
+    const sr = s as Record<string, unknown>;
+    const w = sr['width'];
+    const h = sr['height'];
+    if (typeof w !== 'number' || !Number.isFinite(w) || w <= 0 || w > 100) {
+      fail(`${path}.size.width`, 'must be a positive number ≤ 100 (percent of card)');
+    }
+    if (typeof h !== 'number' || !Number.isFinite(h) || h <= 0 || h > 100) {
+      fail(`${path}.size.height`, 'must be a positive number ≤ 100 (percent of card)');
+    }
+    overlay.size = { width: w as number, height: h as number };
+  }
+
+  if (o['tap_action'] !== undefined) {
+    const ta = o['tap_action'];
+    if (!ta || typeof ta !== 'object') fail(`${path}.tap_action`, 'must be an object');
+    const tar = ta as Record<string, unknown>;
+    const a = tar['action'];
+    if (typeof a !== 'string' || !TAP_ACTIONS.includes(a as TapActionKind)) {
+      fail(`${path}.tap_action.action`, `must be one of ${TAP_ACTIONS.join(', ')}`);
+    }
+    overlay.tap_action = { action: a as TapActionKind };
+  }
+
+  if (o['card_config'] !== undefined) {
+    const cc = o['card_config'];
+    if (!cc || typeof cc !== 'object' || Array.isArray(cc)) {
+      fail(`${path}.card_config`, 'must be an object');
+    }
+    if (type !== 'custom') {
+      fail(`${path}.card_config`, 'is only valid when type === "custom"');
+    }
+    const unsafe = findUnsafeUrls(cc, `${path}.card_config`);
+    if (unsafe.length) {
+      const first = unsafe[0]!;
+      fail(
+        first.path,
+        `unsafe URL scheme "${first.scheme}" — flowme rejects javascript:, vbscript:, data: and file: URLs in custom overlay configs`,
+      );
+    }
+    overlay.card_config = cc as Record<string, unknown>;
+  }
+
+  if (type === 'custom' && !overlay.card_config) {
+    fail(`${path}.card_config`, 'is required when type === "custom"');
+  }
+
+  return overlay;
 }

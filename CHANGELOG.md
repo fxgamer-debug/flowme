@@ -2,6 +2,35 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] — 2026-04-26
+
+### Added
+
+- **Interactive overlays over the background** for all five spec-defined types:
+  - `sensor` — chip showing entity state and unit; tap opens HA's more-info dialog.
+  - `switch` — animated track + thumb reflecting `on`/`off`; tap calls `homeassistant.toggle`.
+  - `button` — plain label chip; tap toggles the bound entity or fires the configured action.
+  - `camera` — renders the entity's `entity_picture` attribute as a live thumbnail; tap opens more-info.
+  - `custom` — mounts an arbitrary Lovelace card via `window.loadCardHelpers().createCardElement()` in a new `<flowme-custom-overlay>` wrapper. The wrapper forwards `hass` updates and tears the child card down on config change.
+- **Security: custom-overlay URL scanner** (`src/overlays/url-scan.ts`). Recursively walks any user-supplied `card_config` and rejects strings carrying `javascript:`, `vbscript:`, `data:` or `file:` schemes before the config ever reaches `createCardElement`. The scan runs twice: once at config validation time (so bad YAML never boots the card) and once at mount time (so late JSON edits from the editor are caught before they mount).
+- **Editor: overlay authoring.** New `+ Overlay` toolbar button prompts for the overlay type, then drops the overlay at the next click. Overlays render as dashed boxes on the canvas with a live label chip showing `label`/`entity`/type; they are draggable with `Shift`-snap to the 8% grid and have a bottom-right resize handle (also `Shift`-snaps to whole percent). Right-click deletes after confirmation.
+- **Editor: overlay inspector.** Selecting an overlay opens a panel with a type dropdown, entity field (autocomplete-friendly placeholder per type), label, width/height %, tap-action override, and a JSON editor for the custom-overlay card config. JSON is parsed, then revalidated through the full config validator so unsafe URLs are rejected with a clear error.
+- New editor commands: `addOverlay`, `deleteOverlay`, `moveOverlay`, `setOverlaySize`, `setOverlayType`, `setOverlayEntity`, `setOverlayLabel`, `setOverlayTapAction`, `setOverlayCardConfig`.
+- `OverlayConfig` gains `id`, `label`, `tap_action`. The validator enforces unique ids, required entity for non-custom types, required `card_config` for `custom`, positive size ≤ 100%, and tap-action enum membership.
+- `HomeAssistant` shim gains an optional `callService` so the card compiles against older typings.
+
+### Changed
+
+- Card version banner bumped to 0.5.0.
+- `renderOverlayPlaceholder` in `flowme-card.ts` replaced by real overlay rendering through `renderOverlayHost` from `src/overlays/render.ts`.
+
+### Deferred to later versions
+
+- Picture-glob live MJPEG/HLS camera streaming (for now we use `entity_picture`, which already refreshes on entity state change).
+- HVAC colour-gradient interpolation (still waiting on the secondary-entity schema; tracked for a later minor).
+- Web Worker offload for pathfinding (if telemetry warrants it).
+- Unit + integration tests (v1.0.0).
+
 ## [0.4.0] — 2026-04-26
 
 ### Added
@@ -99,6 +128,7 @@ All notable changes to flowme are documented here. Format loosely follows [Keep 
 - Overlay editor (v0.5.0).
 - Unit + integration tests (v1.0.0).
 
+[0.5.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.5.0
 [0.4.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.4.0
 [0.3.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.3.0
 [0.2.0]: https://github.com/fxgamer-debug/flowme/releases/tag/v0.2.0

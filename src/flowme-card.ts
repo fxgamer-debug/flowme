@@ -6,16 +6,17 @@ import type {
   FlowmeConfig,
   HomeAssistant,
   NodeConfig,
-  OverlayConfig,
 } from './types.js';
 import { FlowmeConfigError, validateConfig } from './validate-config.js';
 import { createRenderer } from './animation/renderer-factory.js';
 import type { FlowRenderer } from './animation/types.js';
 import { getProfile } from './flow-profiles/index.js';
 import { parseAspectRatio, parseSensorValue } from './utils.js';
+import { renderOverlayHost } from './overlays/render.js';
+import './overlays/custom-overlay.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '0.4.0';
+const CARD_VERSION = '0.5.0';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -173,7 +174,7 @@ export class FlowmeCard extends LitElement {
           ></div>
           <div class="renderer-mount" ${ref(this.rendererMount)}></div>
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
-          ${(config.overlays ?? []).map((o) => this.renderOverlayPlaceholder(o))}
+          ${(config.overlays ?? []).map((o) => renderOverlayHost(o, this.hass))}
         </div>
       </ha-card>
     `;
@@ -285,18 +286,6 @@ export class FlowmeCard extends LitElement {
     `;
   }
 
-  // v0.5 replaces this with real overlay rendering; for now we render a
-  // subtle marker so users see something at the configured position.
-  private renderOverlayPlaceholder(overlay: OverlayConfig): TemplateResult {
-    return html`
-      <div
-        class="overlay-placeholder"
-        style=${`left: ${overlay.position.x}%; top: ${overlay.position.y}%;`}
-        title=${`overlay: ${overlay.type}`}
-      ></div>
-    `;
-  }
-
   private teardownRenderer(): void {
     if (this.renderer) {
       this.renderer.destroy();
@@ -364,15 +353,138 @@ export class FlowmeCard extends LitElement {
       opacity: 0.85;
       white-space: nowrap;
     }
-    .overlay-placeholder {
+    .overlay {
       position: absolute;
-      width: 32px;
-      height: 32px;
-      border-radius: 6px;
       transform: translate(-50%, -50%);
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px dashed rgba(255, 255, 255, 0.4);
-      pointer-events: none;
+      min-width: 24px;
+      min-height: 24px;
+      border-radius: 8px;
+      background: rgba(17, 17, 17, 0.55);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      color: #fff;
+      padding: 6px 8px;
+      font-size: 12px;
+      font-family: var(--paper-font-body1_-_font-family, inherit);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      outline: none;
+    }
+    .overlay.interactive {
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    .overlay.interactive:hover {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+    }
+    .overlay.interactive:active {
+      transform: translate(-50%, -50%) scale(0.97);
+    }
+    .overlay-body {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      gap: 2px;
+      width: 100%;
+      height: 100%;
+      text-align: center;
+    }
+    .overlay-label {
+      font-size: 10px;
+      opacity: 0.75;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .overlay-value {
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .value-unit {
+      font-size: 10px;
+      opacity: 0.75;
+      margin-left: 3px;
+      font-weight: 500;
+    }
+    .switch-body .switch-track {
+      width: 28px;
+      height: 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      position: relative;
+      margin: 2px auto;
+      transition: background 150ms ease;
+    }
+    .switch-body.is-on .switch-track {
+      background: var(--primary-color, #03a9f4);
+    }
+    .switch-body .switch-thumb {
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 150ms ease;
+    }
+    .switch-body.is-on .switch-thumb {
+      transform: translateX(14px);
+    }
+    .switch-state {
+      font-size: 10px;
+      opacity: 0.8;
+    }
+    .button-body {
+      justify-content: center;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .camera-body {
+      padding: 0;
+      position: relative;
+    }
+    .camera-frame {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+    }
+    .camera-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+    }
+    .camera-label {
+      position: absolute;
+      bottom: 4px;
+      left: 6px;
+      right: 6px;
+      font-size: 10px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+    .overlay-custom {
+      padding: 0;
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
     .error {
       padding: 16px;
