@@ -1,8 +1,10 @@
 import type {
   FlowConfig,
   FlowmeConfig,
+  FlowmeDefaults,
   NodeConfig,
   NodePosition,
+  OpacityConfig,
   OverlayConfig,
 } from '../types.js';
 
@@ -348,10 +350,10 @@ export function setOverlayOpacity(
   return next;
 }
 
-export function setOpacity<K extends keyof import('../types.js').OpacityConfig>(
+export function setOpacity<K extends keyof OpacityConfig>(
   config: FlowmeConfig,
   key: K,
-  value: import('../types.js').OpacityConfig[K],
+  value: OpacityConfig[K],
 ): FlowmeConfig {
   const next = cloneConfig(config);
   next.opacity = { ...next.opacity, [key]: value };
@@ -382,10 +384,10 @@ export function setFlowOpacity(config: FlowmeConfig, flowId: string, opacity: nu
   return next;
 }
 
-export function setDefault<K extends keyof import('../types.js').FlowmeDefaults>(
+export function setDefault<K extends keyof FlowmeDefaults>(
   config: FlowmeConfig,
   key: K,
-  value: import('../types.js').FlowmeDefaults[K],
+  value: FlowmeDefaults[K],
 ): FlowmeConfig {
   const next = cloneConfig(config);
   next.defaults = { ...next.defaults, [key]: value };
