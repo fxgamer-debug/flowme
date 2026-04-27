@@ -3314,7 +3314,7 @@ let A = class extends j {
           o = `resize overlay ${n.id}`;
           break;
         default:
-          o = `move waypoint ${n.index} of ${n.flowId}`;
+          o = n.kind === "waypoint" ? `move waypoint ${n.index} of ${n.flowId}` : "canvas drag";
       }
       this.pushPatch(i, s, o);
     }, this.onKeyDown = (e) => {

@@ -24,7 +24,7 @@ const stop = startMockUpdates(hass, (updated) => {
 });
 
 // Prevent cleanup from being GC'd — only needed for hmr teardown
-(window as Record<string, unknown>).__flowmeDevStop = stop;
+(window as unknown as Record<string, unknown>).__flowmeDevStop = stop;
 
 // ── Control panel ──────────────────────────────────────────────────────────
 

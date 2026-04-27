@@ -2217,7 +2217,9 @@ export class FlowmeCardEditor extends LitElement {
         description = `resize overlay ${target.id}`;
         break;
       default:
-        description = `move waypoint ${target.index} of ${target.flowId}`;
+        description = target.kind === 'waypoint'
+          ? `move waypoint ${target.index} of ${target.flowId}`
+          : `canvas drag`;
     }
     this.pushPatch(startConfig, endConfig, description);
   };

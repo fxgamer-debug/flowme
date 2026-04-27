@@ -162,7 +162,7 @@ function buildEntityStates(t: number, overrides: Record<string, string | undefin
       device_class: 'humidity',
       friendly_name: 'Indoor Humidity',
     }),
-    'weather.demo': makeState('weather.demo', get('weather.demo', weatherState), {
+    'weather.demo': makeState('weather.demo', get('weather.demo', weatherState as string), {
       friendly_name: 'Demo Weather',
       temperature: outdoorTemp,
     }),
@@ -221,8 +221,9 @@ export function startMockUpdates(
       hass.states[id] = state;
     }
     // Re-apply switch override if set
-    if (hass._overrides['switch.demo_switch']) {
-      hass.states['switch.demo_switch'].state = hass._overrides['switch.demo_switch'];
+    const switchOverride = hass._overrides['switch.demo_switch'];
+    if (switchOverride && hass.states['switch.demo_switch']) {
+      hass.states['switch.demo_switch'].state = switchOverride;
     }
     onUpdate({ ...hass, states: { ...hass.states } });
   }, intervalMs);
