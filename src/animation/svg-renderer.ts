@@ -15,7 +15,7 @@ import { dlog } from '../debug-log.js';
 
 const RLOG = '[FlowMe Renderer]';
 function rlog(...args: unknown[]): void {
-  console.warn(RLOG, ...args);
+  dlog(RLOG, ...args);
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

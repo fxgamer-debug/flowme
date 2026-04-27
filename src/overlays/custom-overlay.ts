@@ -13,7 +13,7 @@ import { assertSafeCardConfig } from './url-scan.js';
 @customElement('flowme-custom-overlay')
 export class FlowmeCustomOverlay extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistant;
-  @property({ attribute: false }) cardConfig?: Record<string, unknown>;
+  @property({ attribute: false }) card?: Record<string, unknown>;
 
   @state() private errorMessage?: string;
 
@@ -22,7 +22,7 @@ export class FlowmeCustomOverlay extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
-    if (changed.has('cardConfig')) {
+    if (changed.has('card')) {
       this.rebuildChild();
     }
     if (this.childCard && this.hass && this.childCard.hass !== this.hass) {
@@ -43,7 +43,7 @@ export class FlowmeCustomOverlay extends LitElement {
   }
 
   private rebuildChild(): void {
-    const config = this.cardConfig;
+    const config = this.card;
     const json = config ? JSON.stringify(config) : undefined;
     if (json === this.lastMountedConfigJson) return;
     this.lastMountedConfigJson = json;

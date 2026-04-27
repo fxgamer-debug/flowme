@@ -1,26 +1,28 @@
 /**
- * v1.0.3-debug diagnostic channel. Every log point the user asked for
- * goes through this module so grep-ing `[FlowMe]` in the console gives
- * a complete timeline. This file will be removed / gutted once we've
- * figured out why animation doesn't run in the user's HA instance.
+ * FlowMe diagnostic logging channel. All output is gated behind the
+ * card-level `debug: true` config flag so a production install with
+ * the default `debug: false` produces zero console output during
+ * normal operation.
  *
- * Kept as `console.warn` calls because the project's lint config only
- * allows `warn` / `error` without per-line disables. Semantically they
- * are still diagnostic logs — the prefix tells the eye.
+ * Call `setDebugEnabled(config.debug ?? false)` from `setConfig()` to
+ * update the flag. `dlog` checks the flag before every call — no
+ * per-call guards needed at the call sites.
+ *
+ * `console.error` is intentionally NOT gated here: genuine failures
+ * (renderer crashes, SVG init errors) always surface regardless of
+ * the debug flag.
  */
 
-/** Top-level tag so everything is one filter away in DevTools. */
 const TAG = '[FlowMe]';
+let _debugEnabled = false;
 
-export function dlog(...args: unknown[]): void {
-  console.warn(TAG, ...args);
+/** Call once per setConfig() to flip the logging gate. */
+export function setDebugEnabled(flag: boolean): void {
+  _debugEnabled = flag;
 }
 
-export function dlogGroup(label: string, body: () => void): void {
-  console.warn(`${TAG} ${label}`);
-  try {
-    body();
-  } finally {
-    // keep it flat — no groupEnd — because happy-dom doesn't implement groups
-  }
+/** Logs when `debug: true` is set in card config. No-op otherwise. */
+export function dlog(...args: unknown[]): void {
+  if (!_debugEnabled) return;
+  console.warn(TAG, ...args);
 }

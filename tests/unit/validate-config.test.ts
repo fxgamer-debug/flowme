@@ -60,12 +60,11 @@ describe('validateConfig — happy path', () => {
     expect(cfg.background.weather_entity).toBe('weather.home');
   });
 
-  it('parses v1.0.8 defaults block (all fields)', () => {
+  it('parses v1.0.8 defaults block (all fields, no camera_refresh_interval in v1.0.9)', () => {
     const raw = {
       ...minimalConfig(),
       defaults: {
         node_radius: 16,
-        camera_refresh_interval: 30,
         burst_trigger_ratio: 0.8,
         burst_sustain_ms: 3000,
         burst_max_particles: 15,
@@ -75,12 +74,17 @@ describe('validateConfig — happy path', () => {
     };
     const cfg = validateConfig(raw);
     expect(cfg.defaults?.node_radius).toBe(16);
-    expect(cfg.defaults?.camera_refresh_interval).toBe(30);
     expect(cfg.defaults?.burst_trigger_ratio).toBe(0.8);
     expect(cfg.defaults?.burst_sustain_ms).toBe(3000);
     expect(cfg.defaults?.burst_max_particles).toBe(15);
     expect(cfg.defaults?.dot_radius).toBe(7);
     expect(cfg.defaults?.line_width).toBe(3);
+  });
+
+  it('parses debug flag', () => {
+    const raw = { ...minimalConfig(), debug: true };
+    const cfg = validateConfig(raw);
+    expect(cfg.debug).toBe(true);
   });
 
   it('rejects defaults.burst_trigger_ratio > 1', () => {
@@ -117,33 +121,39 @@ describe('validateConfig — happy path', () => {
     expect(cfg.domain_colors?.grid).toBeUndefined();
   });
 
-  it('parses camera overlay refresh_interval and offline_label', () => {
+  it('parses a custom overlay with visible and opacity', () => {
     const raw = {
       ...minimalConfig(),
       overlays: [
         {
-          id: 'cam1',
-          type: 'camera',
-          entity: 'camera.test',
+          id: 'ov1',
+          type: 'custom',
           position: { x: 50, y: 50 },
-          refresh_interval: 30,
-          offline_label: 'Kamera offline',
+          card: { type: 'entity', entity: 'sensor.test' },
+          visible: false,
+          opacity: 0.7,
         },
       ],
     };
     const cfg = validateConfig(raw);
-    expect(cfg.overlays?.[0]?.refresh_interval).toBe(30);
-    expect(cfg.overlays?.[0]?.offline_label).toBe('Kamera offline');
+    expect(cfg.overlays?.[0]?.visible).toBe(false);
+    expect(cfg.overlays?.[0]?.opacity).toBe(0.7);
   });
 
-  it('rejects refresh_interval on non-camera overlays', () => {
+  it('rejects opacity outside 0–1', () => {
     const raw = {
       ...minimalConfig(),
       overlays: [
-        { id: 's1', type: 'sensor', entity: 'sensor.x', position: { x: 10, y: 10 }, refresh_interval: 10 },
+        {
+          id: 'ov1',
+          type: 'custom',
+          position: { x: 10, y: 10 },
+          card: { type: 'entity', entity: 'sensor.x' },
+          opacity: 1.5,
+        },
       ],
     };
-    expect(() => validateConfig(raw)).toThrow(/refresh_interval/);
+    expect(() => validateConfig(raw)).toThrow(/opacity/);
   });
 
   it('parses the v1.0.7 flow.color shorthand', () => {
@@ -182,24 +192,21 @@ describe('validateConfig — happy path', () => {
     expect(cfg.background.default).toBe('');
   });
 
-  it('accepts overlays of every supported type', () => {
+  it('accepts a custom overlay (only supported type in v1.0.9)', () => {
     const raw = {
       ...minimalConfig(),
       overlays: [
-        { id: 'ov_sensor', type: 'sensor', entity: 'sensor.t', position: { x: 20, y: 20 } },
-        { id: 'ov_switch', type: 'switch', entity: 'switch.l', position: { x: 30, y: 30 } },
-        { id: 'ov_camera', type: 'camera', entity: 'camera.c', position: { x: 40, y: 40 } },
-        { id: 'ov_button', type: 'button', position: { x: 50, y: 50 }, label: 'Go' },
         {
           id: 'ov_custom',
           type: 'custom',
           position: { x: 60, y: 60 },
-          card_config: { type: 'entity', entity: 'sensor.x' },
+          card: { type: 'entity', entity: 'sensor.x' },
         },
       ],
     };
     const cfg = validateConfig(raw);
-    expect(cfg.overlays).toHaveLength(5);
+    expect(cfg.overlays).toHaveLength(1);
+    expect(cfg.overlays?.[0]?.type).toBe('custom');
   });
 });
 
@@ -360,6 +367,26 @@ describe('validateConfig — speed_curve_override (v1.0.6)', () => {
 });
 
 describe('validateConfig — overlay schema', () => {
+  function customOverlay(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: 'o',
+      type: 'custom',
+      position: { x: 10, y: 10 },
+      card: { type: 'entity', entity: 'sensor.x' },
+      ...extra,
+    };
+  }
+
+  it('rejects native overlay types removed in v1.0.9', () => {
+    for (const type of ['sensor', 'switch', 'camera', 'button']) {
+      const raw = {
+        ...minimalConfig(),
+        overlays: [{ id: 'o', type, position: { x: 0, y: 0 } }],
+      };
+      expect(() => validateConfig(raw)).toThrow(/must be "custom"/);
+    }
+  });
+
   it('rejects unknown overlay types', () => {
     const raw = {
       ...minimalConfig(),
@@ -372,48 +399,22 @@ describe('validateConfig — overlay schema', () => {
     const raw = {
       ...minimalConfig(),
       overlays: [
-        { id: 'dup', type: 'sensor', entity: 'sensor.a', position: { x: 10, y: 10 } },
-        { id: 'dup', type: 'sensor', entity: 'sensor.b', position: { x: 20, y: 20 } },
+        customOverlay({ id: 'dup' }),
+        { id: 'dup', type: 'custom', position: { x: 20, y: 20 }, card: { type: 'entity', entity: 'sensor.b' } },
       ],
     };
     expect(() => validateConfig(raw)).toThrow(/duplicate overlay id/);
   });
 
-  it('requires entity for sensor / switch / camera overlays', () => {
-    for (const type of ['sensor', 'switch', 'camera']) {
-      const raw = {
-        ...minimalConfig(),
-        overlays: [{ id: 'o', type, position: { x: 0, y: 0 } }],
-      };
-      expect(() => validateConfig(raw)).toThrow(/entity/);
-    }
-  });
-
-  it('requires card_config for custom overlays', () => {
+  it('requires card: block for custom overlays', () => {
     const raw = {
       ...minimalConfig(),
       overlays: [{ id: 'o', type: 'custom', position: { x: 0, y: 0 } }],
     };
-    expect(() => validateConfig(raw)).toThrow(/card_config/);
+    expect(() => validateConfig(raw)).toThrow(/card/);
   });
 
-  it('rejects card_config on non-custom types', () => {
-    const raw = {
-      ...minimalConfig(),
-      overlays: [
-        {
-          id: 'o',
-          type: 'sensor',
-          entity: 'sensor.x',
-          position: { x: 0, y: 0 },
-          card_config: { type: 'entity', entity: 'sensor.x' },
-        },
-      ],
-    };
-    expect(() => validateConfig(raw)).toThrow(/card_config/);
-  });
-
-  it('rejects unsafe URL schemes in custom overlay card_config', () => {
+  it('rejects unsafe URL schemes in overlay card block', () => {
     const raw = {
       ...minimalConfig(),
       overlays: [
@@ -421,7 +422,7 @@ describe('validateConfig — overlay schema', () => {
           id: 'o',
           type: 'custom',
           position: { x: 0, y: 0 },
-          card_config: { type: 'markdown', tap_action: { url_path: 'javascript:alert(1)' } },
+          card: { type: 'markdown', tap_action: { url_path: 'javascript:alert(1)' } },
         },
       ],
     };
@@ -431,32 +432,24 @@ describe('validateConfig — overlay schema', () => {
   it('validates size bounds', () => {
     const raw = {
       ...minimalConfig(),
-      overlays: [
-        {
-          id: 'o',
-          type: 'sensor',
-          entity: 'sensor.x',
-          position: { x: 10, y: 10 },
-          size: { width: -1, height: 10 },
-        },
-      ],
+      overlays: [customOverlay({ size: { width: -1, height: 10 } })],
     };
     expect(() => validateConfig(raw)).toThrow(/size\.width/);
   });
 
-  it('rejects unknown tap_action values', () => {
+  it('rejects non-boolean visible', () => {
     const raw = {
       ...minimalConfig(),
-      overlays: [
-        {
-          id: 'o',
-          type: 'sensor',
-          entity: 'sensor.x',
-          position: { x: 10, y: 10 },
-          tap_action: { action: 'destroy-world' },
-        },
-      ],
+      overlays: [customOverlay({ visible: 'yes' })],
     };
-    expect(() => validateConfig(raw)).toThrow(/tap_action/);
+    expect(() => validateConfig(raw)).toThrow(/visible/);
+  });
+
+  it('rejects opacity outside 0–1', () => {
+    const raw = {
+      ...minimalConfig(),
+      overlays: [customOverlay({ opacity: 2 })],
+    };
+    expect(() => validateConfig(raw)).toThrow(/opacity/);
   });
 });

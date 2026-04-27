@@ -9,10 +9,7 @@ import type {
   NodeConfig,
   NodePosition,
   OverlayConfig,
-  OverlayType,
-  TapActionKind,
 } from './types.js';
-import { OVERLAY_TYPES, TAP_ACTIONS } from './types.js';
 import { validateConfig } from './validate-config.js';
 import { parseAspectRatio } from './utils.js';
 import { UndoStack } from './editor/undo-stack.js';
@@ -33,11 +30,9 @@ import {
   renameWeatherState,
   setBackgroundDefault,
   setOverlayCardConfig,
-  setOverlayEntity,
-  setOverlayLabel,
+  setOverlayOpacity,
   setOverlaySize,
-  setOverlayTapAction,
-  setOverlayType,
+  setOverlayVisible,
   setTransitionDuration,
   setWeatherEntity,
   setWeatherStateImage,
@@ -57,7 +52,7 @@ type DragTarget =
 type PendingAction =
   | null
   | { kind: 'add-node' }
-  | { kind: 'add-overlay'; overlayType: OverlayType }
+  | { kind: 'add-overlay'; overlayType: 'custom' }
   | { kind: 'add-flow'; step: 'pick-from' }
   | { kind: 'add-flow'; step: 'pick-to'; fromId: string };
 
@@ -257,7 +252,7 @@ export class FlowmeCardEditor extends LitElement {
         @contextmenu=${this.onOverlayContextMenu}
       >
         <div class="overlay-label-chip">
-          ${overlay.label ?? overlay.entity ?? overlay.type}
+          ${overlay.id}
           <span class="overlay-type-badge">${overlay.type}</span>
         </div>
         ${selected
@@ -417,44 +412,12 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   private renderOverlayInspector(overlay: OverlayConfig): TemplateResult {
-    const size = overlay.size ?? { width: 14, height: 8 };
-    const tap = overlay.tap_action?.action ?? '';
+    const size = overlay.size ?? { width: 20, height: 15 };
+    const visible = overlay.visible !== false;
+    const opacity = overlay.opacity ?? 1;
     return html`
       <div class="inspector overlay-inspector">
         <h4>Overlay: ${overlay.id}</h4>
-        <label>
-          Type
-          <select @change=${(e: Event) => this.onOverlayTypeChange(overlay.id, e)}>
-            ${OVERLAY_TYPES.map(
-              (t) => html`
-                <option value=${t} ?selected=${t === overlay.type}>${t}</option>
-              `,
-            )}
-          </select>
-        </label>
-        ${overlay.type !== 'custom'
-          ? html`
-              <label>
-                Entity
-                ${this.renderEntityPicker(
-                  overlay.entity ?? '',
-                  (value) => this.setOverlayEntityValue(overlay.id, value),
-                  {
-                    includeDomains: this.includeDomainsForOverlay(overlay.type),
-                    placeholder: this.entityPlaceholderFor(overlay.type),
-                  },
-                )}
-              </label>
-            `
-          : nothing}
-        <label>
-          Label
-          <input
-            type="text"
-            .value=${overlay.label ?? ''}
-            @change=${(e: Event) => this.onOverlayLabelChange(overlay.id, e)}
-          />
-        </label>
         <div class="row size-row">
           <label>
             Width %
@@ -479,31 +442,56 @@ export class FlowmeCardEditor extends LitElement {
             />
           </label>
         </div>
-        <label>
-          Tap action
-          <select @change=${(e: Event) => this.onOverlayTapActionChange(overlay.id, e)}>
-            <option value="" ?selected=${!tap}>default</option>
-            ${TAP_ACTIONS.map(
-              (a) => html`<option value=${a} ?selected=${a === tap}>${a}</option>`,
-            )}
-          </select>
+        <label class="toggle-label">
+          Visible
+          <input
+            type="checkbox"
+            .checked=${visible}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const checked = (e.target as HTMLInputElement).checked;
+              const prev = this.config;
+              const next = setOverlayVisible(prev, overlay.id, checked);
+              this.pushPatch(prev, next, `toggle overlay ${overlay.id} visible`);
+            }}
+          />
         </label>
-        ${overlay.type === 'custom' ? this.renderCustomConfigEditor(overlay) : nothing}
+        <label>
+          Opacity
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            .value=${String(opacity)}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const val = parseFloat((e.target as HTMLInputElement).value);
+              if (!Number.isFinite(val)) return;
+              const prev = this.config;
+              const next = setOverlayOpacity(prev, overlay.id, val);
+              this.pushPatch(prev, next, `edit overlay ${overlay.id} opacity`);
+            }}
+          />
+          <span>${Math.round(opacity * 100)}%</span>
+        </label>
+        ${this.renderCardConfigEditor(overlay)}
         <button class="danger" @click=${() => this.removeOverlay(overlay.id)}>Delete overlay</button>
       </div>
     `;
   }
 
-  private renderCustomConfigEditor(overlay: OverlayConfig): TemplateResult {
+  private renderCardConfigEditor(overlay: OverlayConfig): TemplateResult {
     const jsonValue =
       this.customConfigDraft ||
-      JSON.stringify(overlay.card_config ?? { type: 'entity', entity: '' }, null, 2);
+      JSON.stringify(overlay.card ?? { type: 'entity', entity: 'sensor.example_sensor' }, null, 2);
     return html`
       <label>
-        Card config (JSON)
+        Card configuration (any valid HA card YAML)
         <textarea
           rows="8"
           spellcheck="false"
+          placeholder="type: entity&#10;entity: sensor.my_sensor"
           .value=${jsonValue}
           @input=${(e: Event) => {
             this.customConfigDraft = (e.target as HTMLTextAreaElement).value;
@@ -514,29 +502,17 @@ export class FlowmeCardEditor extends LitElement {
       ${this.customConfigError
         ? html`<div class="custom-config-error">${this.customConfigError}</div>`
         : nothing}
+      <p class="hint-sub">
+        Any installed HA card type is supported. Examples: entity, tile, gauge,
+        picture-entity, custom:mini-graph-card, …
+      </p>
+      <p class="hint-sub">
+        URLs must not use javascript:, vbscript:, data: or file: schemes.
+      </p>
       <div class="row">
         <button @click=${() => this.applyCustomConfig(overlay.id)}>Apply card config</button>
       </div>
-      <p class="hint-sub">
-        URLs must not use javascript:, vbscript:, data: or file: schemes — flowme rejects
-        these when the overlay is saved.
-      </p>
     `;
-  }
-
-  private entityPlaceholderFor(type: OverlayType): string {
-    switch (type) {
-      case 'sensor':
-        return 'sensor.my_power_sensor';
-      case 'switch':
-        return 'switch.my_switch';
-      case 'camera':
-        return 'camera.my_camera';
-      case 'button':
-        return 'script.my_script';
-      default:
-        return 'entity.id';
-    }
   }
 
   // -- weather backgrounds panel --
@@ -712,21 +688,10 @@ export class FlowmeCardEditor extends LitElement {
         this.pending = { kind: 'add-flow', step: 'pick-from' };
         this.statusMessage = 'Click the source node.';
         break;
-      case 'add-overlay': {
-        const choice = window.prompt(
-          `Overlay type? One of: ${OVERLAY_TYPES.join(', ')}`,
-          'sensor',
-        );
-        if (!choice) break;
-        const trimmed = choice.trim().toLowerCase();
-        if (!OVERLAY_TYPES.includes(trimmed as OverlayType)) {
-          this.statusMessage = `Unknown overlay type "${choice}".`;
-          break;
-        }
-        this.pending = { kind: 'add-overlay', overlayType: trimmed as OverlayType };
-        this.statusMessage = `Click anywhere on the background to drop a ${trimmed} overlay.`;
+      case 'add-overlay':
+        this.pending = { kind: 'add-overlay', overlayType: 'custom' };
+        this.statusMessage = 'Click anywhere on the background to place a custom overlay.';
         break;
-      }
       case 'suggest-path':
         void this.runSuggestPath();
         break;
@@ -879,15 +844,12 @@ export class FlowmeCardEditor extends LitElement {
     if (this.pending?.kind === 'add-overlay') {
       const pos = this.pointerToPercent(event);
       if (!pos) return;
-      const overlayType = this.pending.overlayType;
       const seed: Omit<OverlayConfig, 'id'> & { id?: string } = {
-        type: overlayType,
+        type: 'custom',
         position: pos,
-        size: overlayType === 'camera' ? { width: 22, height: 15 } : { width: 14, height: 8 },
+        size: { width: 20, height: 15 },
+        card: { type: 'entity', entity: 'sensor.example_sensor' },
       };
-      if (overlayType === 'custom') {
-        seed.card_config = { type: 'entity', entity: '' };
-      }
       const prev = this.config;
       const { config: next, overlay } = addOverlay(prev, seed);
       this.selectedOverlayId = overlay.id;
@@ -1011,7 +973,7 @@ export class FlowmeCardEditor extends LitElement {
     if (!id) return;
     const overlay = (this.config.overlays ?? []).find((o) => o.id === id);
     if (!overlay) return;
-    const startSize = { ...(overlay.size ?? { width: 14, height: 8 }) };
+    const startSize = { ...(overlay.size ?? { width: 20, height: 15 }) };
     el.setPointerCapture(event.pointerId);
     this.dragPointerId = event.pointerId;
     this.dragTarget = {
@@ -1190,64 +1152,16 @@ export class FlowmeCardEditor extends LitElement {
     this.pushPatch(prev, next, `edit entity of ${flowId}`);
   }
 
-  private onOverlayTypeChange(id: string, event: Event): void {
-    if (!this.config) return;
-    const value = (event.target as HTMLSelectElement).value as OverlayType;
-    const prev = this.config;
-    const next = setOverlayType(prev, id, value);
-    this.customConfigDraft = '';
-    this.pushPatch(prev, next, `change overlay ${id} type`);
-  }
-
-  private setOverlayEntityValue(id: string, value: string): void {
-    if (!this.config) return;
-    const trimmed = value.trim();
-    const prev = this.config;
-    const next = setOverlayEntity(prev, id, trimmed || undefined);
-    this.pushPatch(prev, next, `edit overlay ${id} entity`);
-  }
-
-  private includeDomainsForOverlay(type: OverlayType): string[] {
-    switch (type) {
-      case 'switch':
-        return ['switch', 'light', 'input_boolean', 'fan', 'cover'];
-      case 'sensor':
-        return ['sensor', 'binary_sensor', 'input_number', 'number'];
-      case 'camera':
-        return ['camera'];
-      case 'button':
-        return ['script', 'automation', 'button', 'input_button'];
-      default:
-        return [];
-    }
-  }
-
-  private onOverlayLabelChange(id: string, event: Event): void {
-    if (!this.config) return;
-    const value = (event.target as HTMLInputElement).value;
-    const prev = this.config;
-    const next = setOverlayLabel(prev, id, value || undefined);
-    this.pushPatch(prev, next, `edit overlay ${id} label`);
-  }
-
   private onOverlaySizeChange(id: string, which: 'width' | 'height', event: Event): void {
     if (!this.config) return;
     const overlay = (this.config.overlays ?? []).find((o) => o.id === id);
     if (!overlay) return;
-    const current = overlay.size ?? { width: 14, height: 8 };
+    const current = overlay.size ?? { width: 20, height: 15 };
     const raw = Number((event.target as HTMLInputElement).value);
     if (!Number.isFinite(raw) || raw <= 0) return;
     const prev = this.config;
     const next = setOverlaySize(prev, id, { ...current, [which]: raw });
     this.pushPatch(prev, next, `resize overlay ${id}`);
-  }
-
-  private onOverlayTapActionChange(id: string, event: Event): void {
-    if (!this.config) return;
-    const value = (event.target as HTMLSelectElement).value;
-    const prev = this.config;
-    const next = setOverlayTapAction(prev, id, (value || undefined) as TapActionKind | undefined);
-    this.pushPatch(prev, next, `edit overlay ${id} tap action`);
   }
 
   private applyCustomConfig(overlayId: string): void {

@@ -2,6 +2,53 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.9] — 2026-04-27
+
+Strategic overlay refactor and debug-logging gate.
+
+### BREAKING CHANGES
+
+- **All native overlay types removed** (`camera`, `switch`, `sensor`, `button`). Only `type: custom` is supported from this version onward. Migrate by wrapping entity display in a standard HA card, e.g.:
+
+  ```yaml
+  # Before (removed)
+  overlays:
+    - type: camera
+      entity: camera.front_door
+      position: { x: 80, y: 50 }
+      size: { width: 20, height: 15 }
+
+  # After (v1.0.9+)
+  overlays:
+    - type: custom
+      position: { x: 80, y: 50 }
+      size: { width: 20, height: 15 }
+      card:
+        type: picture-entity
+        entity: camera.front_door
+        show_name: false
+  ```
+
+- **`card_config:` renamed to `card:`** on custom overlays. Update all existing configs.
+- **`defaults.camera_refresh_interval`** removed (camera overlay type gone).
+- **`tap_action`, `entity`, `label`, `refresh_interval`, `offline_label`** removed from `OverlayConfig`.
+
+### Added
+
+- `card: <ha-card-config>` on custom overlays — accepts any installed Lovelace card type.
+- `visible: false` on overlays — hides the wrapper with `display: none`.
+- `opacity: 0–1` on overlays — CSS opacity applied to the wrapper element.
+- `debug: true` top-level config flag — gates ALL `console.log`/`console.warn` output. Default `false` = silent production operation. `console.error` always fires.
+- `setOverlayVisible` and `setOverlayOpacity` editor commands.
+
+### Changed
+
+- Overlay position now anchors at **top-left** corner (`left: x%, top: y%`). Previously centred.
+- `getStubConfig()` includes one example `custom` overlay with `card: { type: entity, entity: sensor.example_sensor }`.
+- Debug `setTimeout` blocks in `firstUpdated` removed entirely.
+- `syncCameraTimer` removed from `flowme-card.ts`.
+- All renderer diagnostic logging (`rlog`) now routes through `dlog` and is gated by `config.debug`.
+
 ## [1.0.8] — 2026-04-27
 
 Security and hardcoding audit cleanup. No new rendering features.

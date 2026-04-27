@@ -99,47 +99,32 @@ export interface FlowConfig {
   speed_curve_override?: SpeedCurveOverride;
 }
 
-export const OVERLAY_TYPES = ['sensor', 'switch', 'camera', 'button', 'custom'] as const;
+export const OVERLAY_TYPES = ['custom'] as const;
 export type OverlayType = (typeof OVERLAY_TYPES)[number];
-
-export const TAP_ACTIONS = ['toggle', 'more-info', 'none'] as const;
-export type TapActionKind = (typeof TAP_ACTIONS)[number];
-
-export interface TapActionConfig {
-  action: TapActionKind;
-}
 
 export interface OverlayConfig {
   /** Stable identifier. Auto-assigned if omitted during migration. */
   id: string;
   type: OverlayType;
   position: NodePosition;
-  entity?: string;
-  label?: string;
-  /** Size in percentages of the card container. Defaults to 10×6. */
+  /** Size in percentages of the card container. Defaults to 20×15. */
   size?: { width: number; height: number };
   /**
-   * What happens when the overlay is tapped. Defaults per type:
-   *   switch  → toggle
-   *   button  → toggle (if entity set) else none
-   *   sensor  → more-info
-   *   camera  → more-info
-   *   custom  → whatever the embedded card decides
+   * Any valid HA card configuration object. FlowMe passes this directly to
+   * `createCardElement()` — it supports any installed card type.
+   * Required for `type: custom`.
    */
-  tap_action?: TapActionConfig;
-  /** Full HA card config, only used when type === 'custom'. */
-  card_config?: Record<string, unknown>;
+  card: Record<string, unknown>;
   /**
-   * Camera only. Refresh interval in seconds. Overrides
-   * `FlowmeDefaults.camera_refresh_interval` for this overlay. Default: 10.
+   * When false the overlay wrapper is hidden (display:none). Default: true.
+   * v1.0.9+.
    */
-  refresh_interval?: number;
+  visible?: boolean;
   /**
-   * Camera only. Text to show in the `title` attribute of the offline
-   * placeholder. Set to an empty string to show only the icon with no text.
-   * Default: empty string (no text). v1.0.8+.
+   * CSS opacity applied to the wrapper element, 0–1. Default: 1.
+   * v1.0.9+.
    */
-  offline_label?: string;
+  opacity?: number;
 }
 
 /**
@@ -150,12 +135,6 @@ export interface OverlayConfig {
 export interface FlowmeDefaults {
   /** Default node dot radius in px. Used when `node.size` is not set. Default: 12. */
   node_radius?: number;
-  /**
-   * Camera snapshot refresh interval in seconds. Applies to all camera
-   * overlays on this card unless overridden by the individual overlay's
-   * `refresh_interval`. Default: 10.
-   */
-  camera_refresh_interval?: number;
   /**
    * Fraction of `peak` at which a flow enters burst-density mode, e.g. 0.9
    * means 90% of peak. Default: 0.9.
@@ -219,6 +198,12 @@ export interface FlowmeConfig {
    * `color:` on every individual flow.
    */
   domain_colors?: DomainColors;
+  /**
+   * Enable verbose debug logging to the browser console. Default false.
+   * When false, zero console output is produced during normal operation.
+   * v1.0.9+.
+   */
+  debug?: boolean;
 }
 
 export type FlowShape = 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';

@@ -141,7 +141,7 @@ describe('flowme-card smoke test (happy-dom)', () => {
     expect(html).not.toContain('W W');
   });
 
-  it('camera overlay renders a placeholder SVG icon when entity_picture is missing', async () => {
+  it('custom overlay renders a flowme-custom-overlay element', async () => {
     const card = document.createElement('flowme-card') as HTMLElement & {
       setConfig: (c: unknown) => void;
       hass?: HomeAssistant;
@@ -149,29 +149,21 @@ describe('flowme-card smoke test (happy-dom)', () => {
     };
     card.setConfig({
       ...MINIMAL_CONFIG,
+      flows: [],
       overlays: [
         {
-          id: 'cam1',
-          type: 'camera',
-          entity: 'camera.unreachable',
-          position: { x: 50, y: 50 },
-          size: { width: 16, height: 16 },
+          id: 'ov1',
+          type: 'custom',
+          position: { x: 10, y: 10 },
+          size: { width: 20, height: 15 },
+          card: { type: 'entity', entity: 'sensor.example' },
         },
       ],
     });
-    card.hass = {
-      states: {
-        'camera.unreachable': {
-          entity_id: 'camera.unreachable',
-          state: 'unavailable',
-          attributes: {},
-        },
-      },
-    } as unknown as HomeAssistant;
     document.body.appendChild(card);
     await card.updateComplete;
-    expect(card.shadowRoot!.innerHTML).toContain('camera-placeholder');
-    expect(card.shadowRoot!.innerHTML).toContain('camera-icon');
+    expect(card.shadowRoot!.innerHTML).toContain('flowme-custom-overlay');
+    expect(card.shadowRoot!.innerHTML).toContain('overlay-custom');
   });
 
   it('M1: domain_colors overrides built-in id-pattern defaults', async () => {

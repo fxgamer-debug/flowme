@@ -19,11 +19,9 @@ import {
   moveOverlay,
   deleteOverlay,
   setOverlaySize,
-  setOverlayType,
-  setOverlayEntity,
-  setOverlayLabel,
-  setOverlayTapAction,
   setOverlayCardConfig,
+  setOverlayVisible,
+  setOverlayOpacity,
   setBackgroundDefault,
   setTransitionDuration,
   setWeatherStateImage,
@@ -144,11 +142,18 @@ describe('flow commands', () => {
 });
 
 describe('overlay commands', () => {
+  function customOverlaySeed() {
+    return {
+      type: 'custom' as const,
+      position: { x: 50, y: 50 },
+      card: { type: 'entity', entity: 'sensor.example' } as Record<string, unknown>,
+    };
+  }
+
   it('addOverlay appends and generates ids when missing', () => {
     const cfg = baseConfig();
     const { config, overlay } = addOverlay(cfg, {
-      type: 'sensor',
-      entity: 'sensor.t',
+      ...customOverlaySeed(),
       position: { x: 200, y: -10 },
     });
     expect(overlay.id).toBe('overlay_1');
@@ -157,10 +162,7 @@ describe('overlay commands', () => {
   });
 
   it('moveOverlay clamps, deleteOverlay removes', () => {
-    const seed = addOverlay(baseConfig(), {
-      type: 'button',
-      position: { x: 50, y: 50 },
-    }).config;
+    const seed = addOverlay(baseConfig(), customOverlaySeed()).config;
     const moved = moveOverlay(seed, 'overlay_1', { x: -50, y: 150 });
     expect(moved.overlays?.[0]?.position).toEqual({ x: 0, y: 100 });
     const removed = deleteOverlay(moved, 'overlay_1');
@@ -168,44 +170,35 @@ describe('overlay commands', () => {
   });
 
   it('setOverlaySize clamps to [2, 100]', () => {
-    const seed = addOverlay(baseConfig(), {
-      type: 'button',
-      position: { x: 0, y: 0 },
-    }).config;
+    const seed = addOverlay(baseConfig(), customOverlaySeed()).config;
     const tiny = setOverlaySize(seed, 'overlay_1', { width: 0.5, height: 200 });
     expect(tiny.overlays?.[0]?.size).toEqual({ width: 2, height: 100 });
   });
 
-  it('setOverlayType → "custom" keeps existing card_config; switching away drops it', () => {
-    let cfg = addOverlay(baseConfig(), {
-      type: 'custom',
-      position: { x: 0, y: 0 },
-      card_config: { type: 'entity', entity: 'sensor.x' },
-    }).config;
-    cfg = setOverlayType(cfg, 'overlay_1', 'sensor');
-    expect(cfg.overlays?.[0]?.card_config).toBeUndefined();
+  it('setOverlayCardConfig updates card field', () => {
+    let cfg = addOverlay(baseConfig(), customOverlaySeed()).config;
+    cfg = setOverlayCardConfig(cfg, 'overlay_1', { type: 'tile', entity: 'sensor.c' });
+    expect(cfg.overlays?.[0]?.card).toEqual({ type: 'tile', entity: 'sensor.c' });
   });
 
-  it('setOverlayEntity / Label / TapAction / CardConfig round-trip', () => {
-    let cfg = addOverlay(baseConfig(), { type: 'sensor', position: { x: 0, y: 0 }, entity: 'sensor.a' }).config;
-    cfg = setOverlayEntity(cfg, 'overlay_1', 'sensor.b');
-    expect(cfg.overlays?.[0]?.entity).toBe('sensor.b');
-    cfg = setOverlayEntity(cfg, 'overlay_1', undefined);
-    expect(cfg.overlays?.[0]?.entity).toBeUndefined();
+  it('setOverlayVisible sets visible: false; true removes the key', () => {
+    let cfg = addOverlay(baseConfig(), customOverlaySeed()).config;
+    cfg = setOverlayVisible(cfg, 'overlay_1', false);
+    expect(cfg.overlays?.[0]?.visible).toBe(false);
+    cfg = setOverlayVisible(cfg, 'overlay_1', true);
+    expect(cfg.overlays?.[0]?.visible).toBeUndefined();
+  });
 
-    cfg = setOverlayLabel(cfg, 'overlay_1', 'Label');
-    expect(cfg.overlays?.[0]?.label).toBe('Label');
-    cfg = setOverlayLabel(cfg, 'overlay_1', '');
-    expect(cfg.overlays?.[0]?.label).toBeUndefined();
-
-    cfg = setOverlayTapAction(cfg, 'overlay_1', 'toggle');
-    expect(cfg.overlays?.[0]?.tap_action).toEqual({ action: 'toggle' });
-    cfg = setOverlayTapAction(cfg, 'overlay_1', undefined);
-    expect(cfg.overlays?.[0]?.tap_action).toBeUndefined();
-
-    cfg = setOverlayType(cfg, 'overlay_1', 'custom');
-    cfg = setOverlayCardConfig(cfg, 'overlay_1', { type: 'entity', entity: 'sensor.c' });
-    expect(cfg.overlays?.[0]?.card_config).toEqual({ type: 'entity', entity: 'sensor.c' });
+  it('setOverlayOpacity clamps to 0–1 and removes key when 1', () => {
+    let cfg = addOverlay(baseConfig(), customOverlaySeed()).config;
+    cfg = setOverlayOpacity(cfg, 'overlay_1', 0.5);
+    expect(cfg.overlays?.[0]?.opacity).toBe(0.5);
+    cfg = setOverlayOpacity(cfg, 'overlay_1', 1);
+    expect(cfg.overlays?.[0]?.opacity).toBeUndefined();
+    cfg = setOverlayOpacity(cfg, 'overlay_1', -0.5);
+    expect(cfg.overlays?.[0]?.opacity).toBe(0);
+    cfg = setOverlayOpacity(cfg, 'overlay_1', 1.5);
+    expect(cfg.overlays?.[0]?.opacity).toBeUndefined();
   });
 });
 

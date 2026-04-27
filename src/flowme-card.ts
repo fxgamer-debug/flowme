@@ -15,10 +15,10 @@ import { getProfile, NEUTRAL_NODE_COLOR, resolveFlowColor } from './flow-profile
 import { parseAspectRatio, parseSensorValue, scaleSensorValue } from './utils.js';
 import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
-import { dlog } from './debug-log.js';
+import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.8';
+const CARD_VERSION = '1.0.9';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -47,7 +47,6 @@ export class FlowmeCard extends LitElement {
       const watchIds = [
         ...(cfg?.flows.map((f) => f.entity) ?? []),
         ...(cfg?.nodes.map((n) => n.entity).filter(Boolean) ?? []),
-        ...(cfg?.overlays?.map((o) => o.entity).filter(Boolean) ?? []),
         cfg?.background.weather_entity,
       ].filter((id): id is string => typeof id === 'string' && id.length > 0);
 
@@ -81,22 +80,18 @@ export class FlowmeCard extends LitElement {
   private preloadCache = new Map<string, HTMLImageElement>();
   private lastAppliedBgUrl = '';
   /**
-   * Interval that forces a LitElement re-render every 10 s when the card
-   * contains camera overlays. The overlay renderer uses a bucketed
-   * cache-bust token to fetch fresh snapshots, but it can only advance
-   * the token when the card actually re-renders.
-   */
-  private cameraRefreshTimer: number | null = null;
-  /**
    * Set of `${flowId}:${entityId}` we've already warned about missing data for.
    * Keeps console noise under control when a sensor is permanently stale.
    */
   private warnedMissing = new Set<string>();
 
   setConfig(raw: unknown): void {
-    dlog('setConfig called:', JSON.parse(JSON.stringify(raw ?? null)));
     try {
       const config = validateConfig(raw);
+      // Gate all diagnostic logging behind the config flag. Call this
+      // before any dlog() so even the "setConfig called" log is gated.
+      setDebugEnabled(config.debug ?? false);
+      dlog('setConfig called:', JSON.parse(JSON.stringify(raw ?? null)));
       dlog('setConfig validated → flows=', config.flows.length, 'nodes=', config.nodes.length, 'overlays=', config.overlays?.length ?? 0);
       this.config = config;
       this.errorMessage = undefined;
@@ -125,29 +120,6 @@ export class FlowmeCard extends LitElement {
   override firstUpdated(): void {
     dlog('firstUpdated — shadowRoot children count=', this.shadowRoot?.children.length ?? 0);
     dlog('firstUpdated — SVG element found?', !!this.shadowRoot?.querySelector('svg'));
-
-    window.setTimeout(() => {
-      const sr = this.shadowRoot;
-      const anim = sr?.querySelector('animateMotion');
-      dlog('t+2000ms — animateMotion element:', anim ? anim.outerHTML : '(none found)');
-      dlog('t+2000ms — animateMotion.dur=', anim?.getAttribute('dur') ?? '(no dur)');
-      const allAnims = sr?.querySelectorAll('animateMotion');
-      dlog('t+2000ms — total animateMotion elements=', allAnims?.length ?? 0);
-      // Verify the <mpath href="#..."> references resolve to actual paths
-      // in the same shadow root. Chrome historically had bugs with
-      // cross-scope fragment refs inside SMIL.
-      allAnims?.forEach((a, i) => {
-        const mpath = a.querySelector('mpath');
-        const href = mpath?.getAttribute('href') ?? mpath?.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
-        const resolved = href && sr ? sr.querySelector(href) : null;
-        dlog(`t+2000ms — animateMotion[${i}] mpath href=${href} resolved=${!!resolved}`);
-      });
-    }, 2000);
-
-    window.setTimeout(() => {
-      const html = this.shadowRoot?.innerHTML ?? '';
-      dlog('t+3000ms — shadow DOM HTML (first 2000 chars):\n' + html.slice(0, 2000));
-    }, 3000);
   }
 
   override disconnectedCallback(): void {
@@ -156,27 +128,7 @@ export class FlowmeCard extends LitElement {
       window.clearTimeout(this.transitionTimer);
       this.transitionTimer = null;
     }
-    if (this.cameraRefreshTimer !== null) {
-      window.clearInterval(this.cameraRefreshTimer);
-      this.cameraRefreshTimer = null;
-    }
     super.disconnectedCallback();
-  }
-
-  private syncCameraTimer(): void {
-    const hasCameras = !!this.config?.overlays?.some((o) => o.type === 'camera');
-    if (hasCameras && this.cameraRefreshTimer === null) {
-      // Use the minimum refresh interval across all camera overlays so every
-      // overlay gets its snapshot at least as often as configured.
-      const intervals = this.config?.overlays
-        ?.filter((o) => o.type === 'camera')
-        .map((o) => (o.refresh_interval ?? this.config?.defaults?.camera_refresh_interval ?? 10) * 1000);
-      const intervalMs = intervals?.length ? Math.min(...intervals) : 10_000;
-      this.cameraRefreshTimer = window.setInterval(() => this.requestUpdate(), intervalMs);
-    } else if (!hasCameras && this.cameraRefreshTimer !== null) {
-      window.clearInterval(this.cameraRefreshTimer);
-      this.cameraRefreshTimer = null;
-    }
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -189,10 +141,7 @@ export class FlowmeCard extends LitElement {
       this.rendererReadyFor = this.config;
       const activeConfig = this.config;
       void this.renderer.init(mount, activeConfig).catch((err) => {
-        console.warn(
-          '[flowme] renderer init failed — falling back to SVG renderer',
-          err,
-        );
+        dlog('renderer init failed — falling back to SVG renderer', err);
         this.teardownRenderer();
         this.renderer = new SvgRenderer();
         this.rendererReadyFor = activeConfig;
@@ -224,17 +173,13 @@ export class FlowmeCard extends LitElement {
           const key = `${flow.id}:${flow.entity}`;
           if (!this.warnedMissing.has(key)) {
             this.warnedMissing.add(key);
-            console.warn(
-              `[flowme] flow "${flow.id}" references entity "${flow.entity}" but it is not present in hass.states — check spelling / domain permissions`,
-            );
+            dlog(`flow "${flow.id}" references entity "${flow.entity}" but it is not present in hass.states — check spelling / domain permissions`);
           }
         } else if (state.state === 'unavailable' || state.state === 'unknown') {
           const key = `${flow.id}:${flow.entity}:unavailable`;
           if (!this.warnedMissing.has(key)) {
             this.warnedMissing.add(key);
-            console.warn(
-              `[flowme] flow "${flow.id}" entity "${flow.entity}" is currently ${state.state} — no flow will render until it reports a number`,
-            );
+            dlog(`flow "${flow.id}" entity "${flow.entity}" is currently ${state.state} — no flow will render until it reports a number`);
           }
         }
         this.renderer.updateFlow(flow.id, scaled.value);
@@ -243,10 +188,6 @@ export class FlowmeCard extends LitElement {
 
     if (changed.has('config') || changed.has('hass')) {
       this.syncWeatherBackground();
-    }
-
-    if (changed.has('config')) {
-      this.syncCameraTimer();
     }
   }
 
@@ -307,6 +248,15 @@ export class FlowmeCard extends LitElement {
           waypoints: [],
         },
       ],
+      overlays: [
+        {
+          id: 'example_overlay',
+          type: 'custom',
+          position: { x: 5, y: 5 },
+          size: { width: 20, height: 15 },
+          card: { type: 'entity', entity: 'sensor.example_sensor' },
+        },
+      ],
     };
   }
 
@@ -347,8 +297,8 @@ export class FlowmeCard extends LitElement {
           <div class="renderer-mount" ${ref(this.rendererMount)}></div>
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
           ${(config.overlays ?? []).map((o) => {
-            dlog('rendering overlay →', o.type, 'entity=', o.entity ?? '(none)', 'position=', o.position, 'size=', o.size);
-            return renderOverlayHost(o, this.hass, this.config?.defaults);
+            dlog('rendering overlay →', o.type, 'position=', o.position, 'size=', o.size);
+            return renderOverlayHost(o, this.hass);
           })}
         </div>
       </ha-card>

@@ -6,11 +6,9 @@ import type {
   FlowConfig,
   NodePosition,
   OverlayConfig,
-  OverlayType,
   SpeedCurveOverride,
-  TapActionKind,
 } from './types.js';
-import { FLOW_DOMAINS, OVERLAY_TYPES, TAP_ACTIONS } from './types.js';
+import { FLOW_DOMAINS } from './types.js';
 import { findUnsafeUrls } from './overlays/url-scan.js';
 
 export class FlowmeConfigError extends Error {
@@ -234,7 +232,6 @@ function validateDefaults(raw: unknown): FlowmeDefaults {
   const d = raw as Record<string, unknown>;
   const out: FlowmeDefaults = {};
   if (d['node_radius'] !== undefined) out.node_radius = validatePositiveNumber(d['node_radius'], 'defaults.node_radius');
-  if (d['camera_refresh_interval'] !== undefined) out.camera_refresh_interval = validatePositiveNumber(d['camera_refresh_interval'], 'defaults.camera_refresh_interval');
   if (d['burst_trigger_ratio'] !== undefined) {
     const v = validatePositiveNumber(d['burst_trigger_ratio'], 'defaults.burst_trigger_ratio');
     if (v > 1) fail('defaults.burst_trigger_ratio', 'must be ≤ 1 (it is a fraction of peak)');
@@ -365,6 +362,11 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     config.domain_colors = validateDomainColors(c['domain_colors']);
   }
 
+  if (c['debug'] !== undefined) {
+    if (typeof c['debug'] !== 'boolean') fail('debug', 'must be a boolean');
+    config.debug = c['debug'] as boolean;
+  }
+
   return config;
 }
 
@@ -374,39 +376,41 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
   const o = raw as Record<string, unknown>;
 
   const type = o['type'];
-  if (typeof type !== 'string' || !OVERLAY_TYPES.includes(type as OverlayType)) {
-    fail(`${path}.type`, `must be one of ${OVERLAY_TYPES.join(', ')}`);
+  if (type !== 'custom') {
+    fail(
+      `${path}.type`,
+      `must be "custom" — native overlay types (camera, switch, sensor, button) were removed in v1.0.9. Use type: custom with a card: block instead.`,
+    );
   }
 
   const id = o['id'];
   if (typeof id !== 'string' || !id.length) fail(`${path}.id`, 'must be a non-empty string');
-  if (seenIds.has(id)) fail(`${path}.id`, `duplicate overlay id "${id}"`);
-  seenIds.add(id);
+  if (seenIds.has(id as string)) fail(`${path}.id`, `duplicate overlay id "${id as string}"`);
+  seenIds.add(id as string);
 
   const position = validatePosition(o['position'], `${path}.position`);
 
+  // card: block is required — any valid HA card config object
+  const cardRaw = o['card'];
+  if (!cardRaw || typeof cardRaw !== 'object' || Array.isArray(cardRaw)) {
+    fail(`${path}.card`, 'must be a HA card config object (e.g. { type: "entity", entity: "sensor.my_sensor" })');
+  }
+  const unsafe = findUnsafeUrls(cardRaw, `${path}.card`);
+  if (unsafe.length) {
+    const first = unsafe[0]!;
+    fail(
+      first.path,
+      `unsafe URL scheme "${first.scheme}" — flowme rejects javascript:, vbscript:, data: and file: URLs in overlay card configs`,
+    );
+  }
+  const card = cardRaw as Record<string, unknown>;
+
   const overlay: OverlayConfig = {
-    id,
-    type: type as OverlayType,
+    id: id as string,
+    type: 'custom',
     position,
+    card,
   };
-
-  if (o['entity'] !== undefined) {
-    if (typeof o['entity'] !== 'string' || !o['entity'].length) {
-      fail(`${path}.entity`, 'must be a non-empty entity id');
-    }
-    overlay.entity = o['entity'] as string;
-  }
-
-  // entity is required for non-custom overlays
-  if ((type === 'sensor' || type === 'switch' || type === 'camera') && !overlay.entity) {
-    fail(`${path}.entity`, `is required for overlay type "${type}"`);
-  }
-
-  if (o['label'] !== undefined) {
-    if (typeof o['label'] !== 'string') fail(`${path}.label`, 'must be a string');
-    overlay.label = o['label'] as string;
-  }
 
   if (o['size'] !== undefined) {
     const s = o['size'];
@@ -423,53 +427,17 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
     overlay.size = { width: w as number, height: h as number };
   }
 
-  if (o['tap_action'] !== undefined) {
-    const ta = o['tap_action'];
-    if (!ta || typeof ta !== 'object') fail(`${path}.tap_action`, 'must be an object');
-    const tar = ta as Record<string, unknown>;
-    const a = tar['action'];
-    if (typeof a !== 'string' || !TAP_ACTIONS.includes(a as TapActionKind)) {
-      fail(`${path}.tap_action.action`, `must be one of ${TAP_ACTIONS.join(', ')}`);
-    }
-    overlay.tap_action = { action: a as TapActionKind };
+  if (o['visible'] !== undefined) {
+    if (typeof o['visible'] !== 'boolean') fail(`${path}.visible`, 'must be a boolean');
+    overlay.visible = o['visible'] as boolean;
   }
 
-  if (o['card_config'] !== undefined) {
-    const cc = o['card_config'];
-    if (!cc || typeof cc !== 'object' || Array.isArray(cc)) {
-      fail(`${path}.card_config`, 'must be an object');
+  if (o['opacity'] !== undefined) {
+    const op = o['opacity'];
+    if (typeof op !== 'number' || !Number.isFinite(op as number) || (op as number) < 0 || (op as number) > 1) {
+      fail(`${path}.opacity`, 'must be a number between 0 and 1');
     }
-    if (type !== 'custom') {
-      fail(`${path}.card_config`, 'is only valid when type === "custom"');
-    }
-    const unsafe = findUnsafeUrls(cc, `${path}.card_config`);
-    if (unsafe.length) {
-      const first = unsafe[0]!;
-      fail(
-        first.path,
-        `unsafe URL scheme "${first.scheme}" — flowme rejects javascript:, vbscript:, data: and file: URLs in custom overlay configs`,
-      );
-    }
-    overlay.card_config = cc as Record<string, unknown>;
-  }
-
-  if (type === 'custom' && !overlay.card_config) {
-    fail(`${path}.card_config`, 'is required when type === "custom"');
-  }
-
-  if (o['refresh_interval'] !== undefined) {
-    if (type !== 'camera') fail(`${path}.refresh_interval`, 'is only valid for camera overlays');
-    const ri = o['refresh_interval'];
-    if (typeof ri !== 'number' || !Number.isFinite(ri) || (ri as number) <= 0) {
-      fail(`${path}.refresh_interval`, 'must be a positive number (seconds)');
-    }
-    overlay.refresh_interval = ri as number;
-  }
-
-  if (o['offline_label'] !== undefined) {
-    if (type !== 'camera') fail(`${path}.offline_label`, 'is only valid for camera overlays');
-    if (typeof o['offline_label'] !== 'string') fail(`${path}.offline_label`, 'must be a string');
-    overlay.offline_label = o['offline_label'] as string;
+    overlay.opacity = op as number;
   }
 
   return overlay;
