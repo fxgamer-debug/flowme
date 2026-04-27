@@ -59,10 +59,10 @@ jobs:
         id: changelog
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          # grab everything from "## v$TAG" up to (but not including) the next "## v" heading
-          awk -v tag="v$TAG" '
-            $0 ~ "^## "tag"( |$)" { flag=1; next }
-            flag && /^## v/ { exit }
+          # CHANGELOG format: "## [1.0.9] — 2026-04-27"
+          awk -v tag="$TAG" '
+            $0 ~ ("^## \\[" tag "\\]") { flag=1; next }
+            flag && /^## \[/ { exit }
             flag { print }
           ' CHANGELOG.md > .release-notes.md
           if [ ! -s .release-notes.md ]; then
@@ -94,3 +94,4 @@ jobs:
             dist/flowme-card.js.map.sha256
           draft: false
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          make_latest: ${{ steps.prerelease.outputs.is_prerelease == 'false' }}
