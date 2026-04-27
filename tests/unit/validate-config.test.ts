@@ -60,6 +60,92 @@ describe('validateConfig — happy path', () => {
     expect(cfg.background.weather_entity).toBe('weather.home');
   });
 
+  it('parses v1.0.8 defaults block (all fields)', () => {
+    const raw = {
+      ...minimalConfig(),
+      defaults: {
+        node_radius: 16,
+        camera_refresh_interval: 30,
+        burst_trigger_ratio: 0.8,
+        burst_sustain_ms: 3000,
+        burst_max_particles: 15,
+        dot_radius: 7,
+        line_width: 3,
+      },
+    };
+    const cfg = validateConfig(raw);
+    expect(cfg.defaults?.node_radius).toBe(16);
+    expect(cfg.defaults?.camera_refresh_interval).toBe(30);
+    expect(cfg.defaults?.burst_trigger_ratio).toBe(0.8);
+    expect(cfg.defaults?.burst_sustain_ms).toBe(3000);
+    expect(cfg.defaults?.burst_max_particles).toBe(15);
+    expect(cfg.defaults?.dot_radius).toBe(7);
+    expect(cfg.defaults?.line_width).toBe(3);
+  });
+
+  it('rejects defaults.burst_trigger_ratio > 1', () => {
+    const raw = { ...minimalConfig(), defaults: { burst_trigger_ratio: 1.5 } };
+    expect(() => validateConfig(raw)).toThrow(/burst_trigger_ratio/);
+  });
+
+  it('rejects defaults with non-positive values', () => {
+    expect(() => validateConfig({ ...minimalConfig(), defaults: { node_radius: -1 } })).toThrow(/node_radius/);
+    expect(() => validateConfig({ ...minimalConfig(), defaults: { dot_radius: 0 } })).toThrow(/dot_radius/);
+  });
+
+  it('parses v1.0.8 domain_colors block', () => {
+    const raw = {
+      ...minimalConfig(),
+      domain_colors: {
+        solar: '#111111',
+        grid: '#222222',
+        battery: '#333333',
+        load: '#444444',
+      },
+    };
+    const cfg = validateConfig(raw);
+    expect(cfg.domain_colors?.solar).toBe('#111111');
+    expect(cfg.domain_colors?.grid).toBe('#222222');
+    expect(cfg.domain_colors?.battery).toBe('#333333');
+    expect(cfg.domain_colors?.load).toBe('#444444');
+  });
+
+  it('accepts partial domain_colors (only some keys)', () => {
+    const raw = { ...minimalConfig(), domain_colors: { solar: '#aabbcc' } };
+    const cfg = validateConfig(raw);
+    expect(cfg.domain_colors?.solar).toBe('#aabbcc');
+    expect(cfg.domain_colors?.grid).toBeUndefined();
+  });
+
+  it('parses camera overlay refresh_interval and offline_label', () => {
+    const raw = {
+      ...minimalConfig(),
+      overlays: [
+        {
+          id: 'cam1',
+          type: 'camera',
+          entity: 'camera.test',
+          position: { x: 50, y: 50 },
+          refresh_interval: 30,
+          offline_label: 'Kamera offline',
+        },
+      ],
+    };
+    const cfg = validateConfig(raw);
+    expect(cfg.overlays?.[0]?.refresh_interval).toBe(30);
+    expect(cfg.overlays?.[0]?.offline_label).toBe('Kamera offline');
+  });
+
+  it('rejects refresh_interval on non-camera overlays', () => {
+    const raw = {
+      ...minimalConfig(),
+      overlays: [
+        { id: 's1', type: 'sensor', entity: 'sensor.x', position: { x: 10, y: 10 }, refresh_interval: 10 },
+      ],
+    };
+    expect(() => validateConfig(raw)).toThrow(/refresh_interval/);
+  });
+
   it('parses the v1.0.7 flow.color shorthand', () => {
     const raw = {
       ...minimalConfig(),

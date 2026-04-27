@@ -205,7 +205,7 @@ export class HoudiniRenderer implements FlowRenderer {
     const durMs = Math.max(50, sigmoidSpeedCurve(magnitude, params) * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
     const domain = flow.domain ?? this.config?.domain;
-    const color = resolveFlowColor(flow, profile, domain, direction);
+    const color = resolveFlowColor(flow, profile, domain, direction, this.config?.domain_colors);
 
     const count = Math.max(
       1,

@@ -18,7 +18,7 @@ import './overlays/custom-overlay.js';
 import { dlog } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.7';
+const CARD_VERSION = '1.0.8';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -28,16 +28,6 @@ console.info(
   'color: #4ADE80; background: #111; font-weight: 700;',
 );
 
-/** Fixed list the user explicitly requested in the debug spec. Logged on
- *  every hass update regardless of whether these entities are wired into
- *  the card — so we can rule out entity naming mismatches immediately. */
-const DEBUG_WATCH_ENTITIES = [
-  'sensor.sirbu_dumitra_pv_string_1_power',
-  'sensor.sirbu_dumitra_pv_string_2_power',
-  'sensor.sirbu_dumitra_grid_power',
-  'sensor.sirbu_dumitra_battery_power',
-  'sensor.sirbu_dumitra_load_power',
-] as const;
 
 @customElement('flowme-card')
 export class FlowmeCard extends LitElement {
@@ -51,15 +41,21 @@ export class FlowmeCard extends LitElement {
     const prev = this._hass;
     this._hass = value;
     if (value) {
-      const watched: Record<string, string | undefined> = {};
-      for (const id of DEBUG_WATCH_ENTITIES) {
-        watched[id] = value.states[id]?.state;
+      // Build the watch list dynamically from the current config so no
+      // personal entity IDs are ever hardcoded in the bundle.
+      const cfg = this.config;
+      const watchIds = [
+        ...(cfg?.flows.map((f) => f.entity) ?? []),
+        ...(cfg?.nodes.map((n) => n.entity).filter(Boolean) ?? []),
+        ...(cfg?.overlays?.map((o) => o.entity).filter(Boolean) ?? []),
+        cfg?.background.weather_entity,
+      ].filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+      const watchValues: Record<string, string | undefined> = {};
+      for (const id of watchIds) {
+        watchValues[id] = value.states[id]?.state;
       }
-      const flowEntities: Record<string, string | undefined> = {};
-      for (const flow of this.config?.flows ?? []) {
-        flowEntities[flow.entity] = value.states[flow.entity]?.state;
-      }
-      dlog('hass setter called. hardcoded watch:', watched, '| flow-entity values:', flowEntities);
+      dlog('hass setter called. config entity states:', watchValues);
     } else {
       dlog('hass setter called with undefined');
     }
@@ -170,7 +166,13 @@ export class FlowmeCard extends LitElement {
   private syncCameraTimer(): void {
     const hasCameras = !!this.config?.overlays?.some((o) => o.type === 'camera');
     if (hasCameras && this.cameraRefreshTimer === null) {
-      this.cameraRefreshTimer = window.setInterval(() => this.requestUpdate(), 10_000);
+      // Use the minimum refresh interval across all camera overlays so every
+      // overlay gets its snapshot at least as often as configured.
+      const intervals = this.config?.overlays
+        ?.filter((o) => o.type === 'camera')
+        .map((o) => (o.refresh_interval ?? this.config?.defaults?.camera_refresh_interval ?? 10) * 1000);
+      const intervalMs = intervals?.length ? Math.min(...intervals) : 10_000;
+      this.cameraRefreshTimer = window.setInterval(() => this.requestUpdate(), intervalMs);
     } else if (!hasCameras && this.cameraRefreshTimer !== null) {
       window.clearInterval(this.cameraRefreshTimer);
       this.cameraRefreshTimer = null;
@@ -346,7 +348,7 @@ export class FlowmeCard extends LitElement {
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
           ${(config.overlays ?? []).map((o) => {
             dlog('rendering overlay →', o.type, 'entity=', o.entity ?? '(none)', 'position=', o.position, 'size=', o.size);
-            return renderOverlayHost(o, this.hass);
+            return renderOverlayHost(o, this.hass, this.config?.defaults);
           })}
         </div>
       </ha-card>
@@ -436,7 +438,7 @@ export class FlowmeCard extends LitElement {
     const showLabel = node.show_label !== false && !!node.label;
     const profile = getProfile(this.config?.domain);
     const fill = node.color ?? this.nodeFlowColor(node.id) ?? profile.default_color_positive;
-    const size = node.size ?? 12;
+    const size = node.size ?? this.config?.defaults?.node_radius ?? 12;
     // Value rendering: prefer the sensor's own `unit_of_measurement` attribute
     // over the profile's default unit_label, and only append a unit once. This
     // fixes the "1 W W" doubled-unit bug users were seeing when a sensor
@@ -491,12 +493,13 @@ export class FlowmeCard extends LitElement {
   private nodeFlowColor(nodeId: string): string | undefined {
     if (!this.config) return undefined;
     const cardDomain = this.config.domain;
+    const domainColors = this.config.domain_colors;
     let firstColor: string | undefined;
     const seenKeys = new Set<string>();
     for (const flow of this.config.flows) {
       if (flow.from_node !== nodeId && flow.to_node !== nodeId) continue;
       const profile = getProfile(flow.domain ?? cardDomain);
-      const color = resolveFlowColor(flow, profile, flow.domain ?? cardDomain, 1);
+      const color = resolveFlowColor(flow, profile, flow.domain ?? cardDomain, 1, domainColors);
       const key = color.toLowerCase();
       if (!seenKeys.has(key)) {
         seenKeys.add(key);

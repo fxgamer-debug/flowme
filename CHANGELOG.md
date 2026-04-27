@@ -2,6 +2,69 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.8] — 2026-04-27
+
+Security and hardcoding audit cleanup. No new rendering features.
+
+### Security fix (CRITICAL)
+
+**C1** — `DEBUG_WATCH_ENTITIES` in `flowme-card.ts` hardcoded five private home-sensor entity IDs (`sensor.sirbu_dumitra_*`) which ended up in the compiled bundle. The fixed code derives the watch list dynamically from the card's own config (flows, nodes, overlays, weather entity) so no personal entity IDs are ever embedded in the source.
+
+### Added — `defaults:` top-level config block
+
+A new optional `defaults:` block lets users tune card-level rendering behaviour without touching individual flows or nodes. All fields are optional; built-in values remain unchanged when omitted:
+
+```yaml
+defaults:
+  node_radius: 12           # node dot size in px (was hardcoded)
+  camera_refresh_interval: 10  # seconds; also overrideable per-overlay
+  burst_trigger_ratio: 0.9  # fraction of peak that enters burst mode
+  burst_sustain_ms: 5000    # ms above trigger before burst activates
+  burst_max_particles: 20   # particle cap in burst mode
+  dot_radius: 5             # flow dot/circle radius in px
+  line_width: 2             # flow outline stroke width in px
+```
+
+### Added — `domain_colors:` top-level config block
+
+Overrides the built-in energy id-pattern defaults without having to set `color:` on every flow:
+
+```yaml
+domain_colors:
+  solar: "#FFD700"    # built-in default
+  grid: "#1EB4FF"
+  battery: "#32DC50"
+  load: "#FF8C1E"
+```
+
+Partial overrides are allowed. Keys not set fall through to the built-in defaults.
+
+### Added — per-camera-overlay `refresh_interval` and `offline_label`
+
+```yaml
+overlays:
+  - type: camera
+    entity: camera.my_camera
+    position: { x: 50, y: 50 }
+    refresh_interval: 30      # override defaults.camera_refresh_interval
+    offline_label: "Camera offline"  # shown in placeholder tooltip; default ""
+```
+
+`refresh_interval` and `offline_label` are only valid on `type: camera` overlays; the validator rejects them on other types.
+
+### Fixed — medium/low audit findings
+
+- **M7** — Editor overlay entity placeholder strings changed from opinionated names (`sensor.indoor_temperature`, `switch.porch_light`, `camera.front_door`, `script.bedtime`) to clearly generic `sensor.my_power_sensor`, `switch.my_switch`, `camera.my_camera`, `script.my_script`.
+- **M8** — Weather entity picker placeholder changed from `weather.home` to `weather.forecast_home` (the most common HA default). The value is placeholder text only and is never auto-saved to config.
+- **M9** — Houdini worklet fallback particle colour changed from `#A78BFA` (purple — domain colour for generic/hvac) to `#FFFFFF` (white) so the fallback has no semantic hue that could confuse colour debugging.
+- **L9** — `'camera offline'` hardcoded English string removed from the camera placeholder `title` attribute. The `offline_label` overlay config field replaces it; the default is an empty string (icon only, no text).
+
+### Tests
+
+- `tests/unit/validate-config.test.ts` — `defaults` block (full and partial), `burst_trigger_ratio > 1`, non-positive values, `domain_colors` full and partial, camera overlay `refresh_interval` / `offline_label`, `refresh_interval` rejection on non-camera type.
+- `tests/unit/flow-profiles.test.ts` — `domainColors` parameter override (full and partial).
+- `tests/smoke/flowme-card.smoke.test.ts` — C1 fix (no `sirbu`/`dumitra` in class source), `domain_colors` override flows to node fill, `defaults.node_radius` applied to node dot.
+
 ## [1.0.7] — 2026-04-27
 
 Two visual fixes reported on top of v1.0.6: every flow and node was rendering in the energy profile's positive default colour, and node circles drifted upward whenever their value/label was toggled on. Both are now resolved by introducing a single colour-resolution helper and pinning the node's CSS anchor to the dot's centre.

@@ -1,4 +1,4 @@
-import type { FlowConfig, FlowDomain, FlowProfile } from '../types.js';
+import type { DomainColors, FlowConfig, FlowDomain, FlowProfile } from '../types.js';
 import { energyProfile } from './energy.js';
 import { waterProfile } from './water.js';
 import { networkProfile } from './network.js';
@@ -32,25 +32,31 @@ export const NEUTRAL_NODE_COLOR = '#CCCCCC';
  * Per-domain default colour for a flow whose id matches a well-known
  * residential pattern. Lets users skip per-flow `color:` config when
  * they follow conventional naming. Only triggered for the *energy*
- * domain in v1.0.7 — other domains keep their profile defaults.
+ * domain — other domains keep their profile defaults.
  *
  * Patterns are word-boundary aware so `solar1`, `solar_string_1`,
  * `pv_string_2`, `grid_power`, `battery_soc` and `house_load` all
  * match. Returns `undefined` when nothing matches, letting the
  * caller fall through to the profile default.
+ *
+ * `domainColors` (v1.0.8+) is the card-level `domain_colors:` block
+ * which lets users override the built-in hex values without having to
+ * set `color:` on every individual flow. When provided it takes
+ * precedence over the built-in defaults.
  */
 export function defaultDomainFlowColor(
   domain: FlowDomain | undefined,
   flowId: string,
+  domainColors?: DomainColors,
 ): string | undefined {
   if (domain !== 'energy') return undefined;
   const id = flowId.toLowerCase();
   // Order matters: more specific patterns first.
-  if (/(?:^|[^a-z])(solar|pv)(?:[^a-z]|$)/.test(id)) return '#FFD700';
-  if (/(?:^|[^a-z])grid(?:[^a-z]|$)/.test(id)) return '#1EB4FF';
-  if (/(?:^|[^a-z])(battery|batt)(?:[^a-z]|$)/.test(id)) return '#32DC50';
+  if (/(?:^|[^a-z])(solar|pv)(?:[^a-z]|$)/.test(id)) return domainColors?.solar ?? '#FFD700';
+  if (/(?:^|[^a-z])grid(?:[^a-z]|$)/.test(id)) return domainColors?.grid ?? '#1EB4FF';
+  if (/(?:^|[^a-z])(battery|batt)(?:[^a-z]|$)/.test(id)) return domainColors?.battery ?? '#32DC50';
   if (/(?:^|[^a-z])(load|consumption|consume|house)(?:[^a-z]|$)/.test(id)) {
-    return '#FF8C1E';
+    return domainColors?.load ?? '#FF8C1E';
   }
   return undefined;
 }
@@ -62,8 +68,9 @@ export function defaultDomainFlowColor(
  *   1. `flow.color_positive` / `flow.color_negative` — direction-specific
  *      explicit overrides.
  *   2. `flow.color` — single-colour shorthand applied to both directions.
- *   3. `defaultDomainFlowColor(domain, flow.id)` — built-in residential
- *      defaults (solar/grid/battery/load → gold/blue/green/orange).
+ *   3. `defaultDomainFlowColor(domain, flow.id, domainColors)` — built-in
+ *      residential defaults (solar/grid/battery/load), overrideable by the
+ *      card-level `domain_colors:` block (v1.0.8+).
  *   4. `profile.default_color_positive` / `profile.default_color_negative`
  *      — profile-level fallback.
  *
@@ -75,8 +82,9 @@ export function resolveFlowColor(
   profile: FlowProfile,
   domain: FlowDomain | undefined,
   direction: number,
+  domainColors?: DomainColors,
 ): string {
-  const universal = flow.color ?? defaultDomainFlowColor(domain, flow.id);
+  const universal = flow.color ?? defaultDomainFlowColor(domain, flow.id, domainColors);
   if (direction >= 0) {
     return flow.color_positive ?? universal ?? profile.default_color_positive;
   }

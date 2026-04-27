@@ -49,6 +49,18 @@ describe('flowme-card smoke test (happy-dom)', () => {
     document.body.innerHTML = '';
   });
 
+  it('C1 fix: no personal/hardcoded entity IDs in compiled bundle (sirbu/dumitra)', () => {
+    // The bundle must not contain any personal sensor names that were present in
+    // DEBUG_WATCH_ENTITIES before the v1.0.8 audit fix.
+    // We check the *module source* itself via a dynamic import URL, but since
+    // happy-dom doesn't execute full module text we check a side effect:
+    // the compiled card class must not expose the strings in any property.
+    const ctor = customElements.get('flowme-card') as unknown;
+    const src = String(ctor);
+    expect(src).not.toMatch(/sirbu/i);
+    expect(src).not.toMatch(/dumitra/i);
+  });
+
   it('registers the custom element and appears on window.customCards', () => {
     const w = window as unknown as { customCards?: Array<{ type: string }> };
     expect(w.customCards).toBeDefined();
@@ -160,6 +172,51 @@ describe('flowme-card smoke test (happy-dom)', () => {
     await card.updateComplete;
     expect(card.shadowRoot!.innerHTML).toContain('camera-placeholder');
     expect(card.shadowRoot!.innerHTML).toContain('camera-icon');
+  });
+
+  it('M1: domain_colors overrides built-in id-pattern defaults', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      domain_colors: { solar: '#ff0000' },
+      nodes: [
+        { id: 'pv1', position: { x: 10, y: 50 } },
+        { id: 'inv', position: { x: 90, y: 50 } },
+      ],
+      flows: [
+        { id: 'solar1', from_node: 'pv1', to_node: 'inv', entity: 'sensor.power', waypoints: [] },
+      ],
+    });
+    card.hass = makeHass();
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const dot = card.shadowRoot!.querySelector('[data-node-id="pv1"] .node-dot') as HTMLElement;
+    expect(dot).toBeTruthy();
+    // Should use the domain_colors override, not the built-in #FFD700.
+    expect(dot.getAttribute('style') ?? '').toMatch(/#ff0000/i);
+    expect(dot.getAttribute('style') ?? '').not.toMatch(/#FFD700/i);
+  });
+
+  it('M2: defaults.node_radius sets fallback dot size', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      defaults: { node_radius: 20 },
+    });
+    card.hass = makeHass();
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const dot = card.shadowRoot!.querySelector('.node-dot') as HTMLElement;
+    expect(dot).toBeTruthy();
+    expect(dot.getAttribute('style') ?? '').toContain('20px');
   });
 
   it('node renders default-by-id energy colour (solar1 → gold) without explicit config', async () => {

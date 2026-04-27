@@ -1,5 +1,7 @@
 import type {
   FlowmeConfig,
+  FlowmeDefaults,
+  DomainColors,
   NodeConfig,
   FlowConfig,
   NodePosition,
@@ -218,6 +220,48 @@ function validateSpeedCurveOverride(raw: unknown, path: string): SpeedCurveOverr
   return out;
 }
 
+function validatePositiveNumber(val: unknown, path: string): number {
+  if (typeof val !== 'number' || !Number.isFinite(val) || val <= 0) {
+    fail(path, 'must be a positive finite number');
+  }
+  return val as number;
+}
+
+function validateDefaults(raw: unknown): FlowmeDefaults {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail('defaults', 'must be an object');
+  }
+  const d = raw as Record<string, unknown>;
+  const out: FlowmeDefaults = {};
+  if (d['node_radius'] !== undefined) out.node_radius = validatePositiveNumber(d['node_radius'], 'defaults.node_radius');
+  if (d['camera_refresh_interval'] !== undefined) out.camera_refresh_interval = validatePositiveNumber(d['camera_refresh_interval'], 'defaults.camera_refresh_interval');
+  if (d['burst_trigger_ratio'] !== undefined) {
+    const v = validatePositiveNumber(d['burst_trigger_ratio'], 'defaults.burst_trigger_ratio');
+    if (v > 1) fail('defaults.burst_trigger_ratio', 'must be ≤ 1 (it is a fraction of peak)');
+    out.burst_trigger_ratio = v;
+  }
+  if (d['burst_sustain_ms'] !== undefined) out.burst_sustain_ms = validatePositiveNumber(d['burst_sustain_ms'], 'defaults.burst_sustain_ms');
+  if (d['burst_max_particles'] !== undefined) out.burst_max_particles = validatePositiveNumber(d['burst_max_particles'], 'defaults.burst_max_particles');
+  if (d['dot_radius'] !== undefined) out.dot_radius = validatePositiveNumber(d['dot_radius'], 'defaults.dot_radius');
+  if (d['line_width'] !== undefined) out.line_width = validatePositiveNumber(d['line_width'], 'defaults.line_width');
+  return out;
+}
+
+function validateDomainColors(raw: unknown): DomainColors {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail('domain_colors', 'must be an object');
+  }
+  const d = raw as Record<string, unknown>;
+  const out: DomainColors = {};
+  for (const key of ['solar', 'grid', 'battery', 'load'] as const) {
+    if (d[key] !== undefined) {
+      if (typeof d[key] !== 'string') fail(`domain_colors.${key}`, 'must be a string colour value');
+      out[key] = d[key] as string;
+    }
+  }
+  return out;
+}
+
 export function validateConfig(raw: unknown): FlowmeConfig {
   if (!raw || typeof raw !== 'object') throw new FlowmeConfigError('config must be an object');
   const c = raw as Record<string, unknown>;
@@ -313,6 +357,14 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     );
   }
 
+  if (c['defaults'] !== undefined) {
+    config.defaults = validateDefaults(c['defaults']);
+  }
+
+  if (c['domain_colors'] !== undefined) {
+    config.domain_colors = validateDomainColors(c['domain_colors']);
+  }
+
   return config;
 }
 
@@ -403,6 +455,21 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
 
   if (type === 'custom' && !overlay.card_config) {
     fail(`${path}.card_config`, 'is required when type === "custom"');
+  }
+
+  if (o['refresh_interval'] !== undefined) {
+    if (type !== 'camera') fail(`${path}.refresh_interval`, 'is only valid for camera overlays');
+    const ri = o['refresh_interval'];
+    if (typeof ri !== 'number' || !Number.isFinite(ri) || (ri as number) <= 0) {
+      fail(`${path}.refresh_interval`, 'must be a positive number (seconds)');
+    }
+    overlay.refresh_interval = ri as number;
+  }
+
+  if (o['offline_label'] !== undefined) {
+    if (type !== 'camera') fail(`${path}.offline_label`, 'is only valid for camera overlays');
+    if (typeof o['offline_label'] !== 'string') fail(`${path}.offline_label`, 'must be a string');
+    overlay.offline_label = o['offline_label'] as string;
   }
 
   return overlay;

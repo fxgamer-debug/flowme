@@ -43,7 +43,7 @@ class FlowmePainter {
     if (points.length < 2) return;
 
     const progress = clamp01(parseFloat(String(props.get('--flowme-progress') || '0')) || 0);
-    const color = String(props.get('--flowme-color') || '#A78BFA').trim() || '#A78BFA';
+    const color = String(props.get('--flowme-color') || '#FFFFFF').trim() || '#FFFFFF';
     const glow = String(props.get('--flowme-glow') || '0').trim() === '1';
     const shape = String(props.get('--flowme-shape') || 'dot').trim() || 'dot';
     const count = Math.max(1, Math.round(parseFloat(String(props.get('--flowme-count') || '3')) || 3));

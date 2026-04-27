@@ -193,9 +193,10 @@ export class SvgRenderer implements FlowRenderer {
       const outline = document.createElementNS(SVG_NS, 'use');
       outline.setAttributeNS(XLINK_NS, 'href', `#${pathId}`);
       outline.setAttribute('href', `#${pathId}`);
+      const strokeWidth = this.config?.defaults?.line_width ?? STROKE_WIDTH;
       outline.setAttribute('stroke', this.primaryColor(flow));
       outline.setAttribute('stroke-opacity', '0.2');
-      outline.setAttribute('stroke-width', String(STROKE_WIDTH));
+      outline.setAttribute('stroke-width', String(strokeWidth));
       outline.setAttribute('stroke-linecap', 'round');
       outline.setAttribute('stroke-linejoin', 'round');
       outline.setAttribute('fill', 'none');
@@ -307,7 +308,7 @@ export class SvgRenderer implements FlowRenderer {
       : Math.max(50, rawSpeed * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
     const domain = flow.domain ?? this.config?.domain;
-    const color = resolveFlowColor(flow, profile, domain, direction);
+    const color = resolveFlowColor(flow, profile, domain, direction, this.config?.domain_colors);
 
     const burstMultiplier = this.updateBurstState(flowId, magnitude, params, profile);
 
@@ -360,7 +361,10 @@ export class SvgRenderer implements FlowRenderer {
     profile: FlowProfile,
   ): number {
     const peak = params.peak;
-    const trigger = peak * BURST_TRIGGER_RATIO;
+    const burstTriggerRatio =
+      this.config?.defaults?.burst_trigger_ratio ?? BURST_TRIGGER_RATIO;
+    const burstSustainMs = this.config?.defaults?.burst_sustain_ms ?? BURST_SUSTAIN_MS;
+    const trigger = peak * burstTriggerRatio;
     const aboveTrigger = magnitude >= trigger;
     const now = performance.now();
 
@@ -379,10 +383,10 @@ export class SvgRenderer implements FlowRenderer {
       this.burstEnteredAt.set(flowId, enteredAt);
     }
     const elapsed = now - enteredAt;
-    if (elapsed < BURST_SUSTAIN_MS) {
+    if (elapsed < burstSustainMs) {
       rlog(
         'burst PENDING:', flowId, 'magnitude=', magnitude, '| above', trigger.toFixed(2),
-        'for', Math.round(elapsed), 'ms of', BURST_SUSTAIN_MS,
+        'for', Math.round(elapsed), 'ms of', burstSustainMs,
       );
       return 1;
     }
@@ -390,7 +394,7 @@ export class SvgRenderer implements FlowRenderer {
     if (!this.burstActive.has(flowId)) {
       rlog(
         'burst ENTER:', flowId,
-        '| sustained ≥', (BURST_TRIGGER_RATIO * 100).toFixed(0) + '%',
+        '| sustained ≥', (burstTriggerRatio * 100).toFixed(0) + '%',
         'of peak', peak,
         'for', Math.round(elapsed), 'ms → density ×' + multiplier,
       );
@@ -425,8 +429,9 @@ export class SvgRenderer implements FlowRenderer {
         profile.particle_count_curve ? profile.particle_count_curve(value) : DEFAULT_PARTICLE_COUNT,
       ),
     );
+    const burstMaxParticles = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
     const desired = Math.min(
-      BURST_MAX_PARTICLES,
+      burstMaxParticles,
       Math.max(1, Math.round(base * burstMultiplier)),
     );
     if (burstMultiplier !== 1) {
@@ -534,8 +539,9 @@ export class SvgRenderer implements FlowRenderer {
           : Math.max(3, Math.floor(totalLenPct / 15)),
       ),
     );
+    const burstMaxParticles = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
     const pulseCount = Math.min(
-      BURST_MAX_PARTICLES,
+      burstMaxParticles,
       Math.max(2, Math.round(basePulseCount * burstMultiplier)),
     );
     if (burstMultiplier !== 1) {
@@ -598,20 +604,22 @@ export class SvgRenderer implements FlowRenderer {
     color: string,
     glow: boolean,
   ): { shape: SVGGraphicsElement; animateMotion: SVGAnimateMotionElement } {
+    const dotRadius = this.config?.defaults?.dot_radius ?? DOT_RADIUS;
     let shape: SVGGraphicsElement;
     if (kind === 'square') {
+      const squareSize = dotRadius * (SQUARE_SIZE / DOT_RADIUS);
       const rect = document.createElementNS(SVG_NS, 'rect');
-      rect.setAttribute('width', String(SQUARE_SIZE));
-      rect.setAttribute('height', String(SQUARE_SIZE));
-      rect.setAttribute('x', String(-SQUARE_SIZE / 2));
-      rect.setAttribute('y', String(-SQUARE_SIZE / 2));
+      rect.setAttribute('width', String(squareSize));
+      rect.setAttribute('height', String(squareSize));
+      rect.setAttribute('x', String(-squareSize / 2));
+      rect.setAttribute('y', String(-squareSize / 2));
       rect.setAttribute('rx', '1.5');
       rect.setAttribute('fill', color);
       rect.setAttribute('opacity', '0');
       shape = rect;
     } else {
       const circle = document.createElementNS(SVG_NS, 'circle');
-      circle.setAttribute('r', String(DOT_RADIUS));
+      circle.setAttribute('r', String(dotRadius));
       circle.setAttribute('fill', color);
       circle.setAttribute('opacity', '0');
       shape = circle;
@@ -641,6 +649,6 @@ export class SvgRenderer implements FlowRenderer {
     const domain = flow.domain ?? this.config?.domain;
     // Outline / wave-stroke colour. Always uses the positive direction
     // so it matches the resting hue users associate with the flow.
-    return resolveFlowColor(flow, profile, domain, 1);
+    return resolveFlowColor(flow, profile, domain, 1, this.config?.domain_colors);
   }
 }

@@ -129,6 +129,62 @@ export interface OverlayConfig {
   tap_action?: TapActionConfig;
   /** Full HA card config, only used when type === 'custom'. */
   card_config?: Record<string, unknown>;
+  /**
+   * Camera only. Refresh interval in seconds. Overrides
+   * `FlowmeDefaults.camera_refresh_interval` for this overlay. Default: 10.
+   */
+  refresh_interval?: number;
+  /**
+   * Camera only. Text to show in the `title` attribute of the offline
+   * placeholder. Set to an empty string to show only the icon with no text.
+   * Default: empty string (no text). v1.0.8+.
+   */
+  offline_label?: string;
+}
+
+/**
+ * Card-level defaults block (v1.0.8+). Every field is optional — when
+ * omitted the built-in constants are used. This lets users tune rendering
+ * behaviour once at the card level rather than per-flow.
+ */
+export interface FlowmeDefaults {
+  /** Default node dot radius in px. Used when `node.size` is not set. Default: 12. */
+  node_radius?: number;
+  /**
+   * Camera snapshot refresh interval in seconds. Applies to all camera
+   * overlays on this card unless overridden by the individual overlay's
+   * `refresh_interval`. Default: 10.
+   */
+  camera_refresh_interval?: number;
+  /**
+   * Fraction of `peak` at which a flow enters burst-density mode, e.g. 0.9
+   * means 90% of peak. Default: 0.9.
+   */
+  burst_trigger_ratio?: number;
+  /**
+   * How many milliseconds a flow must stay above the burst trigger before
+   * particle count increases. Default: 5000.
+   */
+  burst_sustain_ms?: number;
+  /** Maximum number of particles allowed in burst mode. Default: 20. */
+  burst_max_particles?: number;
+  /** Dot/square particle radius in px. Default: 5. */
+  dot_radius?: number;
+  /** Flow line stroke width in px. Default: 2. */
+  line_width?: number;
+}
+
+/**
+ * Domain-level colour overrides (v1.0.8+). These override the id-pattern
+ * defaults applied by `defaultDomainFlowColor` for the energy domain. All
+ * fields optional — omit to keep the built-in defaults
+ * (#FFD700 / #1EB4FF / #32DC50 / #FF8C1E).
+ */
+export interface DomainColors {
+  solar?: string;
+  grid?: string;
+  battery?: string;
+  load?: string;
 }
 
 export interface BackgroundConfig {
@@ -155,6 +211,14 @@ export interface FlowmeConfig {
   fullscreen?: boolean;
   /** Optional password required before the editor activates. */
   edit_mode_password?: string;
+  /** Card-level rendering defaults (v1.0.8+). All fields optional. */
+  defaults?: FlowmeDefaults;
+  /**
+   * Energy-domain colour overrides (v1.0.8+). Override the built-in
+   * id-pattern defaults (solar/grid/battery/load) without having to set
+   * `color:` on every individual flow.
+   */
+  domain_colors?: DomainColors;
 }
 
 export type FlowShape = 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';

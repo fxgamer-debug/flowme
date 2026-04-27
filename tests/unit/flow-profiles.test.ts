@@ -417,6 +417,21 @@ describe('defaultDomainFlowColor (v1.0.7 energy id-pattern defaults)', () => {
     expect(defaultDomainFlowColor(undefined, 'solar1')).toBeUndefined();
   });
 
+  it('v1.0.8 domainColors parameter overrides built-in defaults', () => {
+    const dc = { solar: '#111111', grid: '#222222', battery: '#333333', load: '#444444' };
+    expect(defaultDomainFlowColor('energy', 'solar1', dc)).toBe('#111111');
+    expect(defaultDomainFlowColor('energy', 'grid_flow', dc)).toBe('#222222');
+    expect(defaultDomainFlowColor('energy', 'battery_flow', dc)).toBe('#333333');
+    expect(defaultDomainFlowColor('energy', 'load_flow', dc)).toBe('#444444');
+  });
+
+  it('v1.0.8 domainColors partial override (only solar)', () => {
+    const dc = { solar: '#abcdef' };
+    expect(defaultDomainFlowColor('energy', 'solar1', dc)).toBe('#abcdef');
+    // Unoverridden keys fall back to built-in defaults.
+    expect(defaultDomainFlowColor('energy', 'grid_flow', dc)).toBe('#1EB4FF');
+  });
+
   it('returns undefined for energy ids that do not match any pattern', () => {
     expect(defaultDomainFlowColor('energy', 'inverter')).toBeUndefined();
     expect(defaultDomainFlowColor('energy', 'random_sensor')).toBeUndefined();

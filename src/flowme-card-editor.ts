@@ -527,13 +527,13 @@ export class FlowmeCardEditor extends LitElement {
   private entityPlaceholderFor(type: OverlayType): string {
     switch (type) {
       case 'sensor':
-        return 'sensor.indoor_temperature';
+        return 'sensor.my_power_sensor';
       case 'switch':
-        return 'switch.porch_light';
+        return 'switch.my_switch';
       case 'camera':
-        return 'camera.front_door';
+        return 'camera.my_camera';
       case 'button':
-        return 'script.bedtime';
+        return 'script.my_script';
       default:
         return 'entity.id';
     }
@@ -584,7 +584,7 @@ export class FlowmeCardEditor extends LitElement {
             ${this.renderEntityPicker(
               bg.weather_entity ?? '',
               (value) => this.setWeatherEntityValue(value),
-              { includeDomains: ['weather'], placeholder: 'weather.home' },
+              { includeDomains: ['weather'], placeholder: 'weather.forecast_home' },
             )}
           </label>
           <label>

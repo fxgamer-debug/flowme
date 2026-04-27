@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from 'lit';
 
-import type { HomeAssistant, OverlayConfig, TapActionKind } from '../types.js';
+import type { FlowmeDefaults, HomeAssistant, OverlayConfig, TapActionKind } from '../types.js';
 import { parseSensorValue } from '../utils.js';
 import { dlog } from '../debug-log.js';
 
@@ -70,6 +70,7 @@ export function overlayBoxStyle(overlay: OverlayConfig): string {
 export function renderOverlayContent(
   overlay: OverlayConfig,
   hass: HomeAssistant | undefined,
+  defaults?: FlowmeDefaults,
 ): TemplateResult {
   switch (overlay.type) {
     case 'sensor':
@@ -79,7 +80,7 @@ export function renderOverlayContent(
     case 'button':
       return renderButton(overlay, hass);
     case 'camera':
-      return renderCamera(overlay, hass);
+      return renderCamera(overlay, hass, defaults);
     case 'custom':
       return renderCustom(overlay, hass);
   }
@@ -89,6 +90,7 @@ export function renderOverlayContent(
 export function renderOverlayHost(
   overlay: OverlayConfig,
   hass: HomeAssistant | undefined,
+  defaults?: FlowmeDefaults,
 ): TemplateResult {
   dlog('renderOverlayHost →', overlay.type, 'id=', overlay.id, 'entity=', overlay.entity ?? '(none)', 'position=', overlay.position, 'size=', overlay.size, 'entity-state=', overlay.entity ? hass?.states[overlay.entity]?.state : '(n/a)');
   const action = defaultTapAction(overlay);
@@ -103,7 +105,7 @@ export function renderOverlayHost(
       tabindex=${interactive ? '0' : '-1'}
       role=${interactive ? 'button' : 'group'}
     >
-      ${renderOverlayContent(overlay, hass)}
+      ${renderOverlayContent(overlay, hass, defaults)}
     </div>
   `;
 }
@@ -164,34 +166,48 @@ function renderButton(overlay: OverlayConfig, hass: HomeAssistant | undefined): 
 }
 
 /**
- * Camera snapshots advance every 10 seconds. We bucket the cache-bust
- * timestamp to a 10 s grid so all camera overlays on the card share the
- * same underlying image request when pointed at the same entity — this
- * stops LitElement re-rendering thrashing the browser cache once per
- * frame. When the entity is `unavailable` / `unknown` / missing or has
- * no `entity_picture`, we render a grey placeholder with an SVG camera
- * glyph so the user sees the overlay location even while cameras are
- * offline.
+ * Camera snapshots are bucketed to a configurable refresh interval. We
+ * bucket the cache-bust timestamp so all camera overlays sharing the
+ * same entity share the same underlying image request — this stops
+ * LitElement re-rendering thrashing the browser cache.
+ *
+ * The effective refresh interval is resolved per-overlay:
+ *   overlay.refresh_interval → defaults.camera_refresh_interval → 10 s
+ *
+ * When the entity is `unavailable` / `unknown` / missing or has no
+ * `entity_picture`, a grey placeholder with an SVG camera glyph is
+ * shown. The `offline_label` config field (default: empty string)
+ * controls the tooltip text — no English strings are hardcoded.
  */
-const CAMERA_REFRESH_MS = 10_000;
+const DEFAULT_CAMERA_REFRESH_S = 10;
 
-function cameraBustToken(): number {
-  return Math.floor(Date.now() / CAMERA_REFRESH_MS);
+function cameraBustToken(refreshMs: number): number {
+  return Math.floor(Date.now() / refreshMs);
 }
 
-function renderCamera(overlay: OverlayConfig, hass: HomeAssistant | undefined): TemplateResult {
+function renderCamera(
+  overlay: OverlayConfig,
+  hass: HomeAssistant | undefined,
+  defaults?: FlowmeDefaults,
+): TemplateResult {
+  const refreshMs =
+    (overlay.refresh_interval ?? defaults?.camera_refresh_interval ?? DEFAULT_CAMERA_REFRESH_S) *
+    1000;
   const state = overlay.entity ? hass?.states[overlay.entity] : undefined;
   const picture = state?.attributes?.['entity_picture'] as string | undefined;
   const offline =
     !state || state.state === 'unavailable' || state.state === 'unknown' || !picture;
   const src = picture
-    ? `${picture}${picture.includes('?') ? '&' : '?'}flowme_bust=${cameraBustToken()}`
+    ? `${picture}${picture.includes('?') ? '&' : '?'}flowme_bust=${cameraBustToken(refreshMs)}`
     : '';
+  // offline_label: use configured value (which may be '' for icon-only);
+  // fall back to empty string so no English text is ever hardcoded.
+  const offlineTitle = overlay.offline_label ?? '';
   return html`
     <div class="overlay-body camera-body">
       ${offline
         ? html`
-            <div class="camera-placeholder" title=${overlay.entity ?? 'camera offline'}>
+            <div class="camera-placeholder" title=${offlineTitle}>
               <svg
                 class="camera-icon"
                 viewBox="0 0 24 24"
