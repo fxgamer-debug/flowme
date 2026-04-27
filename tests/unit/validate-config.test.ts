@@ -377,13 +377,16 @@ describe('validateConfig — overlay schema', () => {
     };
   }
 
-  it('rejects native overlay types removed in v1.0.9', () => {
+  it('gracefully handles removed native overlay types (warn, not crash) since v1.0.10', () => {
     for (const type of ['sensor', 'switch', 'camera', 'button']) {
       const raw = {
         ...minimalConfig(),
         overlays: [{ id: 'o', type, position: { x: 0, y: 0 } }],
       };
-      expect(() => validateConfig(raw)).toThrow(/must be "custom"/);
+      // Should NOT throw — produces a migration-warning overlay instead
+      const result = validateConfig(raw);
+      expect(result.overlays).toHaveLength(1);
+      expect(result.overlays![0]!._migration_warning).toMatch(/removed in v1\.0\.9/);
     }
   });
 

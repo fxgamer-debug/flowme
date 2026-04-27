@@ -1,6 +1,7 @@
 import type {
   FlowmeConfig,
   FlowmeDefaults,
+  OpacityConfig,
   DomainColors,
   NodeConfig,
   FlowConfig,
@@ -66,6 +67,7 @@ function validateNode(raw: unknown, idx: number, seenIds: Set<string>): NodeConf
   if (typeof n['size'] === 'number') node.size = n['size'] as number;
   if (typeof n['show_label'] === 'boolean') node.show_label = n['show_label'] as boolean;
   if (typeof n['show_value'] === 'boolean') node.show_value = n['show_value'] as boolean;
+  if (n['opacity'] !== undefined) node.opacity = validateOpacityFloat(n['opacity'], `${path}.opacity`);
   return node;
 }
 
@@ -133,6 +135,7 @@ function validateFlow(
     if (sm < 0.1 || sm > 5.0) fail(`${path}.speed_multiplier`, 'must be between 0.1 and 5.0');
     flow.speed_multiplier = sm;
   }
+  if (f['opacity'] !== undefined) flow.opacity = validateOpacityFloat(f['opacity'], `${path}.opacity`);
   if (f['speed_curve_override'] !== undefined) {
     flow.speed_curve_override = validateSpeedCurveOverride(
       f['speed_curve_override'],
@@ -241,6 +244,25 @@ function validateDefaults(raw: unknown): FlowmeDefaults {
   if (d['burst_max_particles'] !== undefined) out.burst_max_particles = validatePositiveNumber(d['burst_max_particles'], 'defaults.burst_max_particles');
   if (d['dot_radius'] !== undefined) out.dot_radius = validatePositiveNumber(d['dot_radius'], 'defaults.dot_radius');
   if (d['line_width'] !== undefined) out.line_width = validatePositiveNumber(d['line_width'], 'defaults.line_width');
+  return out;
+}
+
+function validateOpacityFloat(val: unknown, path: string): number {
+  if (typeof val !== 'number' || !Number.isFinite(val) || val < 0 || val > 1) {
+    fail(path, 'must be a number between 0 and 1');
+  }
+  return val as number;
+}
+
+function validateOpacity(raw: unknown): OpacityConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail('opacity', 'must be an object');
+  }
+  const o = raw as Record<string, unknown>;
+  const out: OpacityConfig = {};
+  for (const key of ['background', 'darken', 'nodes', 'flows', 'dots', 'glow', 'labels', 'values', 'overlays'] as const) {
+    if (o[key] !== undefined) out[key] = validateOpacityFloat(o[key], `opacity.${key}`);
+  }
   return out;
 }
 
@@ -367,6 +389,10 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     config.debug = c['debug'] as boolean;
   }
 
+  if (c['opacity'] !== undefined) {
+    config.opacity = validateOpacity(c['opacity']);
+  }
+
   return config;
 }
 
@@ -376,7 +402,10 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
   const o = raw as Record<string, unknown>;
 
   const type = o['type'];
-  if (type !== 'custom') {
+  const REMOVED_TYPES = ['camera', 'switch', 'sensor', 'button'];
+  const isRemovedType = typeof type === 'string' && REMOVED_TYPES.includes(type);
+
+  if (!isRemovedType && type !== 'custom') {
     fail(
       `${path}.type`,
       `must be "custom" — native overlay types (camera, switch, sensor, button) were removed in v1.0.9. Use type: custom with a card: block instead.`,
@@ -389,6 +418,31 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
   seenIds.add(id as string);
 
   const position = validatePosition(o['position'], `${path}.position`);
+
+  // For removed native types: produce a warning overlay instead of crashing
+  if (isRemovedType) {
+    const warningMsg = `type: ${type as string} was removed in v1.0.9. Replace with type: custom and a card: block. See documentation.`;
+    console.warn(`[flowme] ${path}: ${warningMsg}`);
+    const overlay: OverlayConfig = {
+      id: id as string,
+      type: 'custom',
+      position,
+      card: { type: 'markdown', content: '' },
+      _migration_warning: warningMsg,
+    };
+    if (o['size'] !== undefined) {
+      const s = o['size'];
+      if (s && typeof s === 'object') {
+        const sr = s as Record<string, unknown>;
+        const w = sr['width'];
+        const h = sr['height'];
+        if (typeof w === 'number' && typeof h === 'number') {
+          overlay.size = { width: w, height: h };
+        }
+      }
+    }
+    return overlay;
+  }
 
   // card: block is required — any valid HA card config object
   const cardRaw = o['card'];

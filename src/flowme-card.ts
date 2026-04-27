@@ -6,6 +6,7 @@ import type {
   FlowmeConfig,
   HomeAssistant,
   NodeConfig,
+  OpacityConfig,
 } from './types.js';
 import { FlowmeConfigError, validateConfig } from './validate-config.js';
 import { createRenderer } from './animation/renderer-factory.js';
@@ -18,7 +19,7 @@ import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.9';
+const CARD_VERSION = '1.0.10';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -28,6 +29,29 @@ console.info(
   'color: #4ADE80; background: #111; font-weight: 700;',
 );
 
+
+/**
+ * Build CSS custom-property inline-style string from the opacity config block.
+ * Applies defaults (1 for all except darken which defaults to 0).
+ */
+function buildOpacityVars(opacity?: OpacityConfig): string {
+  if (!opacity) return '';
+  const pairs: string[] = [];
+  const add = (key: keyof OpacityConfig, cssVar: string) => {
+    const v = opacity[key];
+    if (v !== undefined) pairs.push(`${cssVar}:${v};`);
+  };
+  add('background', '--flowme-opacity-bg');
+  add('darken', '--flowme-opacity-darken');
+  add('nodes', '--flowme-opacity-nodes');
+  add('flows', '--flowme-opacity-flows');
+  add('dots', '--flowme-opacity-dots');
+  add('glow', '--flowme-opacity-glow');
+  add('labels', '--flowme-opacity-labels');
+  add('values', '--flowme-opacity-values');
+  add('overlays', '--flowme-opacity-overlays');
+  return pairs.join('');
+}
 
 @customElement('flowme-card')
 export class FlowmeCard extends LitElement {
@@ -280,11 +304,13 @@ export class FlowmeCard extends LitElement {
     const paddingTop = `${(1 / aspect) * 100}%`;
     const transitionMs = config.background.transition_duration ?? DEFAULT_TRANSITION_MS;
 
+    const opacityVars = buildOpacityVars(config.opacity);
+
     return html`
       <ha-card>
         <div
           class="stage"
-          style=${`padding-top: ${paddingTop};`}
+          style=${`padding-top: ${paddingTop};${opacityVars}`}
         >
           <div
             class=${`background ${this.activeLayer === 'A' ? 'visible' : ''}`}
@@ -412,7 +438,7 @@ export class FlowmeCard extends LitElement {
       <div
         class="node"
         data-node-id=${node.id}
-        style=${`left: ${node.position.x}%; top: ${node.position.y}%; --flowme-dot-size: ${size}px;`}
+        style=${`left: ${node.position.x}%; top: ${node.position.y}%; --flowme-dot-size: ${size}px;${node.opacity !== undefined ? ` opacity: ${node.opacity};` : ''}`}
       >
         <span
           class="node-dot"
@@ -509,12 +535,21 @@ export class FlowmeCard extends LitElement {
       transition-timing-function: ease-in-out;
     }
     .background.visible {
-      opacity: 1;
+      opacity: var(--flowme-opacity-bg, 1);
+    }
+    .stage::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, var(--flowme-opacity-darken, 0));
+      pointer-events: none;
+      z-index: 1;
     }
     .renderer-mount {
       position: absolute;
       inset: 0;
       pointer-events: none;
+      opacity: var(--flowme-opacity-flows, 1);
     }
     .node {
       position: absolute;
@@ -536,6 +571,7 @@ export class FlowmeCard extends LitElement {
       font-family: var(--paper-font-body1_-_font-family, inherit);
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
       pointer-events: none;
+      opacity: var(--flowme-opacity-nodes, 1);
     }
     .node-dot {
       display: inline-block;
@@ -546,177 +582,42 @@ export class FlowmeCard extends LitElement {
     .node-label {
       font-weight: 600;
       white-space: nowrap;
+      opacity: var(--flowme-opacity-labels, 1);
     }
     .node-value {
-      opacity: 0.85;
+      opacity: calc(0.85 * var(--flowme-opacity-values, 1));
       white-space: nowrap;
     }
     .overlay {
       position: absolute;
-      transform: translate(-50%, -50%);
       min-width: 24px;
       min-height: 24px;
       border-radius: 8px;
-      background: rgba(17, 17, 17, 0.55);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      color: #fff;
-      padding: 6px 8px;
-      font-size: 12px;
-      font-family: var(--paper-font-body1_-_font-family, inherit);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
       box-sizing: border-box;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       overflow: hidden;
-      outline: none;
+      pointer-events: all;
+      z-index: 10;
     }
-    .overlay.interactive {
-      cursor: pointer;
-      transition: transform 120ms ease, box-shadow 120ms ease;
+    .overlay-migration-warning {
+      background: rgba(200, 40, 40, 0.85);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: 1px solid rgba(255, 80, 80, 0.7);
+      padding: 4px 8px;
     }
-    .overlay.interactive:hover {
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-    }
-    .overlay.interactive:active {
-      transform: translate(-50%, -50%) scale(0.97);
-    }
-    .overlay-body {
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      justify-content: center;
-      gap: 2px;
-      width: 100%;
-      height: 100%;
-      text-align: center;
-    }
-    .overlay-label {
-      font-size: 10px;
-      opacity: 0.75;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .overlay-value {
-      font-size: 16px;
-      font-weight: 700;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .value-unit {
-      font-size: 10px;
-      opacity: 0.75;
-      margin-left: 3px;
-      font-weight: 500;
-    }
-    .overlay-switch {
-      /* 44 px is the iOS HIG / WCAG minimum touch target. Percentage
-         sizes still scale the overlay visually, but we never let the
-         actual clickable box shrink below 44×44. */
-      min-width: 44px;
-      min-height: 44px;
-    }
-    .switch-body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 3px;
-      width: 100%;
-      height: 100%;
-    }
-    .switch-body.is-on {
-      box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.6);
-    }
-    .switch-body.is-off {
-      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.5);
-    }
-    .switch-body .switch-track {
-      width: 28px;
-      height: 14px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.2);
-      position: relative;
-      margin: 2px auto;
-      transition: background 150ms ease;
-    }
-    .switch-body.is-on .switch-track {
-      background: var(--primary-color, #03a9f4);
-    }
-    .switch-body .switch-thumb {
-      position: absolute;
-      top: 1px;
-      left: 1px;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: #fff;
-      transition: transform 150ms ease;
-    }
-    .switch-body.is-on .switch-thumb {
-      transform: translateX(14px);
-    }
-    .switch-state {
-      font-size: 10px;
-      opacity: 0.8;
-    }
-    .button-body {
-      justify-content: center;
-      align-items: center;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 6px;
-      font-weight: 600;
-    }
-    .camera-body {
-      padding: 0;
-      position: relative;
-    }
-    .camera-frame {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 6px;
-      display: block;
-    }
-    .camera-placeholder {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 6px;
-      color: rgba(255, 255, 255, 0.55);
-    }
-    .camera-icon {
-      width: 40%;
-      max-width: 48px;
-      max-height: 48px;
-      opacity: 0.9;
-    }
-    .overlay-camera {
-      padding: 2px;
-      background: rgba(8, 8, 8, 0.75);
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-    }
-    .camera-label {
-      position: absolute;
-      bottom: 4px;
-      left: 6px;
-      right: 6px;
-      font-size: 10px;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    .migration-warning-inner {
+      color: #fff;
+      font-size: 11px;
+      font-family: var(--paper-font-body1_-_font-family, inherit);
+      line-height: 1.4;
+      overflow-wrap: break-word;
     }
     .overlay-custom {
       padding: 0;
       background: transparent;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
+      opacity: var(--flowme-opacity-overlays, 1);
     }
     .error {
       padding: 16px;

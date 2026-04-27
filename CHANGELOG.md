@@ -2,6 +2,65 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.10] — 2026-04-27
+
+Phase 1 correctness fixes: opacity editor UI, defaults editor UI, suggest-path workflow,
+graceful handling of removed native overlay types, and HACS release process fix.
+
+### Fixed
+
+- **P1-1 — Opacity editor UI**: Added a collapsible "Opacity" panel to the visual editor exposing
+  sliders (0.0–1.0) for: Background image, Background darkening, Nodes, Flow lines, Animated dots,
+  Glow effect, Labels, Values, and Overlays (all custom overlays as a group).
+  Per-node and per-flow opacity override sliders added to their respective inspector panels.
+  Opacity values are stored in a new top-level `opacity:` config block (`OpacityConfig`) and applied
+  via CSS custom properties on the stage (`--flowme-opacity-*`). Per-flow opacity is also applied
+  directly to the SVG `<g>` element in the renderer. Per-node opacity applies inline to the node DOM.
+
+- **P1-2 — Defaults editor UI**: Added a collapsible "Defaults" section to the visual editor
+  exposing number inputs for: Node radius, Dot radius, Line width, Burst trigger ratio, Burst sustain
+  (ms), and Burst max particles. All inputs are clamped to the specified ranges and commit a single
+  undo-stack entry per edit.
+
+- **P1-3 — Suggest path workflow**: Completely reworked the suggest-path flow.
+  - Shift+click a node to add it to the suggest-path selection set (numbered badge 1/2 shown on node).
+  - "Suggest path" button is **disabled** until exactly 2 nodes are selected, with an informative
+    tooltip explaining the requirement.
+  - Clicking "Accept" creates a **new flow** between the two selected nodes with the auto-routed
+    waypoints and immediately opens the new flow in the inspector.
+  - Clicking "Cancel" or clicking the stage background clears the selection.
+  - Node badges and amber highlight ring show which nodes are queued.
+
+- **P1-4 — Undo/redo**: Verified fully functional. Toolbar buttons, keyboard shortcuts (⌘Z / Ctrl+Z,
+  ⌘⇧Z / Ctrl+Shift+Z), disabled states, and single-command-per-drag-on-pointerUp are all working.
+
+- **P1-5/P1-6 — Removed overlay type safety net**: Configs containing `type: camera`, `type: switch`,
+  `type: sensor`, or `type: button` no longer crash. The validator converts them to a migration-warning
+  overlay that renders a visible red error at the overlay's position with the message:
+  `"type: X was removed in v1.0.9. Replace with type: custom and a card: block."`.
+  One ungated `console.warn` is logged per overlay with this issue.
+
+- **P1-7 — Romanian strings**: Confirmed no Romanian strings remain in `src/`. All built-in UI strings
+  are English.
+
+- **Removed dead CSS**: Cleaned up all legacy native-overlay CSS rules (`.overlay-body`, `.overlay-switch`,
+  `.camera-body`, `.camera-frame`, `.overlay-camera`, etc.) that were left over from v1.0.9.
+
+### Added
+
+- New `opacity?: OpacityConfig` field in `FlowmeConfig` (all fields optional, defaults to 1.0).
+- New `opacity?: number` field on `NodeConfig` and `FlowConfig` for per-element overrides.
+- New `_migration_warning?: string` field on `OverlayConfig` (internal, set by validator only).
+- `setOpacity`, `setNodeOpacity`, `setFlowOpacity` editor commands.
+- `setDefault` editor command for writing to the `defaults:` block.
+
+### Changed
+
+- `hacs.json` updated to spec: `name: "FlowMe"`, `filename: "flowme-card.js"`, `content_in_root: false`.
+- CARD_VERSION bumped to `1.0.10`.
+
+---
+
 ## [1.0.9] — 2026-04-27
 
 Strategic overlay refactor and debug-logging gate.

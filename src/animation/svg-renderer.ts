@@ -189,6 +189,9 @@ export class SvgRenderer implements FlowRenderer {
 
       const group = document.createElementNS(SVG_NS, 'g');
       group.setAttribute('data-flow-id', flow.id);
+      if (flow.opacity !== undefined) {
+        group.setAttribute('opacity', String(flow.opacity));
+      }
 
       const outline = document.createElementNS(SVG_NS, 'use');
       outline.setAttributeNS(XLINK_NS, 'href', `#${pathId}`);

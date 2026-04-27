@@ -26,7 +26,7 @@
  *     entity: sensor.temperature
  */
 
-import { html, type TemplateResult } from 'lit';
+import { html, nothing, type TemplateResult } from 'lit';
 
 import type { HomeAssistant, OverlayConfig } from '../types.js';
 import { dlog } from '../debug-log.js';
@@ -69,6 +69,21 @@ export function renderOverlayHost(
     opacity !== 1 ? `opacity:${opacity};` : '',
   ].join('');
 
+  if (overlay._migration_warning) {
+    return html`
+      <div
+        class="overlay overlay-migration-warning"
+        data-overlay-id=${overlay.id}
+        style=${overlayBoxStyle(overlay) + extraStyle}
+        title=${overlay._migration_warning}
+      >
+        <div class="migration-warning-inner">
+          ⚠ ${overlay._migration_warning}
+        </div>
+      </div>
+    `;
+  }
+
   return html`
     <div
       class="overlay overlay-custom"
@@ -80,5 +95,6 @@ export function renderOverlayHost(
         .card=${overlay.card}
       ></flowme-custom-overlay>
     </div>
+    ${nothing}
   `;
 }

@@ -74,7 +74,9 @@ export class FlowmeEditorToolbar extends LitElement {
       <button
         @click=${() => this.fire('suggest-path')}
         ?disabled=${this.suggestPathDisabled}
-        title="Auto-route waypoints (v0.3)"
+        title=${this.suggestPathDisabled
+          ? 'Shift+click exactly two nodes to suggest a path between them'
+          : 'Create a new flow with auto-routed waypoints between the two selected nodes'}
       >
         Suggest path
       </button>
@@ -100,7 +102,7 @@ export class FlowmeEditorToolbar extends LitElement {
         ${this.previewMode ? 'Editing' : 'Preview'}
       </button>
       <span class="spacer"></span>
-      <span class="hint">Shift = 8% snap · right-click waypoint to delete</span>
+      <span class="hint">Shift+click node = select for path · Shift+drag = snap · right-click to delete</span>
       <button @click=${() => this.fire('save')} title="Apply to card config">Save</button>
     `;
   }

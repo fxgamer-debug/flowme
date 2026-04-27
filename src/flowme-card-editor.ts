@@ -4,10 +4,12 @@ import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 
 import type {
   FlowmeConfig,
+  FlowmeDefaults,
   FlowConfig,
   HomeAssistant,
   NodeConfig,
   NodePosition,
+  OpacityConfig,
   OverlayConfig,
 } from './types.js';
 import { validateConfig } from './validate-config.js';
@@ -29,6 +31,10 @@ import {
   moveWaypoint,
   renameWeatherState,
   setBackgroundDefault,
+  setDefault,
+  setFlowOpacity,
+  setNodeOpacity,
+  setOpacity,
   setOverlayCardConfig,
   setOverlayOpacity,
   setOverlaySize,
@@ -57,7 +63,8 @@ type PendingAction =
   | { kind: 'add-flow'; step: 'pick-to'; fromId: string };
 
 interface SuggestPreview {
-  flowId: string;
+  fromNodeId: string;
+  toNodeId: string;
   waypoints: Point[];
   edgesUsable: boolean;
   elapsedMs: number;
@@ -85,6 +92,8 @@ export class FlowmeCardEditor extends LitElement {
   @state() private selectedNodeId: string | null = null;
   @state() private selectedFlowId: string | null = null;
   @state() private selectedOverlayId: string | null = null;
+  /** Nodes selected for suggest-path (max 2). Shift-click to add/remove. */
+  @state() private suggestNodeIds: string[] = [];
   @state() private customConfigDraft = '';
   @state() private customConfigError = '';
   @state() private statusMessage = '';
@@ -148,7 +157,7 @@ export class FlowmeCardEditor extends LitElement {
           .previewMode=${this.previewMode}
           .undoLabel=${this.undoLabel}
           .redoLabel=${this.redoLabel}
-          .suggestPathDisabled=${this.selectedFlowId === null || this.suggestBusy}
+          .suggestPathDisabled=${this.suggestNodeIds.length !== 2 || this.suggestBusy}
           @toolbar-action=${this.onToolbarAction}
         ></flowme-editor-toolbar>
         ${this.statusMessage ? html`<div class="status">${this.statusMessage}</div>` : nothing}
@@ -180,6 +189,8 @@ export class FlowmeCardEditor extends LitElement {
         ${this.renderSuggestBar()}
         ${this.renderInspector()}
         ${this.renderWeatherPanel()}
+        ${this.renderOpacityPanel()}
+        ${this.renderDefaultsPanel()}
         ${this.errorMessage ? html`<pre class="error">${this.errorMessage}</pre>` : nothing}
       </div>
     `;
@@ -271,9 +282,10 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderHandle(node: NodeConfig): TemplateResult {
     const selected = node.id === this.selectedNodeId;
+    const inSuggestSet = this.suggestNodeIds.includes(node.id);
     return html`
       <div
-        class=${`handle ${selected ? 'selected' : ''}`}
+        class=${`handle ${selected ? 'selected' : ''} ${inSuggestSet ? 'suggest-selected' : ''}`}
         data-node-id=${node.id}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
         @pointerdown=${this.onHandlePointerDown}
@@ -285,6 +297,7 @@ export class FlowmeCardEditor extends LitElement {
       >
         <span class="handle-dot"></span>
         ${node.label ? html`<span class="handle-label">${node.label}</span>` : nothing}
+        ${inSuggestSet ? html`<span class="suggest-badge">${this.suggestNodeIds.indexOf(node.id) + 1}</span>` : nothing}
       </div>
     `;
   }
@@ -375,6 +388,27 @@ export class FlowmeCardEditor extends LitElement {
               { includeDomains: ['sensor', 'binary_sensor', 'input_number', 'number'] },
             )}
           </label>
+          <label>
+            Node opacity
+            <div class="inspector-slider-row">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                .value=${String(node.opacity ?? 1)}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!Number.isFinite(v)) return;
+                  const prev = this.config;
+                  const next = setNodeOpacity(prev, node.id, v < 1 || v > 0 ? v : undefined);
+                  this.pushPatch(prev, next, `set opacity of ${node.id}`);
+                }}
+              />
+              <span>${(node.opacity ?? 1).toFixed(2)}</span>
+            </div>
+          </label>
           <button class="danger" @click=${() => this.removeNode(node.id)}>Delete node</button>
         </div>
       `;
@@ -399,6 +433,27 @@ export class FlowmeCardEditor extends LitElement {
           <div class="row">
             <span>${flow.waypoints.length} waypoint(s)</span>
           </div>
+          <label>
+            Flow opacity
+            <div class="inspector-slider-row">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                .value=${String(flow.opacity ?? 1)}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!Number.isFinite(v)) return;
+                  const prev = this.config;
+                  const next = setFlowOpacity(prev, flow.id, v);
+                  this.pushPatch(prev, next, `set opacity of ${flow.id}`);
+                }}
+              />
+              <span>${(flow.opacity ?? 1).toFixed(2)}</span>
+            </div>
+          </label>
           <button class="danger" @click=${() => this.removeFlow(flow.id)}>Delete flow</button>
         </div>
       `;
@@ -534,6 +589,124 @@ export class FlowmeCardEditor extends LitElement {
     'windy',
     'windy-variant',
   ] as const;
+
+  private renderOpacityPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    const op: OpacityConfig = this.config.opacity ?? {};
+
+    const opacitySlider = <K extends keyof OpacityConfig>(
+      key: K,
+      label: string,
+      defaultVal = 1,
+    ) => {
+      const val = (op[key] as number | undefined) ?? defaultVal;
+      return html`
+        <label class="opacity-row">
+          <span class="opacity-label">${label}</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            .value=${String(val)}
+            @input=${(e: Event) => {
+              if (!this.config) return;
+              const v = parseFloat((e.target as HTMLInputElement).value);
+              if (!Number.isFinite(v)) return;
+              const prev = this.config;
+              const next = setOpacity(prev, key, v as OpacityConfig[K]);
+              // live preview without undo entry
+              this.config = next;
+              this.commitToHa(next);
+            }}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const v = parseFloat((e.target as HTMLInputElement).value);
+              if (!Number.isFinite(v)) return;
+              const prev = this.config;
+              const next = setOpacity(prev, key, v as OpacityConfig[K]);
+              this.pushPatch(prev, next, `set opacity.${key}`);
+            }}
+          />
+          <span class="opacity-val">${val.toFixed(2)}</span>
+        </label>
+      `;
+    };
+
+    return html`
+      <details class="panel opacity-panel">
+        <summary>Opacity</summary>
+        <div class="panel-body">
+          <p class="hint-sub">
+            Adjust opacity for each visual layer. 1.0 = fully opaque, 0.0 = invisible.
+            "Darken" is 0 by default (no darkening overlay).
+          </p>
+          ${opacitySlider('background', 'Background image')}
+          ${opacitySlider('darken', 'Background darkening (0=none, 1=black)', 0)}
+          ${opacitySlider('nodes', 'Nodes')}
+          ${opacitySlider('flows', 'Flow lines')}
+          ${opacitySlider('dots', 'Animated dots')}
+          ${opacitySlider('glow', 'Glow effect')}
+          ${opacitySlider('labels', 'Labels')}
+          ${opacitySlider('values', 'Values')}
+          ${opacitySlider('overlays', 'Overlays (all)')}
+        </div>
+      </details>
+    `;
+  }
+
+  private renderDefaultsPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    const d: FlowmeDefaults = this.config.defaults ?? {};
+
+    const numInput = <K extends keyof FlowmeDefaults>(
+      key: K,
+      label: string,
+      opts: { min: number; max: number; step: number; defaultVal: number },
+    ) => {
+      const val = (d[key] as number | undefined) ?? opts.defaultVal;
+      return html`
+        <label class="defaults-row">
+          <span class="defaults-label">${label}</span>
+          <input
+            type="number"
+            min=${opts.min}
+            max=${opts.max}
+            step=${opts.step}
+            .value=${String(val)}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const raw = parseFloat((e.target as HTMLInputElement).value);
+              if (!Number.isFinite(raw)) return;
+              const clamped = Math.max(opts.min, Math.min(opts.max, raw)) as FlowmeDefaults[K];
+              const prev = this.config;
+              const next = setDefault(prev, key, clamped);
+              this.pushPatch(prev, next, `set defaults.${key}`);
+            }}
+          />
+          <span class="defaults-unit">${val}</span>
+        </label>
+      `;
+    };
+
+    return html`
+      <details class="panel defaults-panel">
+        <summary>Defaults</summary>
+        <div class="panel-body">
+          <p class="hint-sub">
+            Card-level rendering defaults. All fields are optional — omitting them
+            keeps the built-in values shown in parentheses.
+          </p>
+          ${numInput('node_radius', 'Node radius (px)', { min: 4, max: 40, step: 1, defaultVal: 12 })}
+          ${numInput('dot_radius', 'Dot radius (px)', { min: 2, max: 20, step: 1, defaultVal: 5 })}
+          ${numInput('line_width', 'Line width (px)', { min: 1, max: 10, step: 1, defaultVal: 2 })}
+          ${numInput('burst_trigger_ratio', 'Burst trigger ratio (0–1)', { min: 0.1, max: 1, step: 0.05, defaultVal: 0.9 })}
+          ${numInput('burst_sustain_ms', 'Burst sustain (ms)', { min: 1000, max: 30000, step: 500, defaultVal: 5000 })}
+          ${numInput('burst_max_particles', 'Burst max particles', { min: 3, max: 50, step: 1, defaultVal: 20 })}
+        </div>
+      </details>
+    `;
+  }
 
   private renderWeatherPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
@@ -717,16 +890,15 @@ export class FlowmeCardEditor extends LitElement {
   // -- suggest path --
 
   private async runSuggestPath(): Promise<void> {
-    if (!this.config || !this.selectedFlowId) {
-      this.statusMessage = 'Select a flow first — then use Suggest path.';
+    if (!this.config || this.suggestNodeIds.length !== 2) {
+      this.statusMessage = 'Shift+click exactly two nodes, then click "Suggest path".';
       return;
     }
-    const flow = this.config.flows.find((f) => f.id === this.selectedFlowId);
-    if (!flow) return;
-    const fromNode = this.config.nodes.find((n) => n.id === flow.from_node);
-    const toNode = this.config.nodes.find((n) => n.id === flow.to_node);
+    const [fromId, toId] = this.suggestNodeIds as [string, string];
+    const fromNode = this.config.nodes.find((n) => n.id === fromId);
+    const toNode = this.config.nodes.find((n) => n.id === toId);
     if (!fromNode || !toNode) {
-      this.statusMessage = 'Flow is missing a source or destination node.';
+      this.statusMessage = 'One or both selected nodes could not be found.';
       return;
     }
 
@@ -745,19 +917,19 @@ export class FlowmeCardEditor extends LitElement {
         return;
       }
       if (result.waypoints.length === 0) {
-        this.statusMessage = 'No waypoints suggested — a straight line already follows the strongest path.';
-        this.suggestPreview = null;
-        return;
+        this.statusMessage = 'No waypoints needed — a straight line follows the shortest path.';
+        // Still create the preview so the user can accept (creates a straight-line flow)
       }
       this.suggestPreview = {
-        flowId: flow.id,
+        fromNodeId: fromId,
+        toNodeId: toId,
         waypoints: result.waypoints,
         edgesUsable: result.edgesUsable,
         elapsedMs: result.elapsedMs,
       };
       this.statusMessage = `Preview: ${result.waypoints.length} waypoint(s) in ${Math.round(
         result.elapsedMs,
-      )} ms. Accept to apply.`;
+      )} ms. Accept to create flow.`;
     } catch (err) {
       this.statusMessage =
         'Auto-route failed: ' + (err instanceof Error ? err.message : String(err));
@@ -769,30 +941,40 @@ export class FlowmeCardEditor extends LitElement {
 
   private acceptSuggestion(): void {
     if (!this.config || !this.suggestPreview) return;
-    const { flowId, waypoints } = this.suggestPreview;
+    const { fromNodeId, toNodeId, waypoints } = this.suggestPreview;
+    const entity =
+      window.prompt(
+        'Entity for this flow (e.g. sensor.grid_power):',
+        'sensor.placeholder_entity',
+      ) ?? 'sensor.placeholder_entity';
     const prev = this.config;
+    const { config: withFlow, flow } = addFlow(prev, fromNodeId, toNodeId, entity);
     const next: FlowmeConfig = {
-      ...prev,
-      flows: prev.flows.map((f) =>
-        f.id === flowId ? { ...f, waypoints: waypoints.map((w) => ({ x: w.x, y: w.y })) } : f,
+      ...withFlow,
+      flows: withFlow.flows.map((f) =>
+        f.id === flow.id
+          ? { ...f, waypoints: waypoints.map((w) => ({ x: w.x, y: w.y })) }
+          : f,
       ),
     };
     this.suggestPreview = null;
-    this.statusMessage = 'Applied suggested waypoints.';
-    this.pushPatch(prev, next, `auto-route ${flowId}`);
+    this.suggestNodeIds = [];
+    this.selectedFlowId = flow.id;
+    this.selectedNodeId = null;
+    this.statusMessage = `Created flow ${flow.id} with ${waypoints.length} waypoint(s).`;
+    this.pushPatch(prev, next, `suggest-path ${flow.id}`);
   }
 
   private cancelSuggestion(): void {
     this.suggestPreview = null;
+    this.suggestNodeIds = [];
     this.statusMessage = 'Suggestion dismissed.';
   }
 
   private renderSuggestPreview(): TemplateResult | typeof nothing {
     if (!this.suggestPreview || !this.config) return nothing;
-    const flow = this.config.flows.find((f) => f.id === this.suggestPreview!.flowId);
-    if (!flow) return nothing;
-    const fromNode = this.config.nodes.find((n) => n.id === flow.from_node);
-    const toNode = this.config.nodes.find((n) => n.id === flow.to_node);
+    const fromNode = this.config.nodes.find((n) => n.id === this.suggestPreview!.fromNodeId);
+    const toNode = this.config.nodes.find((n) => n.id === this.suggestPreview!.toNodeId);
     if (!fromNode || !toNode) return nothing;
     const points: Point[] = [
       fromNode.position,
@@ -872,6 +1054,7 @@ export class FlowmeCardEditor extends LitElement {
     this.selectedNodeId = null;
     this.selectedFlowId = null;
     this.selectedOverlayId = null;
+    this.suggestNodeIds = [];
     this.customConfigDraft = '';
     this.customConfigError = '';
   };
@@ -935,9 +1118,24 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
+    // Shift+click: toggle node in the suggest-path selection set (max 2)
+    if (event.shiftKey) {
+      const idx = this.suggestNodeIds.indexOf(nodeId);
+      if (idx >= 0) {
+        this.suggestNodeIds = this.suggestNodeIds.filter((id) => id !== nodeId);
+      } else if (this.suggestNodeIds.length < 2) {
+        this.suggestNodeIds = [...this.suggestNodeIds, nodeId];
+        if (this.suggestNodeIds.length === 2) {
+          this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route between them.';
+        }
+      }
+      return;
+    }
+    // Normal click: single-select for inspector, clear suggest selection
     this.selectedNodeId = nodeId;
     this.selectedFlowId = null;
     this.selectedOverlayId = null;
+    this.suggestNodeIds = [];
   };
 
   private onOverlayClick = (event: MouseEvent): void => {
@@ -1361,6 +1559,25 @@ export class FlowmeCardEditor extends LitElement {
     .handle.selected .handle-dot {
       box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 0 6px var(--primary-color, #03a9f4);
     }
+    .handle.suggest-selected .handle-dot {
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 0 6px #f59e0b;
+    }
+    .suggest-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f59e0b;
+      color: #000;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
     .handle:active {
       cursor: grabbing;
     }
@@ -1515,6 +1732,20 @@ export class FlowmeCardEditor extends LitElement {
       gap: 4px;
       font-size: 12px;
     }
+    .inspector-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .inspector-slider-row input[type='range'] {
+      flex: 1;
+    }
+    .inspector-slider-row span {
+      font-size: 11px;
+      opacity: 0.7;
+      min-width: 30px;
+      text-align: right;
+    }
     .inspector input {
       font: inherit;
       padding: 4px 6px;
@@ -1607,6 +1838,85 @@ export class FlowmeCardEditor extends LitElement {
       background: transparent;
       border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.15));
       color: var(--primary-text-color, inherit);
+    }
+    .panel {
+      margin: 0 12px 12px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
+      border-radius: 8px;
+      background: var(--secondary-background-color, rgba(255, 255, 255, 0.04));
+    }
+    .panel summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .panel summary::-webkit-details-marker {
+      display: none;
+    }
+    .panel summary::before {
+      content: '▸ ';
+      font-size: 10px;
+      margin-right: 2px;
+    }
+    .panel[open] summary::before {
+      content: '▾ ';
+    }
+    .panel-body {
+      padding: 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .defaults-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .defaults-label {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .defaults-row input[type='number'] {
+      width: 70px;
+      font: inherit;
+      padding: 3px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      background: var(--card-background-color, #1a1a1a);
+      color: var(--primary-text-color, #fff);
+    }
+    .defaults-unit {
+      font-size: 11px;
+      opacity: 0.6;
+      min-width: 30px;
+    }
+    .opacity-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .opacity-label {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .opacity-row input[type='range'] {
+      width: 100px;
+      flex-shrink: 0;
+    }
+    .opacity-val {
+      font-size: 11px;
+      opacity: 0.7;
+      min-width: 32px;
+      text-align: right;
+    }
+    .hint-sub {
+      font-size: 11px;
+      opacity: 0.7;
+      margin: 0 0 4px;
     }
     .weather-panel {
       margin: 0 12px 12px;

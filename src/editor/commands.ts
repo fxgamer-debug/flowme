@@ -348,6 +348,50 @@ export function setOverlayOpacity(
   return next;
 }
 
+export function setOpacity<K extends keyof import('../types.js').OpacityConfig>(
+  config: FlowmeConfig,
+  key: K,
+  value: import('../types.js').OpacityConfig[K],
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.opacity = { ...next.opacity, [key]: value };
+  return next;
+}
+
+export function setNodeOpacity(config: FlowmeConfig, nodeId: string, opacity: number | undefined): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.nodes = next.nodes.map((n) => {
+    if (n.id !== nodeId) return n;
+    const out = { ...n };
+    if (opacity === undefined) delete out.opacity;
+    else out.opacity = opacity;
+    return out;
+  });
+  return next;
+}
+
+export function setFlowOpacity(config: FlowmeConfig, flowId: string, opacity: number | undefined): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    if (opacity === undefined) delete out.opacity;
+    else out.opacity = opacity;
+    return out;
+  });
+  return next;
+}
+
+export function setDefault<K extends keyof import('../types.js').FlowmeDefaults>(
+  config: FlowmeConfig,
+  key: K,
+  value: import('../types.js').FlowmeDefaults[K],
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.defaults = { ...next.defaults, [key]: value };
+  return next;
+}
+
 export function renameWeatherState(
   config: FlowmeConfig,
   oldKey: string,

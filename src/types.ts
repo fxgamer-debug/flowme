@@ -33,6 +33,8 @@ export interface NodeConfig {
   size?: number;
   show_label?: boolean;
   show_value?: boolean;
+  /** Per-node opacity override, 0–1. Falls back to config.opacity.nodes. */
+  opacity?: number;
 }
 
 /**
@@ -92,6 +94,8 @@ export interface FlowConfig {
   reverse?: boolean;
   /** Speed tweak: 0.1 through 5.0, applied after the curve. 1.0 is profile default. */
   speed_multiplier?: number;
+  /** Per-flow opacity override, 0–1. Falls back to config.opacity.flows. */
+  opacity?: number;
   /**
    * Per-flow override of the sigmoid speed-curve parameters (v1.0.6+).
    * See `SpeedCurveOverride`.
@@ -125,6 +129,12 @@ export interface OverlayConfig {
    * v1.0.9+.
    */
   opacity?: number;
+  /**
+   * Set by the validator when a removed native overlay type (camera, switch,
+   * sensor, button) is detected. The renderer shows a visible warning at the
+   * overlay position instead of crashing. Internal field — do not set manually.
+   */
+  _migration_warning?: string;
 }
 
 /**
@@ -166,6 +176,31 @@ export interface DomainColors {
   load?: string;
 }
 
+/**
+ * Card-level opacity overrides (v1.0.10+). All fields are optional — when
+ * omitted the built-in defaults (all 1.0) are used. Values are 0–1.
+ */
+export interface OpacityConfig {
+  /** Background image layer opacity. Default: 1.0. */
+  background?: number;
+  /** Semi-transparent dark overlay on top of the background image. 0 = none, 1 = fully black. Default: 0. */
+  darken?: number;
+  /** Node circles and labels. Default: 1.0. */
+  nodes?: number;
+  /** Flow path lines. Default: 1.0. */
+  flows?: number;
+  /** Animated particles/dots on flow lines. Default: 1.0. */
+  dots?: number;
+  /** Glow halos around flow lines. Default: 1.0. */
+  glow?: number;
+  /** Node label text. Default: 1.0. */
+  labels?: number;
+  /** Sensor value text on nodes. Default: 1.0. */
+  values?: number;
+  /** All custom overlays as a group. Default: 1.0. */
+  overlays?: number;
+}
+
 export interface BackgroundConfig {
   /** Default background image path. */
   default: string;
@@ -204,6 +239,10 @@ export interface FlowmeConfig {
    * v1.0.9+.
    */
   debug?: boolean;
+  /**
+   * Card-level opacity overrides (v1.0.10+). All fields are optional.
+   */
+  opacity?: OpacityConfig;
 }
 
 export type FlowShape = 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';
