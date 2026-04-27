@@ -26,7 +26,7 @@ export class FlowmeConfigError extends Error {
   override name = 'FlowmeConfigError';
 }
 
-const ALLOWED_URL_PREFIXES = ['/local/', '/api/', '/hacsfiles/', 'https://', 'http://'];
+const ALLOWED_URL_PREFIXES = ['/local/', '/api/', '/hacsfiles/', 'https://', 'http://', 'data:'];
 
 function fail(path: string, reason: string): never {
   throw new FlowmeConfigError(`${path}: ${reason}`);

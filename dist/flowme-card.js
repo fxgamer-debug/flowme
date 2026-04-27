@@ -742,7 +742,7 @@ class ie extends Error {
     super(...arguments), this.name = "FlowmeConfigError";
   }
 }
-const ve = ["/local/", "/api/", "/hacsfiles/", "https://", "http://"];
+const ve = ["/local/", "/api/", "/hacsfiles/", "https://", "http://", "data:"];
 function b(e, t) {
   throw new ie(`${e}: ${t}`);
 }

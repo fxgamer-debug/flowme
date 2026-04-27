@@ -1,13 +1,19 @@
 /**
  * Demo FlowMe configuration for the local dev server.
  *
- * Uses only the mock entity IDs defined in mock-hass.ts. CSS gradient
- * backgrounds are used so the demo works with zero file setup.
+ * Uses only the mock entity IDs defined in mock-hass.ts. Solid-colour SVG
+ * data URIs are used as backgrounds so the demo works with zero file setup.
  *
  * Demonstrates: multiple flows with different animation styles,
  * multiple nodes, weather state mapping, sun_entity, debug mode off.
  */
 import type { FlowmeConfig } from '../types.js';
+
+// Solid-colour SVG data URI helper
+function solidBg(hex: string): string {
+  const encoded = encodeURIComponent(hex);
+  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='${encoded}'/%3E%3C/svg%3E`;
+}
 
 export const DEMO_CONFIG: FlowmeConfig = {
   type: 'custom:flowme-card',
@@ -16,24 +22,24 @@ export const DEMO_CONFIG: FlowmeConfig = {
   aspect_ratio: '16:9',
 
   background: {
-    default: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3Crect fill='%23374151'/%3E%3C/svg%3E",
+    default: solidBg('#4a5a6a'),           // neutral grey catchall
     sun_entity: 'sun.sun',
     weather_entity: 'weather.demo',
     weather_states: {
-      sunny:
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FDE68A'/%3E%3Cstop offset='1' stop-color='%23F59E0B'/%3E%3C/linearGradient%3E%3Crect fill='url(%23g)'/%3E%3C/svg%3E",
-      partlycloudy:
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%2393C5FD'/%3E%3Cstop offset='1' stop-color='%236B7280'/%3E%3C/linearGradient%3E%3Crect fill='url(%23g)'/%3E%3C/svg%3E",
-      cloudy:
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%239CA3AF'/%3E%3Cstop offset='1' stop-color='%234B5563'/%3E%3C/linearGradient%3E%3Crect fill='url(%23g)'/%3E%3C/svg%3E",
-      rainy:
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%231E3A5F'/%3E%3Cstop offset='1' stop-color='%23111827'/%3E%3C/linearGradient%3E%3Crect fill='url(%23g)'/%3E%3C/svg%3E",
-      'clear-night':
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%230F172A'/%3E%3Cstop offset='1' stop-color='%231E293B'/%3E%3C/linearGradient%3E%3Crect fill='url(%23g)'/%3E%3C/svg%3E",
-      'partlycloudy-night':
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%231E293B'/%3E%3Cstop offset='1' stop-color='%23374151'/%3E%3C/linearGradient%3E%3Crect fill='url(%23g)'/%3E%3C/svg%3E",
-      snowy:
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23DBEAFE'/%3E%3Cstop offset='1' stop-color='%23E0F2FE'/%3E%3C/linearGradient%3E%3Crect fill='url(%23g)'/%3E%3C/svg%3E",
+      sunny:              solidBg('#f0a500'), // warm amber
+      partlycloudy:       solidBg('#7a9bb5'), // muted blue-grey
+      cloudy:             solidBg('#5a6a7a'), // darker grey
+      rainy:              solidBg('#2a3a5a'), // dark blue
+      pouring:            solidBg('#1e2e4a'),
+      lightning:          solidBg('#1a1a2a'), // very dark blue-purple
+      'lightning-rainy':  solidBg('#1a1a2a'),
+      snowy:              solidBg('#c8d8e8'), // light blue-white
+      fog:                solidBg('#7a8a9a'),
+      windy:              solidBg('#6a9a7a'),
+      'clear-night':      solidBg('#0a0a1a'), // near-black navy
+      'partlycloudy-night': solidBg('#1a2a3a'),
+      'cloudy-night':     solidBg('#1e2e3e'),
+      'rainy-night':      solidBg('#0e1e3a'),
     },
     transition_duration: 3000,
   },
