@@ -283,7 +283,7 @@ export class SvgRenderer implements FlowRenderer {
     if (!flow || !dom) return;
 
     const anim = flow.animation ?? {};
-    const style = anim.animation_style ?? 'dots';
+    const style: AnimStyle = anim.animation_style ?? 'dots';
 
     // Rebuild DOM if style changed since last render
     if (dom.style !== style) {
