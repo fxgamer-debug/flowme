@@ -1,4 +1,5 @@
 import type {
+  DomainColors,
   FlowConfig,
   FlowmeConfig,
   FlowmeDefaults,
@@ -489,7 +490,7 @@ export function setVisibility<K extends keyof VisibilityConfig>(
 
 export function setDomainColor(
   config: FlowmeConfig,
-  key: keyof import('../types.js').DomainColors,
+  key: keyof DomainColors,
   color: string | undefined,
 ): FlowmeConfig {
   const next = cloneConfig(config);

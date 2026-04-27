@@ -3,7 +3,6 @@ import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
   debounce,
   percentToPixel,
-  polylineToSvgPath,
   polylineToSvgPathStyled,
   pointAtProgress,
   pathLengthPercent,
