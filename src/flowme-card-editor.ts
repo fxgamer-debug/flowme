@@ -206,6 +206,7 @@ export class FlowmeCardEditor extends LitElement {
         </div>
         ${this.renderSuggestBar()}
         ${this.renderInspector()}
+        ${this.renderFlowsListPanel()}
         ${this.renderWeatherPanel()}
         ${this.renderGlobalAnimationPanel()}
         ${this.renderOpacityPanel()}
@@ -233,6 +234,18 @@ export class FlowmeCardEditor extends LitElement {
       const b = points[i + 1];
       if (!a || !b) continue;
       segments.push(html`
+        <!-- Invisible wide hit-area (20px) so the line is easy to click -->
+        <line
+          class="segment-hit"
+          x1=${a.x}
+          y1=${a.y}
+          x2=${b.x}
+          y2=${b.y}
+          data-flow-id=${flow.id}
+          data-segment-index=${i}
+          @click=${this.onSegmentClick}
+        />
+        <!-- Visible line with selected highlight -->
         <line
           class=${`segment ${isSelected ? 'selected' : ''}`}
           x1=${a.x}
@@ -1294,6 +1307,61 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
+  private renderFlowsListPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    const flows = this.config.flows;
+
+    return html`
+      <details class="panel flows-list-panel" ?open=${true}>
+        <summary>Flows (${flows.length})</summary>
+        <div class="panel-body flows-list-body">
+          ${flows.length === 0
+            ? html`<p class="hint-sub">No flows yet. Add nodes first, then add a flow between them.</p>`
+            : flows.map((flow) => {
+                const profile = getProfile(flow.domain ?? this.config!.domain);
+                const color = resolveFlowColor(flow, profile, flow.domain ?? this.config!.domain, 1, this.config!.domain_colors);
+                const isSelected = flow.id === this.selectedFlowId;
+                const isHidden = flow.visible === false;
+                return html`
+                  <div
+                    class=${`flow-list-row ${isSelected ? 'selected' : ''} ${isHidden ? 'flow-hidden' : ''}`}
+                    @click=${() => {
+                      this.selectedFlowId = isSelected ? null : flow.id;
+                      this.selectedNodeId = null;
+                      this.selectedOverlayId = null;
+                    }}
+                  >
+                    <span class="flow-dot" style=${`background:${color};`}></span>
+                    <span class="flow-list-label">${flow.id}</span>
+                    <span class="flow-list-sub">${flow.from_node}→${flow.to_node}</span>
+                    <span class="flow-list-style">${flow.animation?.animation_style ?? 'dots'}</span>
+                    <button
+                      class="eye-toggle flow-eye"
+                      title=${isHidden ? 'Show flow' : 'Hide flow'}
+                      @click=${(e: Event) => {
+                        e.stopPropagation();
+                        if (!this.config) return;
+                        const prev = this.config;
+                        const next = setFlowVisible(prev, flow.id, isHidden);
+                        this.pushPatch(prev, next, `${isHidden ? 'show' : 'hide'} flow ${flow.id}`);
+                      }}
+                    >${isHidden ? '◉' : '◎'}</button>
+                  </div>
+                `;
+              })}
+          <button
+            class="add-state"
+            style="margin-top:6px;"
+            @click=${() => {
+              if (!this.config) return;
+              this.pending = { kind: 'add-flow', step: 'pick-from' };
+            }}
+          >+ Add flow</button>
+        </div>
+      </details>
+    `;
+  }
+
   private renderWeatherPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const bg = this.config.background;
@@ -1693,6 +1761,7 @@ export class FlowmeCardEditor extends LitElement {
     }
     this.selectedFlowId = flowId;
     this.selectedNodeId = null;
+    this.selectedOverlayId = null;
   };
 
   private onNodeClick = (event: MouseEvent): void => {
@@ -2150,7 +2219,8 @@ export class FlowmeCardEditor extends LitElement {
     }
     .connectors .segment.selected {
       stroke: var(--primary-color, #03a9f4);
-      stroke-width: 1;
+      stroke-width: 2.5;
+      filter: drop-shadow(0 0 3px var(--primary-color, #03a9f4));
     }
     .handle {
       position: absolute;
@@ -2814,6 +2884,81 @@ export class FlowmeCardEditor extends LitElement {
     button.small {
       font-size: 10px;
       padding: 2px 6px;
+    }
+    /* Hit-area line behind connector segment — wide transparent stroke for easier clicking */
+    .connectors .segment-hit {
+      stroke: transparent;
+      stroke-width: 20;
+      vector-effect: non-scaling-stroke;
+      pointer-events: stroke;
+      cursor: crosshair;
+      fill: none;
+    }
+    /* Flows list panel */
+    .flows-list-panel {
+      margin-top: 8px;
+    }
+    .flows-list-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .flow-list-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.15s;
+      background: rgba(255,255,255,0.04);
+    }
+    .flow-list-row:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    .flow-list-row.selected {
+      background: rgba(var(--rgb-primary-color, 3,169,244), 0.18);
+      border-color: var(--primary-color, #03a9f4);
+    }
+    .flow-list-row.flow-hidden {
+      opacity: 0.5;
+    }
+    .flow-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .flow-list-label {
+      font-weight: 600;
+      font-size: 12px;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .flow-list-sub {
+      font-size: 10px;
+      opacity: 0.6;
+      white-space: nowrap;
+    }
+    .flow-list-style {
+      font-size: 10px;
+      opacity: 0.55;
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+      padding: 1px 4px;
+      white-space: nowrap;
+    }
+    .flow-eye {
+      position: static;
+      width: 20px;
+      height: 20px;
+      font-size: 11px;
+      flex-shrink: 0;
+      background: rgba(0,0,0,0.3);
+      display: flex;
     }
     /* Animation section */
     .anim-details {

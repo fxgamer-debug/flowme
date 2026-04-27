@@ -7,6 +7,25 @@ All notable changes to flowme are documented here. Format loosely follows [Keep 
 Dedicated animation release. Full animation style system, particle shapes, direction modes,
 shimmer/flicker effects, global fps cap and smooth speed transitions.
 
+**Patch (2026-04-28):** Flow selection and animation editor UI were missing from the initial
+v1.0.12 release. Fixed in this patch: wide click hit-area on flow lines, selected-flow
+highlight, Flows list sidebar panel, and the flow settings panel (including animation section)
+is now accessible via the Flows list.
+
+### Fixed (patch)
+
+- **Flow selection**: Added invisible 20 px hit-area stroke behind every connector segment so
+  lines are easy to click on both desktop and touch screens.
+- **Selected flow highlight**: Selected segment now renders at 2.5 px with a blue glow/outline,
+  making the active flow clearly visible.
+- **Flows list panel**: New collapsible "Flows" section in the editor sidebar lists every
+  configured flow with its colour dot, ID, node route, animation style badge, eye-icon toggle,
+  and a click-to-select row that opens the flow settings inspector.
+- **Add flow button**: "Add flow" button added to the Flows list panel, equivalent to the
+  toolbar button.
+- **Deselection**: Selecting a flow from the sidebar now clears any selected node or overlay,
+  and vice versa.
+
 ### Added
 
 - **ANIM-1 — Animation style system**: New `animation:` block per flow with 8 styles:
