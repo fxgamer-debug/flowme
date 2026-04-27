@@ -1,15 +1,20 @@
 import type { FlowProfile } from '../types.js';
-import { clamp, logCurveDuration } from '../utils.js';
+import {
+  clamp,
+  sigmoidSpeedCurve,
+  UNIVERSAL_MAX_DURATION_MS,
+  UNIVERSAL_MIN_DURATION_MS,
+  UNIVERSAL_STEEPNESS,
+} from '../utils.js';
 
 /**
  * Network profile: discrete square packets. Both speed and density scale
- * with throughput — residential ISPs span four decades (0.1 Mbps lurking
- * background traffic → 10 000 Mbps fibre peak), so the universal log curve
- * is particularly well suited here.
+ * with throughput.
  *
- * Residential calibration (v1.0.5):
- *   speed_range_min = 0.1 Mbps     (idle background chatter)
- *   speed_range_max = 10 000 Mbps  (10 Gbps — high-end residential fibre)
+ * Residential v1.0.6 sigmoid calibration (units: Mbps):
+ *   threshold = 0.05    (idle background chatter cut-off)
+ *   p50       = 50      (typical streaming + browsing combined)
+ *   peak      = 10 000  (10 Gbps — high-end residential fibre)
  */
 export const networkProfile: FlowProfile = {
   domain: 'network',
@@ -18,13 +23,20 @@ export const networkProfile: FlowProfile = {
   shape: 'square',
   glow: false,
   unit_label: 'Mbps',
-  speed_range_min: 0.1,
-  speed_range_max: 10_000,
-  visibility_threshold: 0.1,
+  threshold: 0.05,
+  p50: 50,
+  peak: 10_000,
   burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    return logCurveDuration(value, 0.1, 10_000);
+    return sigmoidSpeedCurve(value, {
+      threshold: 0.05,
+      p50: 50,
+      peak: 10_000,
+      max_duration: UNIVERSAL_MAX_DURATION_MS,
+      min_duration: UNIVERSAL_MIN_DURATION_MS,
+      steepness: UNIVERSAL_STEEPNESS,
+    });
   },
 
   particle_count_curve(value: number): number {

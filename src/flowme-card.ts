@@ -18,7 +18,7 @@ import './overlays/custom-overlay.js';
 import { dlog } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.5';
+const CARD_VERSION = '1.0.6';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console

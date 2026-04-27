@@ -1,6 +1,11 @@
 import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition } from '../types.js';
 import { getProfile } from '../flow-profiles/index.js';
-import { debounce, percentToPixel } from '../utils.js';
+import {
+  debounce,
+  percentToPixel,
+  resolveSpeedCurveParams,
+  sigmoidSpeedCurve,
+} from '../utils.js';
 import type { FlowRenderer } from './types.js';
 // Vite inlines the worklet source as a string at build time.
 import workletSource from '../flowme-painter-worklet.js?raw';
@@ -186,9 +191,9 @@ export class HoudiniRenderer implements FlowRenderer {
     if (!flow || !div) return;
 
     const profile = this.profileFor(flow);
-    const threshold = flow.threshold ?? profile.visibility_threshold;
+    const params = resolveSpeedCurveParams(flow, profile);
     const magnitude = Math.abs(value);
-    const visible = magnitude >= threshold;
+    const visible = magnitude >= params.threshold;
 
     if (!visible) {
       div.el.style.opacity = '0';
@@ -197,7 +202,7 @@ export class HoudiniRenderer implements FlowRenderer {
     div.el.style.opacity = '1';
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    const durMs = Math.max(50, profile.speed_curve(magnitude) * speedMultiplier);
+    const durMs = Math.max(50, sigmoidSpeedCurve(magnitude, params) * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
     const color =
       direction > 0

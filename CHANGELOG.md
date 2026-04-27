@@ -2,6 +2,79 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.6] — 2026-04-27
+
+Speed-curve rework: the v1.0.5 logarithmic curve is replaced by a sigmoid in log10-value space, parameterised per domain by percentile anchors (`threshold`, `p50`, `peak`) and overrideable per flow.
+
+### Changed — unified sigmoid curve
+
+Every profile now uses the same shape function:
+
+```
+v      = max(|value|, threshold)
+ratio  = log10(v / p50)
+factor = 1 / (1 + exp(-steepness * ratio))
+ms     = max_duration - factor * (max_duration - min_duration)
+```
+
+Universal constants (overrideable per flow):
+
+- `max_duration = 9000` ms — at and below `threshold`, animation reads as a slow, visible trickle.
+- `min_duration = 700` ms — asymptote the sigmoid approaches at large magnitudes.
+- `steepness   = 1.5`     — controls how sharply the curve transitions through `p50`.
+
+Per-domain calibration:
+
+| Domain   | `threshold` | `p50` | `peak`  | Units  |
+| -------- | ----------- | ----- | ------- | ------ |
+| Energy   | 30          | 800   | 10 000  | W      |
+| Water    | 0.3         | 6     | 60      | L/min  |
+| Network  | 0.05        | 50    | 10 000  | Mbps   |
+| HVAC     | 5           | 200   | 3 000   | CFM    |
+| Gas      | 0.005       | 0.5   | 10      | m³/h   |
+| Generic  | 1           | 100   | 10 000  | —      |
+
+The sigmoid is *asymptotic at the upper end* — values past `peak` keep getting faster but never reach `min_duration`. Burst-density mode (introduced in v1.0.5) compensates: sustained magnitudes ≥ 0.9 × `peak` for ≥ 5 s now multiply particle count by `burst_density_multiplier` (default 1.5, capped at 20). Burst now reads its trigger from the *resolved* peak, so per-flow overrides flow through correctly.
+
+### Added — per-flow `speed_curve_override`
+
+Every parameter of the curve is independently overrideable per flow, falling back to the profile, then to the universal constants. Useful for tuning a single sensor without forking a profile:
+
+```yaml
+flows:
+  - id: ev_charger
+    entity: sensor.ev_charger_power
+    domain: energy
+    speed_curve_override:
+      threshold: 50
+      p50: 1500          # higher median for an EV-only sensor
+      peak: 11000        # 11 kW residential charger ceiling
+      max_duration: 8000
+      min_duration: 600
+      # steepness optional; defaults to 1.5
+```
+
+Resolution order for any field: `speed_curve_override.X` → profile.X → universal constant. The legacy `flow.threshold` shortcut still works as `speed_curve_override.threshold` (the override field wins when both are set), so existing configs need no changes.
+
+### Removed
+
+- `FlowProfile.speed_range_min` / `speed_range_max` / `visibility_threshold` — replaced by `threshold` / `p50` / `peak`.
+- `logCurveDuration()` — replaced by `sigmoidSpeedCurve()` and the `resolveSpeedCurveParams()` helper.
+
+These are internal API changes; the public YAML schema is backward-compatible (only additive — `speed_curve_override` is new, everything else still works).
+
+### Validation
+
+`speed_curve_override` blocks are validated:
+
+- Numeric fields must be finite. `threshold`, `p50`, `peak` and `steepness` must be `> 0`. Durations must be `≥ 50` ms.
+- `min_duration < max_duration` when both are set.
+- Unknown keys are rejected so typos like `stepness` surface immediately.
+
+### Files touched
+
+`src/types.ts`, `src/utils.ts`, `src/flow-profiles/{energy,water,network,hvac,gas,generic}.ts`, `src/animation/svg-renderer.ts`, `src/animation/houdini-renderer.ts`, `src/validate-config.ts`, `src/flowme-card.ts` (CARD_VERSION), `package.json`, `tests/unit/flow-profiles.test.ts`, `tests/unit/validate-config.test.ts`.
+
 ## [1.0.5] — 2026-04-26
 
 Residential recalibration: every domain now shares one logarithmic speed curve, bounded between a visibly-alive slowest duration and a brisk fastest, with a new burst-density mode for saturated flows.

@@ -1,12 +1,18 @@
 import type { FlowProfile } from '../types.js';
-import { logCurveDuration } from '../utils.js';
+import {
+  sigmoidSpeedCurve,
+  UNIVERSAL_MAX_DURATION_MS,
+  UNIVERSAL_MIN_DURATION_MS,
+  UNIVERSAL_STEEPNESS,
+} from '../utils.js';
 
 /**
  * Gas profile: slow expanding-circle pulse along the path.
  *
- * Residential calibration (v1.0.5):
- *   speed_range_min = 0.01 m³/h  (pilot light / idle boiler)
- *   speed_range_max = 10   m³/h  (full-tilt central heating + cooker)
+ * Residential v1.0.6 sigmoid calibration (units: m³/h):
+ *   threshold = 0.005    (pilot light / idle boiler standby)
+ *   p50       = 0.5      (typical hob burner + DHW pre-heat)
+ *   peak      = 10       (full-tilt central heating + cooker)
  */
 export const gasProfile: FlowProfile = {
   domain: 'gas',
@@ -19,13 +25,20 @@ export const gasProfile: FlowProfile = {
   shape: 'pulse',
   glow: true,
   unit_label: 'm³/h',
-  speed_range_min: 0.01,
-  speed_range_max: 10,
-  visibility_threshold: 0.01,
+  threshold: 0.005,
+  p50: 0.5,
+  peak: 10,
   burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    return logCurveDuration(value, 0.01, 10);
+    return sigmoidSpeedCurve(value, {
+      threshold: 0.005,
+      p50: 0.5,
+      peak: 10,
+      max_duration: UNIVERSAL_MAX_DURATION_MS,
+      min_duration: UNIVERSAL_MIN_DURATION_MS,
+      steepness: UNIVERSAL_STEEPNESS,
+    });
   },
 
   describe(value: number): string {

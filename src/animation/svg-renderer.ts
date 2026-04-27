@@ -6,6 +6,9 @@ import {
   polylineToSvgPath,
   pointAtProgress,
   pathLengthPercent,
+  resolveSpeedCurveParams,
+  sigmoidSpeedCurve,
+  type ResolvedSpeedCurveParams,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
 import { dlog } from '../debug-log.js';
@@ -19,7 +22,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
 /**
- * `?flowme_debug=1` → bypasses visibility_threshold, forces a 2000 ms
+ * `?flowme_debug=1` → bypasses the visibility threshold, forces a 2000 ms
  * animation on every flow and logs each particle-build step. Used to
  * prove the animation engine itself works without depending on real
  * sensor values. See README "Troubleshooting → no animation".
@@ -43,11 +46,12 @@ const STROKE_WIDTH = 2; // px
 const WAVE_STROKE_WIDTH = 8; // px
 const PULSE_MAX_RADIUS = 14; // px
 
-/** v1.0.5 burst mode. When a flow's magnitude stays at or above
- *  `BURST_TRIGGER_RATIO × speed_range_max` for at least
- *  `BURST_SUSTAIN_MS` ms, the particle count for that flow is multiplied
- *  by the profile's `burst_density_multiplier` (default 1.5) and capped
- *  at `BURST_MAX_PARTICLES`. Drops below the ratio reset the timer. */
+/** v1.0.5 burst mode (v1.0.6: peak comes from resolved curve params).
+ *  When a flow's magnitude stays at or above `BURST_TRIGGER_RATIO × peak`
+ *  for at least `BURST_SUSTAIN_MS` ms, the particle count for that flow
+ *  is multiplied by the profile's `burst_density_multiplier` (default
+ *  1.5) and capped at `BURST_MAX_PARTICLES`. Drops below the ratio reset
+ *  the timer. */
 const BURST_TRIGGER_RATIO = 0.9;
 const BURST_SUSTAIN_MS = 5000;
 const BURST_MAX_PARTICLES = 20;
@@ -276,11 +280,18 @@ export class SvgRenderer implements FlowRenderer {
     }
 
     const profile = this.profileFor(flow);
-    const threshold = DEBUG ? 0 : flow.threshold ?? profile.visibility_threshold;
+    const params = resolveSpeedCurveParams(flow, profile);
+    const threshold = DEBUG ? 0 : params.threshold;
     const magnitude = Math.abs(value);
     const visible = DEBUG || magnitude >= threshold;
 
-    rlog('applyFlow:', flowId, 'value=', value, '| magnitude=', magnitude, '| threshold=', threshold, '| visible=', visible, '| DEBUG=', DEBUG);
+    rlog(
+      'applyFlow:', flowId,
+      'value=', value, '| magnitude=', magnitude,
+      '| threshold=', threshold, '| visible=', visible, '| DEBUG=', DEBUG,
+      '| curve params (resolved)=', params,
+      '| override=', flow.speed_curve_override ?? '(none)',
+    );
 
     if (!visible) {
       this.setGroupVisible(dom, false);
@@ -290,7 +301,7 @@ export class SvgRenderer implements FlowRenderer {
     this.setGroupVisible(dom, true);
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    const rawSpeed = profile.speed_curve(magnitude);
+    const rawSpeed = sigmoidSpeedCurve(magnitude, params);
     const durMs = DEBUG
       ? DEBUG_DUR_MS
       : Math.max(50, rawSpeed * speedMultiplier);
@@ -300,13 +311,13 @@ export class SvgRenderer implements FlowRenderer {
         ? flow.color_positive ?? profile.default_color_positive
         : flow.color_negative ?? profile.default_color_negative;
 
-    const burstMultiplier = this.updateBurstState(flowId, magnitude, profile);
+    const burstMultiplier = this.updateBurstState(flowId, magnitude, params, profile);
 
     rlog(
       'applyFlow → computed:', flowId,
       '| domain=', flow.domain ?? this.config?.domain ?? '(default)',
       '| shape=', dom.shape,
-      '| rawSpeedCurve(mag)=', rawSpeed,
+      '| sigmoidSpeedCurve(mag)=', rawSpeed,
       '| speedMult=', speedMultiplier,
       '| dur=', durMs, 'ms',
       '| direction=', direction,
@@ -338,17 +349,18 @@ export class SvgRenderer implements FlowRenderer {
   }
 
   /**
-   * Track whether a flow has sustained ≥ 90 % of its profile's
-   * `speed_range_max` for at least 5 s. Return the particle-count
+   * Track whether a flow has sustained ≥ 90 % of its resolved `peak`
+   * (override-aware) for at least 5 s. Return the particle-count
    * multiplier to apply right now (1 outside burst, profile's
    * `burst_density_multiplier` inside — default 1.5).
    */
   private updateBurstState(
     flowId: string,
     magnitude: number,
+    params: ResolvedSpeedCurveParams,
     profile: FlowProfile,
   ): number {
-    const peak = profile.speed_range_max;
+    const peak = params.peak;
     const trigger = peak * BURST_TRIGGER_RATIO;
     const aboveTrigger = magnitude >= trigger;
     const now = performance.now();

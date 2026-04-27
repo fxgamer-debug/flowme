@@ -35,6 +35,28 @@ export interface NodeConfig {
   show_value?: boolean;
 }
 
+/**
+ * Per-flow override of the unified sigmoid speed curve (v1.0.6+). Every
+ * field is independently optional — unset fields fall back to the active
+ * profile's calibration, then to the universal constants
+ * (`UNIVERSAL_MAX_DURATION_MS`, `UNIVERSAL_MIN_DURATION_MS`,
+ * `UNIVERSAL_STEEPNESS`). See `utils.ts → resolveSpeedCurveParams`.
+ */
+export interface SpeedCurveOverride {
+  /** Visibility cut-off and sigmoid lower-bound clamp (in profile units). */
+  threshold?: number;
+  /** Median value — the sigmoid midpoint. Half the duration span at v == p50. */
+  p50?: number;
+  /** Asymptote anchor (also drives burst-mode trigger at 0.9 × peak). */
+  peak?: number;
+  /** Slowest visible duration (ms). Default 9000. */
+  max_duration?: number;
+  /** Fastest visible duration (ms). Default 700. */
+  min_duration?: number;
+  /** Sigmoid steepness `k`. Default 1.5 — higher is sharper. */
+  steepness?: number;
+}
+
 export interface FlowConfig {
   id: string;
   /** Node id to originate at. */
@@ -53,12 +75,21 @@ export interface FlowConfig {
   domain?: FlowDomain;
   color_positive?: string;
   color_negative?: string;
-  /** Values with absolute value below this are treated as "no flow". */
+  /**
+   * Legacy shortcut for `speed_curve_override.threshold`. When both are
+   * set, `speed_curve_override.threshold` wins. Kept so v1.0.x configs
+   * that set `threshold:` directly continue to work unchanged.
+   */
   threshold?: number;
   /** Flip direction interpretation (useful when a sensor reports reverse sign). */
   reverse?: boolean;
-  /** Speed tweak: 0.1 through 5.0. 1.0 is profile default. */
+  /** Speed tweak: 0.1 through 5.0, applied after the curve. 1.0 is profile default. */
   speed_multiplier?: number;
+  /**
+   * Per-flow override of the sigmoid speed-curve parameters (v1.0.6+).
+   * See `SpeedCurveOverride`.
+   */
+  speed_curve_override?: SpeedCurveOverride;
 }
 
 export const OVERLAY_TYPES = ['sensor', 'switch', 'camera', 'button', 'custom'] as const;
@@ -128,7 +159,7 @@ export interface FlowProfile {
   shape: FlowShape;
   glow: boolean;
   /** Unit label, e.g. 'W', 'L/min', 'Mbps'. This is the profile's *base*
-   *  unit — every number the `speed_curve`, `visibility_threshold` and
+   *  unit — every number the `speed_curve`, `threshold`/`p50`/`peak` and
    *  `describe` see is in this unit. */
   unit_label: string;
   /**
@@ -147,34 +178,42 @@ export interface FlowProfile {
    */
   unit_scale?: Readonly<Record<string, number>>;
   /**
-   * Value (in `unit_label`) at which the animation reaches the universal
-   * *slowest* visible duration (4500 ms). Values at or below this are
-   * animated at the slowest speed. The `visibility_threshold` also
-   * defaults to this value — sensor readings below it are considered noise
-   * and the flow is hidden altogether. v1.0.5+.
+   * Visibility cut-off (in `unit_label`). Magnitudes below this hide the
+   * flow entirely, and the sigmoid curve clamps `v` up to `threshold`
+   * before computing duration so we never log10(0). v1.0.6+.
    */
-  speed_range_min: number;
+  threshold: number;
   /**
-   * Value (in `unit_label`) at which the animation reaches the universal
-   * *fastest* duration (600 ms). Values above this saturate — they stay
-   * pinned at 600 ms but can trigger burst-density mode (see
-   * `burst_density_multiplier`). Should reflect the *typical residential
-   * peak* for the domain, not the absolute physical maximum. v1.0.5+.
+   * Median value — the sigmoid midpoint. At `v == p50` the duration sits
+   * exactly halfway between `max_duration` and `min_duration`. Picked
+   * per-domain so the *typical* residential reading lands at "medium
+   * pace". v1.0.6+.
    */
-  speed_range_max: number;
+  p50: number;
   /**
-   * When a flow stays above 90% of `speed_range_max` for ≥ 5 s, particle
-   * count is multiplied by this factor (capped at 20 particles). Lets
-   * flows look visibly more intense at saturation when they can no longer
-   * get any faster. Defaults to 1.5. Set to 1 to disable burst mode for
-   * a profile. v1.0.5+.
+   * Asymptote anchor and burst trigger (in `unit_label`). The sigmoid
+   * approaches `min_duration` as `v` grows past `p50`; sustained
+   * magnitudes ≥ 0.9 × `peak` enter burst-density mode. Should reflect
+   * the *typical residential peak* for the domain, not the absolute
+   * physical maximum. v1.0.6+.
+   */
+  peak: number;
+  /**
+   * When a flow stays above 90% of `peak` for ≥ 5 s, particle count is
+   * multiplied by this factor (capped at 20 particles). Lets flows look
+   * visibly more intense at saturation when the sigmoid is asymptoting
+   * and they can no longer get any faster. Defaults to 1.5. Set to 1 to
+   * disable burst mode for a profile. v1.0.5+.
    */
   burst_density_multiplier?: number;
-  /** Map a sensor value (in the profile's base unit) to a one-cycle
-   *  animation duration in milliseconds. Profiles should implement this
-   *  via `logCurveDuration(value, speed_range_min, speed_range_max)` to
-   *  get the universal shape; they may deviate if their domain has an
-   *  inherently different feel (e.g. network treats speed as a constant). */
+  /**
+   * Map a sensor value (in the profile's base unit) to a one-cycle
+   * animation duration in milliseconds. Implemented by every profile via
+   * the universal sigmoid (`sigmoidSpeedCurve` in `utils.ts`) using this
+   * profile's `threshold` / `p50` / `peak` — domains may *not* deviate
+   * from the unified shape function in v1.0.6+; per-flow overrides are
+   * the supported escape hatch. v1.0.6+.
+   */
   speed_curve: (value: number) => number;
   /**
    * Particle count per flow as a function of value. Used by shapes that
@@ -187,8 +226,6 @@ export interface FlowProfile {
    * Defaults to a constant 4 px when omitted.
    */
   wave_amplitude_curve?: (value: number) => number;
-  /** Flows with absolute value below this are hidden. */
-  visibility_threshold: number;
   /** Human-readable value rendering. e.g. 1200 -> "1.2 kW". */
   describe: (value: number) => string;
 }

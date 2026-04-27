@@ -188,6 +188,80 @@ describe('validateConfig — schema failures', () => {
   });
 });
 
+describe('validateConfig — speed_curve_override (v1.0.6)', () => {
+  function flowWith(override: unknown): Record<string, unknown> {
+    return {
+      ...minimalConfig(),
+      flows: [
+        {
+          id: 'f',
+          from_node: 'a',
+          to_node: 'b',
+          entity: 'sensor.x',
+          waypoints: [],
+          speed_curve_override: override,
+        },
+      ],
+    };
+  }
+
+  it('accepts a full override block and round-trips every field', () => {
+    const cfg = validateConfig(
+      flowWith({
+        threshold: 50,
+        p50: 1000,
+        peak: 8000,
+        max_duration: 8000,
+        min_duration: 600,
+        steepness: 2,
+      }),
+    );
+    expect(cfg.flows[0]?.speed_curve_override).toEqual({
+      threshold: 50,
+      p50: 1000,
+      peak: 8000,
+      max_duration: 8000,
+      min_duration: 600,
+      steepness: 2,
+    });
+  });
+
+  it('accepts a partial override (every field is independently optional)', () => {
+    const cfg = validateConfig(flowWith({ p50: 1500 }));
+    expect(cfg.flows[0]?.speed_curve_override).toEqual({ p50: 1500 });
+  });
+
+  it('rejects non-object overrides', () => {
+    expect(() => validateConfig(flowWith('not an object'))).toThrow(/speed_curve_override/);
+    expect(() => validateConfig(flowWith([]))).toThrow(/speed_curve_override/);
+    expect(() => validateConfig(flowWith(null))).toThrow(/speed_curve_override/);
+  });
+
+  it('rejects non-positive threshold / p50 / peak', () => {
+    expect(() => validateConfig(flowWith({ threshold: 0 }))).toThrow(/threshold/);
+    expect(() => validateConfig(flowWith({ p50: -1 }))).toThrow(/p50/);
+    expect(() => validateConfig(flowWith({ peak: 0 }))).toThrow(/peak/);
+  });
+
+  it('rejects durations below 50 ms', () => {
+    expect(() => validateConfig(flowWith({ max_duration: 10 }))).toThrow(/max_duration/);
+    expect(() => validateConfig(flowWith({ min_duration: 0 }))).toThrow(/min_duration/);
+  });
+
+  it('rejects min_duration ≥ max_duration when both are set', () => {
+    expect(() =>
+      validateConfig(flowWith({ max_duration: 1000, min_duration: 1000 })),
+    ).toThrow(/min_duration/);
+    expect(() =>
+      validateConfig(flowWith({ max_duration: 1000, min_duration: 1500 })),
+    ).toThrow(/min_duration/);
+  });
+
+  it('rejects unknown keys to surface typos', () => {
+    expect(() => validateConfig(flowWith({ stepness: 1.5 }))).toThrow(/stepness/);
+  });
+});
+
 describe('validateConfig — overlay schema', () => {
   it('rejects unknown overlay types', () => {
     const raw = {

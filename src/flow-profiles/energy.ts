@@ -1,24 +1,26 @@
 import type { FlowProfile } from '../types.js';
-import { logCurveDuration } from '../utils.js';
+import {
+  sigmoidSpeedCurve,
+  UNIVERSAL_MAX_DURATION_MS,
+  UNIVERSAL_MIN_DURATION_MS,
+  UNIVERSAL_STEEPNESS,
+} from '../utils.js';
 
 /**
  * Energy profile: dot trail, glow, watts to speed.
  *
- * **Calibrated for residential loads** (v1.0.5). The universal log-curve
- * shape maps the calibration range `[speed_range_min, speed_range_max]`
- * to the universal duration bounds `[4500 ms, 600 ms]`. For energy:
+ * Residential v1.0.6 sigmoid calibration (units: W):
+ *   threshold =    30 W   (idle / phantom-load cut-off)
+ *   p50       =   800 W   (typical fridge + a few standby loads)
+ *   peak      = 10 000 W  (whole-house peak — EV charging, induction hob, kettle)
  *
- *   speed_range_min = 50 W     (hides small idle loads — bulbs, routers)
- *   speed_range_max = 10 000 W (whole-house peak — EV charging, showers)
- *
- * Resulting anchor points:
- *   ≤ 50 W     → 4500 ms (slowest visible flow; a living pulse, not static)
- *     100 W    → ~3950 ms
- *     500 W    → ~2720 ms
- *     1 000 W  → ~2180 ms
- *     5 000 W  → ~1185 ms
- *   ≥ 10 000 W → 600 ms (fastest)
- *   ≥ 9 000 W sustained → burst density (1.5× particles) after 5 s
+ * Resulting anchor points (universal max=9000 ms, min=700 ms, k=1.5):
+ *   ≤ 30 W      → ~8125 ms (threshold floor — slow visible trickle)
+ *     100 W     → ~7000 ms
+ *     800 W     →  4850 ms (median, exactly half the duration span)
+ *   5 000 W     → ~2700 ms
+ *  ≥ 9 000 W sustained → burst density (1.5× particles) after 5 s
+ *  10 000 W     → ~2050 ms (sigmoid asymptotes toward 700 ms but never reaches)
  *
  * Inputs are always WATTS. kW / MW / mW sensors are auto-scaled via
  * `unit_scale` before they reach the curve (v1.0.4+).
@@ -38,17 +40,20 @@ export const energyProfile: FlowProfile = {
     MW: 1_000_000,
     mW: 1e-3,
   },
-  speed_range_min: 50,
-  speed_range_max: 10_000,
-  // Defaults to speed_range_min — sensors reporting below 50 W are
-  // considered idle / noise and the flow is hidden. Users who want to
-  // show phantom-load flows (e.g. a 6 W router) can set a lower per-flow
-  // `threshold:` in YAML.
-  visibility_threshold: 50,
+  threshold: 30,
+  p50: 800,
+  peak: 10_000,
   burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    return logCurveDuration(value, 50, 10_000);
+    return sigmoidSpeedCurve(value, {
+      threshold: 30,
+      p50: 800,
+      peak: 10_000,
+      max_duration: UNIVERSAL_MAX_DURATION_MS,
+      min_duration: UNIVERSAL_MIN_DURATION_MS,
+      steepness: UNIVERSAL_STEEPNESS,
+    });
   },
 
   describe(value: number): string {

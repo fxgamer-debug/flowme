@@ -1,15 +1,20 @@
 import type { FlowProfile } from '../types.js';
-import { logCurveDuration } from '../utils.js';
+import {
+  sigmoidSpeedCurve,
+  UNIVERSAL_MAX_DURATION_MS,
+  UNIVERSAL_MIN_DURATION_MS,
+  UNIVERSAL_STEEPNESS,
+} from '../utils.js';
 
 /**
- * Generic fallback profile (v1.0.5). Calibrated as a reasonable middle
- * ground for dashboards that don't fit energy / water / network / hvac /
- * gas. Users needing a different range should pick a closer domain or,
- * once per-flow range overrides land, set `speed_range_min` / `_max`
- * directly on the flow. For now:
+ * Generic fallback profile (v1.0.6). A reasonable middle ground for
+ * dashboards that don't fit energy / water / network / hvac / gas.
+ * Users needing different bounds should pick a closer domain or set
+ * `speed_curve_override` directly on the flow.
  *
- *   speed_range_min = 1      (slowest visible flow at magnitude 1)
- *   speed_range_max = 1000   (saturates at magnitude 1000)
+ *   threshold =     1   (slowest visible flow at magnitude 1)
+ *   p50       =   100   (sensible "medium-paced" anchor for unit-less data)
+ *   peak      = 10 000  (broad upper bound — overrideable per flow)
  */
 export const genericProfile: FlowProfile = {
   domain: 'generic',
@@ -22,13 +27,20 @@ export const genericProfile: FlowProfile = {
   shape: 'dot',
   glow: false,
   unit_label: '',
-  speed_range_min: 1,
-  speed_range_max: 1000,
-  visibility_threshold: 1,
+  threshold: 1,
+  p50: 100,
+  peak: 10_000,
   burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    return logCurveDuration(value, 1, 1000);
+    return sigmoidSpeedCurve(value, {
+      threshold: 1,
+      p50: 100,
+      peak: 10_000,
+      max_duration: UNIVERSAL_MAX_DURATION_MS,
+      min_duration: UNIVERSAL_MIN_DURATION_MS,
+      steepness: UNIVERSAL_STEEPNESS,
+    });
   },
 
   describe(value: number): string {

@@ -1,12 +1,19 @@
 import type { FlowProfile } from '../types.js';
-import { logCurveDuration } from '../utils.js';
+import {
+  sigmoidSpeedCurve,
+  UNIVERSAL_MAX_DURATION_MS,
+  UNIVERSAL_MIN_DURATION_MS,
+  UNIVERSAL_STEEPNESS,
+} from '../utils.js';
 
 /**
  * Water profile: continuous wave-like fluid effect on a thick line.
  *
- * Residential calibration (v1.0.5):
- *   speed_range_min = 0.5 L/min  (drip / low-flow bathroom tap)
- *   speed_range_max = 50 L/min   (shower + washing machine combined)
+ * Residential v1.0.6 sigmoid calibration (units: L/min):
+ *   threshold = 0.3   (drip / low-flow bathroom tap)
+ *   p50       = 6     (kitchen tap full open)
+ *   peak      = 60    (shower + washing machine combined; mains supply)
+ *
  * Wave amplitude is a constant 4 px.
  */
 export const waterProfile: FlowProfile = {
@@ -20,13 +27,20 @@ export const waterProfile: FlowProfile = {
   shape: 'wave',
   glow: false,
   unit_label: 'L/min',
-  speed_range_min: 0.5,
-  speed_range_max: 50,
-  visibility_threshold: 0.5,
+  threshold: 0.3,
+  p50: 6,
+  peak: 60,
   burst_density_multiplier: 1.5,
 
   speed_curve(value: number): number {
-    return logCurveDuration(value, 0.5, 50);
+    return sigmoidSpeedCurve(value, {
+      threshold: 0.3,
+      p50: 6,
+      peak: 60,
+      max_duration: UNIVERSAL_MAX_DURATION_MS,
+      min_duration: UNIVERSAL_MIN_DURATION_MS,
+      steepness: UNIVERSAL_STEEPNESS,
+    });
   },
 
   wave_amplitude_curve(_value: number): number {

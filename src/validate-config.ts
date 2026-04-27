@@ -5,6 +5,7 @@ import type {
   NodePosition,
   OverlayConfig,
   OverlayType,
+  SpeedCurveOverride,
   TapActionKind,
 } from './types.js';
 import { FLOW_DOMAINS, OVERLAY_TYPES, TAP_ACTIONS } from './types.js';
@@ -131,7 +132,89 @@ function validateFlow(
     if (sm < 0.1 || sm > 5.0) fail(`${path}.speed_multiplier`, 'must be between 0.1 and 5.0');
     flow.speed_multiplier = sm;
   }
+  if (f['speed_curve_override'] !== undefined) {
+    flow.speed_curve_override = validateSpeedCurveOverride(
+      f['speed_curve_override'],
+      `${path}.speed_curve_override`,
+    );
+  }
   return flow;
+}
+
+/**
+ * Validate the per-flow `speed_curve_override` block (v1.0.6+). Every
+ * field is independently optional so users can override only the bits
+ * they care about and inherit the rest from the profile / universal
+ * defaults. All numeric fields must be finite; `threshold`, `p50` and
+ * `peak` must be > 0 (the sigmoid uses log10(v / p50) so zero collapses
+ * the curve); `max_duration` and `min_duration` must be ≥ 50 ms; and
+ * `min_duration` must be < `max_duration` when both are set.
+ */
+function validateSpeedCurveOverride(raw: unknown, path: string): SpeedCurveOverride {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail(path, 'must be an object');
+  }
+  const o = raw as Record<string, unknown>;
+  const out: SpeedCurveOverride = {};
+
+  function readPositive(key: keyof SpeedCurveOverride): number | undefined {
+    const v = o[key as string];
+    if (v === undefined) return undefined;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+      fail(`${path}.${key as string}`, 'must be a positive finite number');
+    }
+    return v as number;
+  }
+  function readDuration(key: keyof SpeedCurveOverride): number | undefined {
+    const v = o[key as string];
+    if (v === undefined) return undefined;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 50) {
+      fail(`${path}.${key as string}`, 'must be a finite number ≥ 50 (milliseconds)');
+    }
+    return v as number;
+  }
+
+  const t = readPositive('threshold');
+  if (t !== undefined) out.threshold = t;
+  const p50 = readPositive('p50');
+  if (p50 !== undefined) out.p50 = p50;
+  const peak = readPositive('peak');
+  if (peak !== undefined) out.peak = peak;
+  const maxD = readDuration('max_duration');
+  if (maxD !== undefined) out.max_duration = maxD;
+  const minD = readDuration('min_duration');
+  if (minD !== undefined) out.min_duration = minD;
+  if (o['steepness'] !== undefined) {
+    const s = o['steepness'];
+    if (typeof s !== 'number' || !Number.isFinite(s) || s <= 0) {
+      fail(`${path}.steepness`, 'must be a positive finite number');
+    }
+    out.steepness = s as number;
+  }
+
+  if (
+    out.max_duration !== undefined &&
+    out.min_duration !== undefined &&
+    out.min_duration >= out.max_duration
+  ) {
+    fail(path, 'min_duration must be < max_duration');
+  }
+
+  // Allowed extra keys check — surface typos rather than silently dropping.
+  const allowedKeys = new Set([
+    'threshold',
+    'p50',
+    'peak',
+    'max_duration',
+    'min_duration',
+    'steepness',
+  ]);
+  for (const key of Object.keys(o)) {
+    if (!allowedKeys.has(key)) {
+      fail(`${path}.${key}`, `unknown key (allowed: ${[...allowedKeys].join(', ')})`);
+    }
+  }
+  return out;
 }
 
 export function validateConfig(raw: unknown): FlowmeConfig {
