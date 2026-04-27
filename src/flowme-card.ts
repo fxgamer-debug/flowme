@@ -11,14 +11,14 @@ import { FlowmeConfigError, validateConfig } from './validate-config.js';
 import { createRenderer } from './animation/renderer-factory.js';
 import { SvgRenderer } from './animation/svg-renderer.js';
 import type { FlowRenderer } from './animation/types.js';
-import { getProfile } from './flow-profiles/index.js';
+import { getProfile, NEUTRAL_NODE_COLOR, resolveFlowColor } from './flow-profiles/index.js';
 import { parseAspectRatio, parseSensorValue, scaleSensorValue } from './utils.js';
 import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
 import { dlog } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.6';
+const CARD_VERSION = '1.0.7';
 const DEFAULT_TRANSITION_MS = 2000;
 
 // eslint-disable-next-line no-console
@@ -460,7 +460,7 @@ export class FlowmeCard extends LitElement {
       <div
         class="node"
         data-node-id=${node.id}
-        style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
+        style=${`left: ${node.position.x}%; top: ${node.position.y}%; --flowme-dot-size: ${size}px;`}
       >
         <span
           class="node-dot"
@@ -473,20 +473,39 @@ export class FlowmeCard extends LitElement {
   }
 
   /**
-   * Walk the configured flows looking for one that either starts or ends at
-   * the given node and has a `color_positive` set. That colour is used as the
-   * node's fallback fill so the dashboard visually groups nodes with their
-   * flow colour (solar nodes glow yellow, grid nodes blue, etc.) without the
+   * Resolve a node's fill colour from its connected flows so the
+   * dashboard visually groups nodes with their flow colour without the
    * user having to duplicate colours on every node.
+   *
+   * Each connected flow is resolved through the same `resolveFlowColor`
+   * helper the renderer uses (explicit override → `flow.color`
+   * shortcut → built-in domain default like solar/grid/battery/load →
+   * profile fallback), always evaluated in the positive direction. If
+   * every connecting flow resolves to the same colour the node adopts
+   * it; if multiple distinct colours connect (the inverter case) the
+   * node renders in `NEUTRAL_NODE_COLOR` (#CCCCCC) so it stops claiming
+   * any single flow's hue. Returns `undefined` only when no flow
+   * touches the node, letting the caller fall through to the profile
+   * default. v1.0.7+.
    */
   private nodeFlowColor(nodeId: string): string | undefined {
     if (!this.config) return undefined;
+    const cardDomain = this.config.domain;
+    let firstColor: string | undefined;
+    const seenKeys = new Set<string>();
     for (const flow of this.config.flows) {
-      if (flow.from_node === nodeId || flow.to_node === nodeId) {
-        if (flow.color_positive) return flow.color_positive;
+      if (flow.from_node !== nodeId && flow.to_node !== nodeId) continue;
+      const profile = getProfile(flow.domain ?? cardDomain);
+      const color = resolveFlowColor(flow, profile, flow.domain ?? cardDomain, 1);
+      const key = color.toLowerCase();
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        if (!firstColor) firstColor = color;
       }
     }
-    return undefined;
+    if (seenKeys.size === 0) return undefined;
+    if (seenKeys.size === 1) return firstColor;
+    return NEUTRAL_NODE_COLOR;
   }
 
   /**
@@ -546,7 +565,15 @@ export class FlowmeCard extends LitElement {
     }
     .node {
       position: absolute;
-      transform: translate(-50%, -50%);
+      /* The configured (x%, y%) is the dot's CENTRE, not the wrapper's
+       * centre. Pull the wrapper horizontally by -50% (column centred
+       * on the point) and vertically by -dot_size/2 (so the dot, which
+       * is the wrapper's first flex child sitting at y=0, has its own
+       * centre on the point). Label / value flow downward in the flex
+       * column without ever pushing the dot off-anchor — fixes the
+       * v1.0.x bug where toggling show_value drifted the dot upward.
+       * v1.0.7+. */
+      transform: translate(-50%, calc(var(--flowme-dot-size, 12px) / -2));
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -561,6 +588,7 @@ export class FlowmeCard extends LitElement {
       display: inline-block;
       border-radius: 50%;
       box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
+      flex-shrink: 0;
     }
     .node-label {
       font-weight: 600;

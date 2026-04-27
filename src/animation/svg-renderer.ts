@@ -1,5 +1,5 @@
 import type { FlowConfig, FlowmeConfig, FlowProfile, FlowShape } from '../types.js';
-import { getProfile } from '../flow-profiles/index.js';
+import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
   debounce,
   percentToPixel,
@@ -306,23 +306,22 @@ export class SvgRenderer implements FlowRenderer {
       ? DEBUG_DUR_MS
       : Math.max(50, rawSpeed * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
-    const color =
-      direction > 0
-        ? flow.color_positive ?? profile.default_color_positive
-        : flow.color_negative ?? profile.default_color_negative;
+    const domain = flow.domain ?? this.config?.domain;
+    const color = resolveFlowColor(flow, profile, domain, direction);
 
     const burstMultiplier = this.updateBurstState(flowId, magnitude, params, profile);
 
     rlog(
       'applyFlow → computed:', flowId,
-      '| domain=', flow.domain ?? this.config?.domain ?? '(default)',
+      '| domain=', domain ?? '(default)',
       '| shape=', dom.shape,
       '| sigmoidSpeedCurve(mag)=', rawSpeed,
       '| speedMult=', speedMultiplier,
       '| dur=', durMs, 'ms',
       '| direction=', direction,
-      '| color=', color,
+      '| resolved color=', color,
       '| burstMultiplier=', burstMultiplier,
+      '| flow.color=', flow.color,
       '| flow.color_positive=', flow.color_positive,
       '| flow.color_negative=', flow.color_negative,
       '| profile.default_color_positive=', profile.default_color_positive,
@@ -639,6 +638,9 @@ export class SvgRenderer implements FlowRenderer {
 
   private primaryColor(flow: FlowConfig): string {
     const profile = this.profileFor(flow);
-    return flow.color_positive ?? profile.default_color_positive;
+    const domain = flow.domain ?? this.config?.domain;
+    // Outline / wave-stroke colour. Always uses the positive direction
+    // so it matches the resting hue users associate with the flow.
+    return resolveFlowColor(flow, profile, domain, 1);
   }
 }

@@ -73,6 +73,13 @@ export interface FlowConfig {
   waypoints: NodePosition[];
   /** Override the card-level domain for this flow. */
   domain?: FlowDomain;
+  /**
+   * Single-colour shorthand. When set (and the direction-specific
+   * `color_positive` / `color_negative` are omitted) it is used for both
+   * directions of flow, and the connected nodes inherit it as well.
+   * v1.0.7+.
+   */
+  color?: string;
   color_positive?: string;
   color_negative?: string;
   /**

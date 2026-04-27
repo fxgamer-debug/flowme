@@ -2,6 +2,60 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.7] — 2026-04-27
+
+Two visual fixes reported on top of v1.0.6: every flow and node was rendering in the energy profile's positive default colour, and node circles drifted upward whenever their value/label was toggled on. Both are now resolved by introducing a single colour-resolution helper and pinning the node's CSS anchor to the dot's centre.
+
+### Added — `flow.color` shorthand and id-pattern defaults
+
+Flows can now set a single `color:` field as a shortcut that applies to both directions:
+
+```yaml
+flows:
+  - id: solar1
+    from_node: pv1
+    to_node: inverter
+    entity: sensor.pv1_power
+    color: "#FFD700"
+```
+
+Resolution order (highest precedence first), applied identically by both renderers and by the node-fill walk:
+
+1. `flow.color_positive` / `flow.color_negative` — direction-specific override.
+2. `flow.color` — shorthand applied to both directions.
+3. `defaultDomainFlowColor(domain, flow.id)` — built-in residential defaults (energy domain only):
+   - `solar*`, `pv*`, `pv_string_*` → `#FFD700` (gold)
+   - `grid*`, `grid_flow`, `grid_power` → `#1EB4FF` (blue)
+   - `battery*`, `batt*` → `#32DC50` (green)
+   - `load*`, `consumption*`, `house*` → `#FF8C1E` (orange)
+4. `profile.default_color_positive` / `profile.default_color_negative` — profile fallback.
+
+Pattern matching is word-boundary aware so `solarium_temperature` and `overload_count` do **not** trigger.
+
+### Fixed — nodes adopt their connected flow's colour
+
+`nodeFlowColor` now resolves through the same helper for every flow that touches the node, then:
+
+- if all connecting flows resolve to the same colour, the node adopts it;
+- if multiple distinct colours connect (the inverter case in a residential energy diagram), the node renders in the new `NEUTRAL_NODE_COLOR` (`#CCCCCC`) so it stops claiming any single flow's hue;
+- if no flow touches the node, it falls through to the profile default as before.
+
+Combined with the id-pattern defaults this means a typical residential energy config now renders solar nodes gold, grid nodes blue, battery nodes green, load nodes orange and the inverter neutral grey — all without any explicit `color:` config.
+
+`node.color` still wins when set explicitly.
+
+### Fixed — node circle stays anchored at (x%, y%)
+
+The `.node` wrapper used `transform: translate(-50%, -50%)`, which centred the *entire flex column* (dot + label + value) on the configured point. Toggling `show_value` or adding a label therefore shifted the dot upward, breaking alignment with house-photo backgrounds the user had calibrated against.
+
+The wrapper now exposes a `--flowme-dot-size` CSS variable (set inline from `node.size`) and uses `transform: translate(-50%, calc(var(--flowme-dot-size, 12px) / -2))` instead. The dot is the wrapper's first flex child at y = 0, so this offset puts the dot's *centre* on the configured point regardless of whether the column also contains a label or value, which now flow downward from that fixed anchor.
+
+### Tests
+
+- `tests/unit/flow-profiles.test.ts` — `defaultDomainFlowColor` patterns (solar/pv/grid/battery/load), `resolveFlowColor` precedence chain (explicit ↦ shorthand ↦ id-pattern ↦ profile), domain isolation (id patterns only fire for energy).
+- `tests/unit/validate-config.test.ts` — `flow.color` shorthand parses through to the validated config.
+- `tests/smoke/flowme-card.smoke.test.ts` — solar node renders gold without explicit colour, inverter node connecting to four distinct flow colours falls back to `#CCCCCC`, `flow.color` shorthand overrides id-pattern defaults, and the `.node` wrapper carries `--flowme-dot-size` plus the configured `left`/`top` so the dot centre stays anchored.
+
 ## [1.0.6] — 2026-04-27
 
 Speed-curve rework: the v1.0.5 logarithmic curve is replaced by a sigmoid in log10-value space, parameterised per domain by percentile anchors (`threshold`, `p50`, `peak`) and overrideable per flow.

@@ -1,5 +1,5 @@
 import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition } from '../types.js';
-import { getProfile } from '../flow-profiles/index.js';
+import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
   debounce,
   percentToPixel,
@@ -204,10 +204,8 @@ export class HoudiniRenderer implements FlowRenderer {
     const speedMultiplier = flow.speed_multiplier ?? 1;
     const durMs = Math.max(50, sigmoidSpeedCurve(magnitude, params) * speedMultiplier);
     const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
-    const color =
-      direction > 0
-        ? flow.color_positive ?? profile.default_color_positive
-        : flow.color_negative ?? profile.default_color_negative;
+    const domain = flow.domain ?? this.config?.domain;
+    const color = resolveFlowColor(flow, profile, domain, direction);
 
     const count = Math.max(
       1,

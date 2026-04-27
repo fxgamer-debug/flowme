@@ -60,6 +60,17 @@ describe('validateConfig — happy path', () => {
     expect(cfg.background.weather_entity).toBe('weather.home');
   });
 
+  it('parses the v1.0.7 flow.color shorthand', () => {
+    const raw = {
+      ...minimalConfig(),
+      flows: [
+        { id: 'f1', from_node: 'a', to_node: 'b', entity: 'sensor.x', color: '#abcdef' },
+      ],
+    };
+    const cfg = validateConfig(raw);
+    expect(cfg.flows[0]?.color).toBe('#abcdef');
+  });
+
   it('treats flow.waypoints as optional (straight line when omitted)', () => {
     const raw = {
       ...minimalConfig(),

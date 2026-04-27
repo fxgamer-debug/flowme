@@ -162,6 +162,135 @@ describe('flowme-card smoke test (happy-dom)', () => {
     expect(card.shadowRoot!.innerHTML).toContain('camera-icon');
   });
 
+  it('node renders default-by-id energy colour (solar1 → gold) without explicit config', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      nodes: [
+        { id: 'pv1', position: { x: 10, y: 50 } },
+        { id: 'inv', position: { x: 90, y: 50 } },
+      ],
+      flows: [
+        { id: 'solar1', from_node: 'pv1', to_node: 'inv', entity: 'sensor.power', waypoints: [] },
+      ],
+    });
+    card.hass = makeHass();
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const dot = card.shadowRoot!.querySelector('[data-node-id="pv1"] .node-dot') as HTMLElement;
+    expect(dot).toBeTruthy();
+    // Inline `background: #FFD700;` — happy-dom keeps the literal hex on the style attribute.
+    expect(dot.getAttribute('style') ?? '').toMatch(/#FFD700/i);
+  });
+
+  it('node connecting to multiple distinct flow colours falls back to neutral grey #CCCCCC', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      nodes: [
+        { id: 'pv1', position: { x: 10, y: 30 } },
+        { id: 'grid', position: { x: 10, y: 70 } },
+        { id: 'battery', position: { x: 90, y: 30 } },
+        { id: 'load', position: { x: 90, y: 70 } },
+        { id: 'inverter', position: { x: 50, y: 50 } },
+      ],
+      flows: [
+        { id: 'solar1', from_node: 'pv1', to_node: 'inverter', entity: 'sensor.power', waypoints: [] },
+        { id: 'grid_flow', from_node: 'grid', to_node: 'inverter', entity: 'sensor.power', waypoints: [] },
+        { id: 'battery_flow', from_node: 'battery', to_node: 'inverter', entity: 'sensor.power', waypoints: [] },
+        { id: 'load_flow', from_node: 'inverter', to_node: 'load', entity: 'sensor.power', waypoints: [] },
+      ],
+    });
+    card.hass = makeHass();
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const inverterDot = card.shadowRoot!.querySelector('[data-node-id="inverter"] .node-dot') as HTMLElement;
+    expect(inverterDot).toBeTruthy();
+    expect(inverterDot.getAttribute('style') ?? '').toMatch(/#CCCCCC/i);
+    // Sanity: each terminal node still adopts its single connected flow's colour.
+    const pvDot = card.shadowRoot!.querySelector('[data-node-id="pv1"] .node-dot') as HTMLElement;
+    expect(pvDot.getAttribute('style') ?? '').toMatch(/#FFD700/i);
+    const gridDot = card.shadowRoot!.querySelector('[data-node-id="grid"] .node-dot') as HTMLElement;
+    expect(gridDot.getAttribute('style') ?? '').toMatch(/#1EB4FF/i);
+    const battDot = card.shadowRoot!.querySelector('[data-node-id="battery"] .node-dot') as HTMLElement;
+    expect(battDot.getAttribute('style') ?? '').toMatch(/#32DC50/i);
+    const loadDot = card.shadowRoot!.querySelector('[data-node-id="load"] .node-dot') as HTMLElement;
+    expect(loadDot.getAttribute('style') ?? '').toMatch(/#FF8C1E/i);
+  });
+
+  it('explicit flow.color shorthand overrides default-by-id', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      nodes: [
+        { id: 'pv1', position: { x: 10, y: 50 } },
+        { id: 'inv', position: { x: 90, y: 50 } },
+      ],
+      flows: [
+        { id: 'solar1', from_node: 'pv1', to_node: 'inv', entity: 'sensor.power', waypoints: [], color: '#ff00aa' },
+      ],
+    });
+    card.hass = makeHass();
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const dot = card.shadowRoot!.querySelector('[data-node-id="pv1"] .node-dot') as HTMLElement;
+    expect(dot.getAttribute('style') ?? '').toMatch(/#ff00aa/i);
+  });
+
+  it('node wrapper uses dot-anchored transform so the circle centre stays at (x%, y%) regardless of label/value', async () => {
+    const card = document.createElement('flowme-card') as HTMLElement & {
+      setConfig: (c: unknown) => void;
+      hass?: HomeAssistant;
+      updateComplete: Promise<unknown>;
+    };
+    card.setConfig({
+      ...MINIMAL_CONFIG,
+      nodes: [
+        // Node A with neither label nor value
+        { id: 'a', position: { x: 10, y: 10 }, size: 12 },
+        // Node B with both label and value showing
+        {
+          id: 'b',
+          position: { x: 90, y: 90 },
+          size: 12,
+          label: 'House',
+          show_value: true,
+          show_label: true,
+          entity: 'sensor.power',
+        },
+      ],
+      // Drop the MINIMAL_CONFIG flow which references src/dst.
+      flows: [],
+    });
+    card.hass = makeHass();
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const a = card.shadowRoot!.querySelector('[data-node-id="a"]') as HTMLElement;
+    const b = card.shadowRoot!.querySelector('[data-node-id="b"]') as HTMLElement;
+    // Both wrappers must declare the dot-size CSS variable so the
+    // shared `.node` rule can offset the wrapper by exactly half the
+    // dot — that is what keeps the circle centred on (x%, y%) even
+    // when label/value are added to the column.
+    expect(a.getAttribute('style') ?? '').toMatch(/--flowme-dot-size:\s*12px/);
+    expect(b.getAttribute('style') ?? '').toMatch(/--flowme-dot-size:\s*12px/);
+    expect(a.getAttribute('style') ?? '').toMatch(/left:\s*10%/);
+    expect(a.getAttribute('style') ?? '').toMatch(/top:\s*10%/);
+    expect(b.getAttribute('style') ?? '').toMatch(/left:\s*90%/);
+    expect(b.getAttribute('style') ?? '').toMatch(/top:\s*90%/);
+  });
+
   it('getLayoutOptions + getGridOptions return grid hints so HA stops warning about resizing', () => {
     const card = document.createElement('flowme-card') as HTMLElement & {
       setConfig: (c: unknown) => void;

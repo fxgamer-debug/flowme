@@ -123,6 +123,7 @@ function validateFlow(
     }
     flow.domain = f['domain'] as FlowConfig['domain'];
   }
+  if (typeof f['color'] === 'string') flow.color = f['color'] as string;
   if (typeof f['color_positive'] === 'string') flow.color_positive = f['color_positive'] as string;
   if (typeof f['color_negative'] === 'string') flow.color_negative = f['color_negative'] as string;
   if (typeof f['threshold'] === 'number') flow.threshold = f['threshold'] as number;

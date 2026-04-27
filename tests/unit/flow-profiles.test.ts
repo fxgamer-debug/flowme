@@ -9,6 +9,9 @@ import {
   genericProfile,
   getProfile,
   flowProfiles,
+  defaultDomainFlowColor,
+  resolveFlowColor,
+  NEUTRAL_NODE_COLOR,
 } from '../../src/flow-profiles/index.js';
 import {
   resolveSpeedCurveParams,
@@ -377,6 +380,101 @@ describe('direction colours (v1.0.5 distinct negative colours)', () => {
     expect(waterProfile.default_color_negative).toBe('#06B6D4');
     expect(gasProfile.default_color_negative).toBe('#A16207');
     expect(genericProfile.default_color_negative).toBe('#34D399');
+  });
+});
+
+describe('defaultDomainFlowColor (v1.0.7 energy id-pattern defaults)', () => {
+  it('matches solar / pv ids → gold', () => {
+    expect(defaultDomainFlowColor('energy', 'solar1')).toBe('#FFD700');
+    expect(defaultDomainFlowColor('energy', 'solar_string_1')).toBe('#FFD700');
+    expect(defaultDomainFlowColor('energy', 'pv1')).toBe('#FFD700');
+    expect(defaultDomainFlowColor('energy', 'pv_string_2')).toBe('#FFD700');
+    expect(defaultDomainFlowColor('energy', 'PV2')).toBe('#FFD700');
+  });
+
+  it('matches grid ids → blue', () => {
+    expect(defaultDomainFlowColor('energy', 'grid')).toBe('#1EB4FF');
+    expect(defaultDomainFlowColor('energy', 'grid_flow')).toBe('#1EB4FF');
+    expect(defaultDomainFlowColor('energy', 'grid_power')).toBe('#1EB4FF');
+  });
+
+  it('matches battery / batt ids → green', () => {
+    expect(defaultDomainFlowColor('energy', 'battery')).toBe('#32DC50');
+    expect(defaultDomainFlowColor('energy', 'battery_flow')).toBe('#32DC50');
+    expect(defaultDomainFlowColor('energy', 'batt_1')).toBe('#32DC50');
+  });
+
+  it('matches load / consumption / house ids → orange', () => {
+    expect(defaultDomainFlowColor('energy', 'load')).toBe('#FF8C1E');
+    expect(defaultDomainFlowColor('energy', 'load_flow')).toBe('#FF8C1E');
+    expect(defaultDomainFlowColor('energy', 'house_load')).toBe('#FF8C1E');
+    expect(defaultDomainFlowColor('energy', 'consumption')).toBe('#FF8C1E');
+  });
+
+  it('returns undefined for non-energy domains (preserves profile defaults)', () => {
+    expect(defaultDomainFlowColor('water', 'solar1')).toBeUndefined();
+    expect(defaultDomainFlowColor('network', 'grid')).toBeUndefined();
+    expect(defaultDomainFlowColor(undefined, 'solar1')).toBeUndefined();
+  });
+
+  it('returns undefined for energy ids that do not match any pattern', () => {
+    expect(defaultDomainFlowColor('energy', 'inverter')).toBeUndefined();
+    expect(defaultDomainFlowColor('energy', 'random_sensor')).toBeUndefined();
+    // Substrings inside other words should NOT match (word-boundary aware).
+    expect(defaultDomainFlowColor('energy', 'solarium_temperature')).toBeUndefined();
+    expect(defaultDomainFlowColor('energy', 'overload_count')).toBeUndefined();
+  });
+});
+
+describe('resolveFlowColor (v1.0.7 unified colour resolution)', () => {
+  function flowFixture(overrides: Partial<{ id: string; color: string; color_positive: string; color_negative: string }> = {}) {
+    return {
+      id: 'flow_x',
+      ...overrides,
+    } as Parameters<typeof resolveFlowColor>[0];
+  }
+
+  it('uses flow.color_positive / color_negative when set, regardless of direction', () => {
+    const flow = flowFixture({ color_positive: '#111111', color_negative: '#222222' });
+    expect(resolveFlowColor(flow, energyProfile, 'energy', 1)).toBe('#111111');
+    expect(resolveFlowColor(flow, energyProfile, 'energy', -1)).toBe('#222222');
+  });
+
+  it('flow.color is a shortcut applied to BOTH directions', () => {
+    const flow = flowFixture({ color: '#abcdef' });
+    expect(resolveFlowColor(flow, energyProfile, 'energy', 1)).toBe('#abcdef');
+    expect(resolveFlowColor(flow, energyProfile, 'energy', -1)).toBe('#abcdef');
+  });
+
+  it('direction-specific override beats the flow.color shortcut', () => {
+    const flow = flowFixture({ color: '#abcdef', color_positive: '#111111' });
+    expect(resolveFlowColor(flow, energyProfile, 'energy', 1)).toBe('#111111');
+    // Negative falls through to the shortcut since color_negative is unset.
+    expect(resolveFlowColor(flow, energyProfile, 'energy', -1)).toBe('#abcdef');
+  });
+
+  it('falls back to defaultDomainFlowColor for known energy ids', () => {
+    expect(resolveFlowColor(flowFixture({ id: 'solar1' }), energyProfile, 'energy', 1)).toBe('#FFD700');
+    expect(resolveFlowColor(flowFixture({ id: 'grid_flow' }), energyProfile, 'energy', 1)).toBe('#1EB4FF');
+    expect(resolveFlowColor(flowFixture({ id: 'battery_flow' }), energyProfile, 'energy', 1)).toBe('#32DC50');
+    expect(resolveFlowColor(flowFixture({ id: 'load_flow' }), energyProfile, 'energy', 1)).toBe('#FF8C1E');
+  });
+
+  it('falls back to profile defaults when no override and no id pattern matches', () => {
+    const flow = flowFixture({ id: 'inverter' });
+    expect(resolveFlowColor(flow, energyProfile, 'energy', 1)).toBe(energyProfile.default_color_positive);
+    expect(resolveFlowColor(flow, energyProfile, 'energy', -1)).toBe(energyProfile.default_color_negative);
+  });
+
+  it('does not apply id-pattern defaults outside the energy domain', () => {
+    const flow = flowFixture({ id: 'solar1' });
+    expect(resolveFlowColor(flow, waterProfile, 'water', 1)).toBe(waterProfile.default_color_positive);
+  });
+});
+
+describe('NEUTRAL_NODE_COLOR', () => {
+  it('exposes the v1.0.7 inverter-style fallback grey', () => {
+    expect(NEUTRAL_NODE_COLOR).toBe('#CCCCCC');
   });
 });
 
