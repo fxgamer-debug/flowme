@@ -410,14 +410,57 @@ The underlying Lovelace card must already be installed (via HACS or manually) be
 
 ## Development
 
+### Prerequisites
+
+- Node.js 20+
+- npm
+
+### Setup
+
 ```bash
+git clone https://github.com/fxgamer-debug/flowme
+cd flowme
 npm install
-npm run dev                 # vite dev server
+```
+
+### Run dev server
+
+```bash
+npm run dev
+# Opens http://localhost:5173
+# Hot reloads on file changes
+# No Home Assistant installation required
+```
+
+The dev server loads `src/dev/demo-app.ts` which renders a FlowMe card with a
+realistic mock Home Assistant environment. All sensor values update automatically
+every 2 seconds. Use the control panel on the right to override values, change
+weather and sun state, or test animation at different speeds.
+
+### Build
+
+```bash
+npm run build
+# Output: dist/flowme-card.js
+```
+
+### Test
+
+```bash
+npm run test              # run all tests once
+npm run test:watch        # watch mode
+npm run test:coverage     # with coverage report
+```
+
+### All scripts
+
+```bash
+npm run dev                 # vite dev server at http://localhost:5173
 npm run build               # produces dist/flowme-card.js
 npm run type-check          # tsc --noEmit on src
 npm run type-check:tests    # tsc --noEmit on tests
 npm run lint                # eslint src
-npm run test                # vitest run (125+ tests)
+npm run test                # vitest run (235+ tests)
 npm run test:watch          # vitest watch mode
 npm run test:coverage       # vitest run --coverage
 npm run check               # lint + type-check + type-check:tests + test + build

@@ -5,11 +5,19 @@ import { resolve } from 'node:path';
 // The Paint Worklet source is imported as ?raw text and inlined into
 // flowme-card.js, then loaded at runtime via a Blob URL. This keeps the
 // entire card as one file and avoids HACS having to ship a second asset.
+//
+// Dev server: `npm run dev` starts Vite with index.html at the root, which
+// imports src/dev/demo-app.ts. No lib mode is used in dev — the full module
+// graph is served with hot reload via native ESM.
 export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
     },
+  },
+  server: {
+    port: 5173,
+    open: true,
   },
   build: {
     lib: {

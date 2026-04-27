@@ -469,6 +469,12 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     }
     background.weather_states = states;
   }
+  if (bg['sun_entity'] !== undefined) {
+    if (typeof bg['sun_entity'] !== 'string') {
+      fail('background.sun_entity', 'must be a string entity id (e.g. sun.sun)');
+    }
+    background.sun_entity = bg['sun_entity'] as string;
+  }
   if (bg['transition_duration'] !== undefined) {
     if (typeof bg['transition_duration'] !== 'number') {
       fail('background.transition_duration', 'must be a number (milliseconds)');

@@ -329,6 +329,14 @@ export interface BackgroundConfig {
   weather_states?: Record<string, string>;
   /** Optional weather entity id driving background swaps. */
   weather_entity?: string;
+  /**
+   * Optional sun entity id (e.g. `sun.sun`). When configured, enables
+   * automatic night background variants: if sun.state === 'below_horizon'
+   * the current weather state has '-night' appended before lookup, enabling
+   * mappings like `partlycloudy-night`. Falls back to `clear-night` as a
+   * generic night image, then to `background.default`. v1.0.13+.
+   */
+  sun_entity?: string;
   /** Fade duration between background images, in milliseconds. Default 2000. */
   transition_duration?: number;
 }

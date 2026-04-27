@@ -108,8 +108,16 @@ export class SvgRenderer implements FlowRenderer {
   private currentDurMs = new Map<string, number>();
   private targetDurMs = new Map<string, number>();
   private speedTransitionStart = new Map<string, number>();
+  // Direction change: track last direction; on sign flip decelerate→0→new direction
+  private lastDirection = new Map<string, number>(); // +1 or -1
+  private dirChanging = new Map<string, { startMs: number; oldDir: number; newDir: number }>();
   private rafHandle: number | null = null;
   private lastFrameTime = 0;
+  // Adaptive particle count per flow (P3-4)
+  private adaptiveCount = new Map<string, number>();
+  private lastAdaptiveChange = new Map<string, number>();
+  // Animation resume (P3-4): track last particle offsets
+  private particleOffsets = new Map<string, number[]>();
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
@@ -151,21 +159,21 @@ export class SvgRenderer implements FlowRenderer {
     const loop = (now: number) => {
       if (!this.svg) return; // destroyed
       const delta = now - this.lastFrameTime;
+      this.sampleFrameTime();
       if (delta >= frameInterval) {
         this.lastFrameTime = now - (delta % frameInterval);
-        // Smooth speed transitions need periodic flush even without new sensor values
+        // Smooth speed/direction transitions need periodic flush
         const smoothSpeed = this.config?.animation?.smooth_speed !== false;
-        if (smoothSpeed && this.speedTransitionStart.size > 0) {
+        if (smoothSpeed && (this.speedTransitionStart.size > 0 || this.dirChanging.size > 0)) {
           this.flushUpdates();
         }
       }
       this.rafHandle = requestAnimationFrame(loop);
     };
 
-    if (targetFps < 60) {
-      this.lastFrameTime = performance.now();
-      this.rafHandle = requestAnimationFrame(loop);
-    }
+    // Always run the rAF loop for smooth_speed and direction change transitions
+    this.lastFrameTime = performance.now();
+    this.rafHandle = requestAnimationFrame(loop);
   }
 
   destroy(): void {
@@ -185,6 +193,11 @@ export class SvgRenderer implements FlowRenderer {
     this.currentDurMs.clear();
     this.targetDurMs.clear();
     this.speedTransitionStart.clear();
+    this.lastDirection.clear();
+    this.dirChanging.clear();
+    this.adaptiveCount.clear();
+    this.lastAdaptiveChange.clear();
+    this.particleOffsets.clear();
   }
 
   // ── internal ──────────────────────────────────────────────────────────────
@@ -311,22 +324,53 @@ export class SvgRenderer implements FlowRenderer {
     let durMs = Math.max(50, rawSpeed * speedMultiplier);
     if (isShimmer) durMs = durMs / SHIMMER_SPEED_FACTOR;
 
-    // ANIM-2: smooth_speed — interpolate toward new duration
+    // ANIM-2 / P3-4: smooth_speed
     const smoothSpeed = this.config?.animation?.smooth_speed !== false;
     durMs = this.resolveSmoothedDur(flowId, durMs, smoothSpeed);
 
     // direction
     const directionMode = anim.direction ?? 'auto';
-    let direction: number;
-    if (directionMode === 'forward') direction = 1;
-    else if (directionMode === 'reverse') direction = -1;
-    else direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
+    let intendedDirection: number;
+    if (directionMode === 'forward') intendedDirection = 1;
+    else if (directionMode === 'reverse') intendedDirection = -1;
+    else intendedDirection = value < 0 !== (flow.reverse === true) ? -1 : 1;
+
+    // P3-4: direction change — decelerate to zero then re-accelerate in new direction (300ms total)
+    let direction = intendedDirection;
+    let effectiveGroupOpacity = isShimmer ? SHIMMER_OPACITY : 1;
+    if (smoothSpeed && directionMode === 'auto') {
+      const prevDir = this.lastDirection.get(flowId);
+      const changing = this.dirChanging.get(flowId);
+      if (prevDir !== undefined && prevDir !== intendedDirection && !changing) {
+        this.dirChanging.set(flowId, { startMs: performance.now(), oldDir: prevDir, newDir: intendedDirection });
+      }
+      const dirChange = this.dirChanging.get(flowId);
+      if (dirChange) {
+        const DIR_CHANGE_MS = 300;
+        const elapsed = performance.now() - dirChange.startMs;
+        if (elapsed < DIR_CHANGE_MS) {
+          const t = elapsed / DIR_CHANGE_MS;
+          if (t < 0.5) {
+            // decelerate: fade group opacity toward 0
+            effectiveGroupOpacity = (isShimmer ? SHIMMER_OPACITY : 1) * (1 - t * 2);
+            direction = dirChange.oldDir;
+          } else {
+            // re-accelerate in new direction
+            effectiveGroupOpacity = (isShimmer ? SHIMMER_OPACITY : 1) * ((t - 0.5) * 2);
+            direction = dirChange.newDir;
+          }
+        } else {
+          this.dirChanging.delete(flowId);
+          direction = intendedDirection;
+        }
+      }
+    }
+    this.lastDirection.set(flowId, intendedDirection);
 
     const domain = flow.domain ?? this.config?.domain;
     const color = resolveFlowColor(flow, profile, domain, direction, this.config?.domain_colors);
 
-    const groupOpacity = isShimmer ? SHIMMER_OPACITY : 1;
-    this.setGroupOpacity(dom, groupOpacity);
+    this.setGroupOpacity(dom, effectiveGroupOpacity);
 
     const burstMultiplier = this.updateBurstState(flowId, magnitude, params, profile);
 
@@ -455,6 +499,24 @@ export class SvgRenderer implements FlowRenderer {
   }
 
   /** Resolve effective particle count, respecting explicit override and burst */
+  private frameTimeSamples: number[] = [];
+  private lastFrameForAdaptive = 0;
+
+  private sampleFrameTime(): void {
+    const now = performance.now();
+    if (this.lastFrameForAdaptive > 0) {
+      const delta = now - this.lastFrameForAdaptive;
+      this.frameTimeSamples.push(delta);
+      if (this.frameTimeSamples.length > 10) this.frameTimeSamples.shift();
+    }
+    this.lastFrameForAdaptive = now;
+  }
+
+  private avgFrameMs(): number {
+    if (this.frameTimeSamples.length === 0) return 16.67;
+    return this.frameTimeSamples.reduce((a, b) => a + b, 0) / this.frameTimeSamples.length;
+  }
+
   private resolveParticleCount(
     flow: FlowConfig,
     profile: FlowProfile,
@@ -462,13 +524,45 @@ export class SvgRenderer implements FlowRenderer {
     burstMultiplier: number,
   ): number {
     const anim = flow.animation ?? {};
+    const targetFps = this.config?.animation?.fps ?? 60;
+    const budgetMs = 1000 / targetFps;
+
+    // When particle_count is explicitly set, skip adaptive logic
     if (anim.particle_count !== undefined) return anim.particle_count;
+
     const base = Math.max(
       1,
       Math.round(profile.particle_count_curve ? profile.particle_count_curve(value) : DEFAULT_PARTICLE_COUNT),
     );
     const burstMax = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
-    return Math.min(burstMax, Math.max(1, Math.round(base * burstMultiplier)));
+    const configured = Math.min(burstMax, Math.max(1, Math.round(base * burstMultiplier)));
+
+    // P3-4: adaptive particle count — reduce when over frame budget
+    const style = anim.animation_style ?? 'dots';
+    if (style === 'dots' || style === 'trail') {
+      const current = this.adaptiveCount.get(flow.id) ?? configured;
+      const avgMs = this.avgFrameMs();
+      const now = performance.now();
+      const lastChange = this.lastAdaptiveChange.get(flow.id) ?? 0;
+      const CHANGE_INTERVAL_MS = 1000;
+      if (now - lastChange > CHANGE_INTERVAL_MS) {
+        let next = current;
+        if (avgMs > budgetMs * 1.2 && current > 1) {
+          next = current - 1;
+          rlog('adaptive:', flow.id, 'reducing particles', current, '→', next, '(avg frame', avgMs.toFixed(1), 'ms)');
+        } else if (avgMs < budgetMs * 0.8 && current < configured) {
+          next = current + 1;
+          rlog('adaptive:', flow.id, 'restoring particles', current, '→', next);
+        }
+        if (next !== current) {
+          this.adaptiveCount.set(flow.id, next);
+          this.lastAdaptiveChange.set(flow.id, now);
+        }
+      }
+      return this.adaptiveCount.get(flow.id) ?? configured;
+    }
+
+    return configured;
   }
 
   private resolveParticleRadius(flow: FlowConfig): number {

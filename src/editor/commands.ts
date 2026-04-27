@@ -83,6 +83,76 @@ export function deleteNode(config: FlowmeConfig, nodeId: string): FlowmeConfig {
   return next;
 }
 
+/**
+ * Bulk-move multiple nodes simultaneously, preserving relative positions.
+ * dx/dy are percentage deltas applied to all specified nodeIds.
+ * Creates a single undo entry for the whole operation.
+ */
+export function bulkMoveNodes(
+  config: FlowmeConfig,
+  moves: Map<string, NodePosition>,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const n of next.nodes) {
+    const pos = moves.get(n.id);
+    if (pos) {
+      n.position = { x: clampPercent(pos.x), y: clampPercent(pos.y) };
+    }
+  }
+  return next;
+}
+
+/** Delete all nodes in the set (and their connected flows). Single undo entry. */
+export function bulkDeleteNodes(config: FlowmeConfig, nodeIds: Set<string>): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.nodes = next.nodes.filter((n) => !nodeIds.has(n.id));
+  next.flows = next.flows.filter((f) => !nodeIds.has(f.from_node) && !nodeIds.has(f.to_node));
+  return next;
+}
+
+/** Set visible on all nodes in the set. Single undo entry. */
+export function bulkSetNodesVisible(
+  config: FlowmeConfig,
+  nodeIds: Set<string>,
+  visible: boolean,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  for (const n of next.nodes) {
+    if (nodeIds.has(n.id)) n.visible = visible;
+  }
+  return next;
+}
+
+/** Align all nodes in the set horizontally (same y as the anchor node). */
+export function alignNodesHorizontal(
+  config: FlowmeConfig,
+  nodeIds: Set<string>,
+  anchorId: string,
+): FlowmeConfig {
+  const anchor = config.nodes.find((n) => n.id === anchorId);
+  if (!anchor) return config;
+  const next = cloneConfig(config);
+  for (const n of next.nodes) {
+    if (nodeIds.has(n.id)) n.position = { ...n.position, y: anchor.position.y };
+  }
+  return next;
+}
+
+/** Align all nodes in the set vertically (same x as the anchor node). */
+export function alignNodesVertical(
+  config: FlowmeConfig,
+  nodeIds: Set<string>,
+  anchorId: string,
+): FlowmeConfig {
+  const anchor = config.nodes.find((n) => n.id === anchorId);
+  if (!anchor) return config;
+  const next = cloneConfig(config);
+  for (const n of next.nodes) {
+    if (nodeIds.has(n.id)) n.position = { ...n.position, x: anchor.position.x };
+  }
+  return next;
+}
+
 export function setNodeLabel(
   config: FlowmeConfig,
   nodeId: string,
@@ -211,6 +281,16 @@ export function setWeatherEntity(
   const next = cloneConfig(config);
   if (entity && entity.length) next.background.weather_entity = entity;
   else delete next.background.weather_entity;
+  return next;
+}
+
+export function setSunEntity(
+  config: FlowmeConfig,
+  entity: string | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  if (entity && entity.length) next.background.sun_entity = entity;
+  else delete next.background.sun_entity;
   return next;
 }
 

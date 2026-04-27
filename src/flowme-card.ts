@@ -14,13 +14,13 @@ import { createRenderer } from './animation/renderer-factory.js';
 import { SvgRenderer } from './animation/svg-renderer.js';
 import type { FlowRenderer } from './animation/types.js';
 import { getProfile, NEUTRAL_NODE_COLOR, resolveFlowColor } from './flow-profiles/index.js';
-import { parseAspectRatio, parseSensorValue, scaleSensorValue } from './utils.js';
+import { parseAspectRatio, parseSensorValue, resolveNightBackground, scaleSensorValue } from './utils.js';
 import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.12';
+const CARD_VERSION = '1.0.13';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -93,6 +93,7 @@ export class FlowmeCard extends LitElement {
         ...(cfg?.flows.map((f) => f.entity) ?? []),
         ...(cfg?.nodes.map((n) => n.entity).filter(Boolean) ?? []),
         cfg?.background.weather_entity,
+        cfg?.background.sun_entity,
       ].filter((id): id is string => typeof id === 'string' && id.length > 0);
 
       const watchValues: Record<string, string | undefined> = {};
@@ -112,6 +113,16 @@ export class FlowmeCard extends LitElement {
         if (prevState !== nextState) {
           // State changed — sync background immediately without waiting for
           // the reactive update cycle (which may be skipped when prev === value).
+          this.syncWeatherBackground();
+        }
+      }
+      // SUN-1: watch sun entity state changes explicitly
+      const sunEntityId = cfg?.background.sun_entity;
+      if (sunEntityId) {
+        const prevSun = prev?.states[sunEntityId]?.state;
+        const nextSun = value.states[sunEntityId]?.state;
+        if (prevSun !== nextSun) {
+          dlog('[sun] state changed:', prevSun, '→', nextSun);
           this.syncWeatherBackground();
         }
       }
@@ -376,16 +387,25 @@ export class FlowmeCard extends LitElement {
   private resolveTargetBackground(): string {
     const bg = this.config?.background;
     if (!bg) return '';
+
     if (bg.weather_entity && bg.weather_states && this.hass) {
       const weather = this.hass.states[bg.weather_entity];
       if (weather) {
-        // Exact string match — HA provides lowercase hyphenated state strings.
-        // Never transform the state before matching (no toLowerCase, no replace).
-        const match = bg.weather_states[weather.state];
-        dlog('[weather]', weather.state, '→', match ?? '(no match, using default)');
-        if (match) return match;
+        const weatherState = weather.state;
+        const sunState = bg.sun_entity ? this.hass.states[bg.sun_entity]?.state : undefined;
+        const resolved = resolveNightBackground(weatherState, sunState, bg.weather_states, bg.default);
+
+        // Compute lookup key for debug logging only
+        let lookupKey = weatherState;
+        if (sunState === 'below_horizon' && !weatherState.endsWith('-night')) {
+          lookupKey = `${weatherState}-night`;
+        }
+        dlog('[FlowMe] sun:', sunState, 'weather:', weatherState, '→ lookup key:', lookupKey, '→ image:', resolved !== bg.default ? resolved : 'default');
+
+        return resolved;
       }
     }
+
     return bg.default;
   }
 

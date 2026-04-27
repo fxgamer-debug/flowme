@@ -59,8 +59,14 @@ import {
   clearFlowAnimation,
   setVisibility,
   setWeatherEntity,
+  setSunEntity,
   setWeatherStateImage,
   snapToGrid,
+  bulkMoveNodes,
+  bulkDeleteNodes,
+  bulkSetNodesVisible,
+  alignNodesHorizontal,
+  alignNodesVertical,
 } from './editor/commands.js';
 import './editor/toolbar.js';
 import type { ToolbarAction } from './editor/toolbar.js';
@@ -69,6 +75,8 @@ import type { Point } from './pathfinding/types.js';
 
 type DragTarget =
   | { kind: 'node'; id: string }
+  | { kind: 'node-bulk'; ids: string[]; startPositions: Map<string, NodePosition>; startPx: { x: number; y: number } }
+  | { kind: 'rubber-band'; startPx: { x: number; y: number }; startPct: NodePosition }
   | { kind: 'waypoint'; flowId: string; index: number }
   | { kind: 'overlay'; id: string }
   | { kind: 'overlay-resize'; id: string; startSize: { width: number; height: number }; startPx: { x: number; y: number } };
@@ -107,11 +115,16 @@ export class FlowmeCardEditor extends LitElement {
   @state() private config?: FlowmeConfig;
   @state() private pending: PendingAction = null;
   @state() private previewMode = false;
+  /** Primary single-select node (opens inspector). Cleared when multi-select is active. */
   @state() private selectedNodeId: string | null = null;
+  /** Multi-select set — when size > 0 the multi-select toolbar is shown. */
+  @state() private selectedNodeIds: Set<string> = new Set();
   @state() private selectedFlowId: string | null = null;
   @state() private selectedOverlayId: string | null = null;
   /** Nodes selected for suggest-path (max 2). Shift-click to add/remove. */
   @state() private suggestNodeIds: string[] = [];
+  /** Rubber-band selection box (% coordinates, null when not dragging) */
+  @state() private rubberBand: { x1: number; y1: number; x2: number; y2: number } | null = null;
   @state() private customConfigDraft = '';
   @state() private customConfigError = '';
   @state() private statusMessage = '';
@@ -190,6 +203,10 @@ export class FlowmeCardEditor extends LitElement {
           style=${`padding-top: ${paddingTop};`}
           @click=${this.onStageClick}
           @contextmenu=${this.onStageContextMenu}
+          @pointerdown=${this.onStagePointerDown}
+          @pointermove=${this.onStagePointerMove}
+          @pointerup=${this.onStagePointerUp}
+          @pointercancel=${this.onStagePointerUp}
           ${ref(this.stageRef)}
         >
           <div
@@ -203,8 +220,10 @@ export class FlowmeCardEditor extends LitElement {
           ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
           ${this.config.nodes.map((n) => this.renderHandle(n))}
           ${this.renderSuggestPreview()}
+          ${this.renderRubberBand()}
         </div>
         ${this.renderSuggestBar()}
+        ${this.renderMultiSelectToolbar()}
         ${this.renderInspector()}
         ${this.renderFlowsListPanel()}
         ${this.renderWeatherPanel()}
@@ -316,11 +335,12 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderHandle(node: NodeConfig): TemplateResult {
     const selected = node.id === this.selectedNodeId;
+    const multiSelected = this.selectedNodeIds.has(node.id);
     const inSuggestSet = this.suggestNodeIds.includes(node.id);
     const isHidden = node.visible === false;
     return html`
       <div
-        class=${`handle ${selected ? 'selected' : ''} ${inSuggestSet ? 'suggest-selected' : ''} ${isHidden ? 'handle-hidden' : ''}`}
+        class=${`handle ${selected ? 'selected' : ''} ${multiSelected ? 'multi-selected' : ''} ${inSuggestSet ? 'suggest-selected' : ''} ${isHidden ? 'handle-hidden' : ''}`}
         data-node-id=${node.id}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
         @pointerdown=${this.onHandlePointerDown}
@@ -1307,6 +1327,84 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
+  private renderRubberBand(): TemplateResult | typeof nothing {
+    const rb = this.rubberBand;
+    if (!rb) return nothing;
+    const left = Math.min(rb.x1, rb.x2);
+    const top = Math.min(rb.y1, rb.y2);
+    const width = Math.abs(rb.x2 - rb.x1);
+    const height = Math.abs(rb.y2 - rb.y1);
+    return html`
+      <div
+        class="rubber-band"
+        style=${`left:${left}%;top:${top}%;width:${width}%;height:${height}%;`}
+      ></div>
+    `;
+  }
+
+  private renderMultiSelectToolbar(): TemplateResult | typeof nothing {
+    const count = this.selectedNodeIds.size;
+    if (count < 2) return nothing;
+    const ids = this.selectedNodeIds;
+    const anchorId = Array.from(ids)[0]!;
+    return html`
+      <div class="multiselect-toolbar">
+        <span class="multiselect-count">${count} nodes selected</span>
+        <button
+          class="ms-btn"
+          title=${count === 2 ? 'Suggest path between selected nodes' : 'Select exactly 2 nodes to suggest a path'}
+          ?disabled=${count !== 2 || this.suggestBusy}
+          @click=${() => this.runSuggestPath()}
+        >Suggest path</button>
+        <button class="ms-btn" @click=${() => this.bulkHide(ids)}>Hide</button>
+        <button class="ms-btn" @click=${() => this.bulkShow(ids)}>Show</button>
+        <button class="ms-btn" @click=${() => this.bulkAlignH(ids, anchorId)}>Align H</button>
+        <button class="ms-btn" @click=${() => this.bulkAlignV(ids, anchorId)}>Align V</button>
+        <button class="ms-btn danger" @click=${() => this.bulkDelete(ids)}>Delete</button>
+        <button class="ms-btn ghost" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; this.suggestNodeIds = []; }}>✕ Deselect</button>
+      </div>
+    `;
+  }
+
+  private bulkHide(ids: Set<string>): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = bulkSetNodesVisible(prev, ids, false);
+    this.pushPatch(prev, next, `hide ${ids.size} nodes`);
+  }
+
+  private bulkShow(ids: Set<string>): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = bulkSetNodesVisible(prev, ids, true);
+    this.pushPatch(prev, next, `show ${ids.size} nodes`);
+  }
+
+  private bulkAlignH(ids: Set<string>, anchorId: string): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = alignNodesHorizontal(prev, ids, anchorId);
+    this.pushPatch(prev, next, `align ${ids.size} nodes horizontally`);
+  }
+
+  private bulkAlignV(ids: Set<string>, anchorId: string): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = alignNodesVertical(prev, ids, anchorId);
+    this.pushPatch(prev, next, `align ${ids.size} nodes vertically`);
+  }
+
+  private bulkDelete(ids: Set<string>): void {
+    if (!this.config) return;
+    if (!window.confirm(`Delete ${ids.size} nodes (and their flows)?`)) return;
+    const prev = this.config;
+    const next = bulkDeleteNodes(prev, ids);
+    this.pushPatch(prev, next, `delete ${ids.size} nodes`);
+    this.selectedNodeIds = new Set();
+    this.selectedNodeId = null;
+    this.suggestNodeIds = [];
+  }
+
   private renderFlowsListPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const flows = this.config.flows;
@@ -1398,6 +1496,26 @@ export class FlowmeCardEditor extends LitElement {
                 ${bg.weather_states?.[liveWeatherState]
                   ? html` → <span class="weather-match-ok">matched</span>`
                   : html` → <span class="weather-match-miss">no mapping (using default)</span>`}
+              </div>`
+            : nothing}
+          <label>
+            Sun entity (optional) — enables automatic night background variants
+            ${this.renderEntityPicker(
+              bg.sun_entity ?? '',
+              (value) => {
+                if (!this.config) return;
+                const prev = this.config;
+                const next = setSunEntity(prev, value || undefined);
+                this.pushPatch(prev, next, 'set sun entity');
+              },
+              { includeDomains: ['sun'], placeholder: 'sun.sun' },
+            )}
+          </label>
+          ${bg.sun_entity && this.hass?.states[bg.sun_entity]
+            ? html`<div class="weather-live-state">
+                Sun: <strong>${this.hass.states[bg.sun_entity]?.state === 'above_horizon'
+                  ? '☀️ above horizon'
+                  : '🌙 below horizon'}</strong>
               </div>`
             : nothing}
           <label>
@@ -1727,6 +1845,7 @@ export class FlowmeCardEditor extends LitElement {
     }
 
     this.selectedNodeId = null;
+    this.selectedNodeIds = new Set();
     this.selectedFlowId = null;
     this.selectedOverlayId = null;
     this.suggestNodeIds = [];
@@ -1739,6 +1858,71 @@ export class FlowmeCardEditor extends LitElement {
       event.preventDefault();
       this.pending = null;
       this.statusMessage = 'Cancelled.';
+    }
+  };
+
+  private stageRubberBandPointerId: number | null = null;
+
+  private onStagePointerDown = (event: PointerEvent): void => {
+    // Only start rubber-band on the stage background itself (not child handles)
+    const target = event.target as HTMLElement;
+    const isBackground = target.classList.contains('stage') || target.classList.contains('background') || target.classList.contains('connectors');
+    if (!isBackground || this.previewMode || this.pending) return;
+    // Left button only
+    if (event.button !== 0) return;
+    const pct = this.pointerToPercent(event);
+    if (!pct) return;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    this.stageRubberBandPointerId = event.pointerId;
+    this.dragTarget = {
+      kind: 'rubber-band',
+      startPx: { x: event.clientX, y: event.clientY },
+      startPct: pct,
+    };
+    this.rubberBand = { x1: pct.x, y1: pct.y, x2: pct.x, y2: pct.y };
+  };
+
+  private onStagePointerMove = (event: PointerEvent): void => {
+    if (this.stageRubberBandPointerId !== event.pointerId || this.dragTarget?.kind !== 'rubber-band') return;
+    const pct = this.pointerToPercent(event);
+    if (!pct) return;
+    const start = this.dragTarget.startPct;
+    this.rubberBand = { x1: start.x, y1: start.y, x2: pct.x, y2: pct.y };
+  };
+
+  private onStagePointerUp = (event: PointerEvent): void => {
+    if (this.stageRubberBandPointerId !== event.pointerId || this.dragTarget?.kind !== 'rubber-band') {
+      this.stageRubberBandPointerId = null;
+      return;
+    }
+    this.stageRubberBandPointerId = null;
+    const rb = this.rubberBand;
+    this.rubberBand = null;
+    this.dragTarget = null;
+    if (!rb || !this.config) return;
+
+    const minX = Math.min(rb.x1, rb.x2);
+    const maxX = Math.max(rb.x1, rb.x2);
+    const minY = Math.min(rb.y1, rb.y2);
+    const maxY = Math.max(rb.y1, rb.y2);
+
+    // Only apply if the box was actually dragged (>2% in either axis)
+    if (maxX - minX < 2 && maxY - minY < 2) return;
+
+    const selected = new Set<string>();
+    for (const node of this.config.nodes) {
+      const { x, y } = node.position;
+      if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+        selected.add(node.id);
+      }
+    }
+    if (selected.size > 0) {
+      this.selectedNodeIds = selected;
+      this.selectedNodeId = selected.size === 1 ? Array.from(selected)[0]! : null;
+      this.selectedFlowId = null;
+      this.selectedOverlayId = null;
+      this.suggestNodeIds = Array.from(selected).slice(0, 2);
+      this.statusMessage = `${selected.size} node(s) selected via rubber-band.`;
     }
   };
 
@@ -1794,21 +1978,35 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
-    // Shift+click: toggle node in the suggest-path selection set (max 2)
+    // Shift+click: toggle multi-select (also serves as suggest-path selection set)
     if (event.shiftKey) {
-      const idx = this.suggestNodeIds.indexOf(nodeId);
-      if (idx >= 0) {
-        this.suggestNodeIds = this.suggestNodeIds.filter((id) => id !== nodeId);
-      } else if (this.suggestNodeIds.length < 2) {
-        this.suggestNodeIds = [...this.suggestNodeIds, nodeId];
-        if (this.suggestNodeIds.length === 2) {
-          this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route between them.';
+      const next = new Set(this.selectedNodeIds);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        // Always add current single-selected node into the set too
+        if (this.selectedNodeId && !next.has(this.selectedNodeId)) {
+          next.add(this.selectedNodeId);
         }
+        next.add(nodeId);
       }
+      this.selectedNodeIds = next;
+      // Mirror into suggestNodeIds (max 2, for backward compat)
+      const arr = Array.from(next).slice(0, 2);
+      this.suggestNodeIds = arr;
+      if (next.size === 2) {
+        this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route, or use bulk actions above.';
+      } else if (next.size > 0) {
+        this.statusMessage = `${next.size} node(s) selected. Shift+click to add more.`;
+      }
+      this.selectedNodeId = next.size === 1 ? nodeId : null;
+      this.selectedFlowId = null;
+      this.selectedOverlayId = null;
       return;
     }
-    // Normal click: single-select for inspector, clear suggest selection
+    // Normal click: single-select for inspector, clear multi-select
     this.selectedNodeId = nodeId;
+    this.selectedNodeIds = new Set([nodeId]);
     this.selectedFlowId = null;
     this.selectedOverlayId = null;
     this.suggestNodeIds = [];
@@ -1900,8 +2098,28 @@ export class FlowmeCardEditor extends LitElement {
     const overlayId = el.dataset['overlayId'];
 
     let target: DragTarget | null = null;
-    if (nodeId) target = { kind: 'node', id: nodeId };
-    else if (overlayId && !el.classList.contains('overlay-resize'))
+    if (nodeId) {
+      // If dragged node is in the multi-select set (>1 node), start bulk drag
+      if (this.selectedNodeIds.size > 1 && this.selectedNodeIds.has(nodeId)) {
+        const startPositions = new Map<string, NodePosition>();
+        for (const n of this.config.nodes) {
+          if (this.selectedNodeIds.has(n.id)) startPositions.set(n.id, { ...n.position });
+        }
+        target = {
+          kind: 'node-bulk',
+          ids: Array.from(this.selectedNodeIds),
+          startPositions,
+          startPx: { x: event.clientX, y: event.clientY },
+        };
+      } else {
+        target = { kind: 'node', id: nodeId };
+        // Clicking a non-selected node while multi-select active resets to single
+        if (!this.selectedNodeIds.has(nodeId)) {
+          this.selectedNodeIds = new Set([nodeId]);
+          this.selectedNodeId = nodeId;
+        }
+      }
+    } else if (overlayId && !el.classList.contains('overlay-resize'))
       target = { kind: 'overlay', id: overlayId };
     else if (flowId && waypointIndexRaw !== undefined) {
       target = { kind: 'waypoint', flowId, index: Number(waypointIndexRaw) };
@@ -1947,6 +2165,21 @@ export class FlowmeCardEditor extends LitElement {
     // live preview — update this.config directly, no patch pushed
     if (target.kind === 'node') {
       this.config = moveNode(this.config, target.id, snapped);
+    } else if (target.kind === 'node-bulk') {
+      // Bulk move: compute delta from drag start and apply to all selected nodes
+      const stage = this.stageRef.value;
+      if (!stage) return;
+      const rect = stage.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dxPct = ((event.clientX - target.startPx.x) / rect.width) * 100;
+      const dyPct = ((event.clientY - target.startPx.y) / rect.height) * 100;
+      const moves = new Map<string, NodePosition>();
+      for (const [id, startPos] of target.startPositions) {
+        const x = this.dragShiftHeld ? snapToGrid(startPos.x + dxPct) : startPos.x + dxPct;
+        const y = this.dragShiftHeld ? snapToGrid(startPos.y + dyPct) : startPos.y + dyPct;
+        moves.set(id, { x, y });
+      }
+      this.config = bulkMoveNodes(this.config, moves);
     } else if (target.kind === 'overlay') {
       this.config = moveOverlay(this.config, target.id, snapped);
     } else if (target.kind === 'waypoint') {
@@ -1973,6 +2206,9 @@ export class FlowmeCardEditor extends LitElement {
     switch (target.kind) {
       case 'node':
         description = `move node ${target.id}`;
+        break;
+      case 'node-bulk':
+        description = `move ${target.ids.length} nodes`;
         break;
       case 'overlay':
         description = `move overlay ${target.id}`;
@@ -2100,6 +2336,16 @@ export class FlowmeCardEditor extends LitElement {
   // -- keyboard --
 
   private onKeyDown = (event: KeyboardEvent): void => {
+    // Escape: deselect all
+    if (event.key === 'Escape') {
+      this.selectedNodeId = null;
+      this.selectedNodeIds = new Set();
+      this.selectedFlowId = null;
+      this.selectedOverlayId = null;
+      this.suggestNodeIds = [];
+      this.rubberBand = null;
+      return;
+    }
     const mod = event.metaKey || event.ctrlKey;
     if (!mod) return;
     const key = event.key.toLowerCase();
@@ -2236,9 +2482,52 @@ export class FlowmeCardEditor extends LitElement {
     .handle.selected .handle-dot {
       box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 0 6px var(--primary-color, #03a9f4);
     }
+    .handle.multi-selected .handle-dot {
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.4), 0 0 0 5px #fff, 0 0 0 7px rgba(3,169,244,0.7);
+    }
     .handle.suggest-selected .handle-dot {
       box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 0 6px #f59e0b;
     }
+    /* Rubber-band selection box */
+    .rubber-band {
+      position: absolute;
+      border: 1.5px solid var(--primary-color, #03a9f4);
+      background: rgba(3, 169, 244, 0.08);
+      border-radius: 2px;
+      pointer-events: none;
+    }
+    /* Multi-select toolbar */
+    .multiselect-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: rgba(3,169,244,0.12);
+      border: 1px solid rgba(3,169,244,0.3);
+      border-radius: 8px;
+      margin-top: 4px;
+    }
+    .multiselect-count {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary-color, #03a9f4);
+      flex-shrink: 0;
+    }
+    .ms-btn {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.07);
+      color: #fff;
+      cursor: pointer;
+    }
+    .ms-btn:hover { background: rgba(255,255,255,0.15); }
+    .ms-btn:disabled { opacity: 0.4; cursor: default; }
+    .ms-btn.danger { border-color: rgba(239,68,68,0.5); color: #fca5a5; }
+    .ms-btn.danger:hover { background: rgba(239,68,68,0.2); }
+    .ms-btn.ghost { opacity: 0.7; }
     .suggest-badge {
       position: absolute;
       top: -8px;

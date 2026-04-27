@@ -2,6 +2,84 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.13] — 2026-04-28
+
+### Added
+
+- **DEV-1 — Dev-server demo environment**: `npm run dev` now starts a local Vite dev
+  server at `http://localhost:5173` with a full FlowMe card rendered in a mock HA
+  environment. No Home Assistant installation required.
+  - `src/dev/mock-hass.ts` — realistic mock `hass` object with 14 entities (solar,
+    grid, battery, load, temperature, humidity, weather, sun, switch, camera).
+    All sensor values update every 2 s with smooth variation patterns (solar ramp,
+    load spikes, battery cycling).
+  - `src/dev/demo-config.ts` — complete FlowMe config using all mock entities with
+    multiple animation styles, weather state mappings and CSS gradient backgrounds
+    (zero file setup required).
+  - `src/dev/demo-app.ts` — demo entry point with a control panel: sliders for every
+    sensor, weather/sun dropdowns, "Randomise all values" and "Reset to live data"
+    buttons.
+  - `README.md` "Development" section expanded with setup, dev server, build and test
+    instructions.
+
+- **SUN-1 — Sun-aware night background switching**: New optional `background.sun_entity`
+  config field (e.g. `sun.sun`).
+  - When `sun.state === 'below_horizon'` the current weather state has `-night` appended
+    before lookup (e.g. `partlycloudy` → `partlycloudy-night`).
+  - Integrations that already report native night states (e.g. `clear-night`) are handled
+    correctly — `-night` is not appended again when the state already ends with it.
+  - Fallback chain: exact night variant → `clear-night` → day image → `background.default`.
+  - `hass` setter now watches `sun_entity` state changes and triggers background
+    re-evaluation immediately on horizon crossing.
+  - 18 new unit tests in `tests/unit/sun-night.test.ts` covering all scenarios.
+  - Editor: sun entity picker added to the "Backgrounds & weather" panel with live
+    "☀️ above horizon / 🌙 below horizon" status display.
+  - `resolveNightBackground()` pure utility function exported from `src/utils.ts`.
+
+- **P3-2 — Editor multi-select**:
+  - **Shift+click** nodes to add/remove from selection set. Selection ring shows for
+    all selected nodes.
+  - **Rubber-band drag** on empty canvas selects all nodes whose centres fall within
+    the drawn box (semi-transparent blue rectangle while dragging, applied on release
+    if box > 2% in either axis).
+  - **Escape** deselects all nodes, flows and overlays.
+  - **Multi-select toolbar** appears when ≥ 2 nodes are selected with:
+    - Suggest path (active only for exactly 2 nodes)
+    - Hide selected / Show selected
+    - Align horizontal / Align vertical (to first selected node)
+    - Delete selected (with confirmation, removes connected flows)
+    - Deselect button
+  - **Bulk move**: dragging any selected node when multiple are selected moves all
+    selected nodes together, preserving relative positions. Creates a single undo
+    entry for the entire operation.
+  - New editor commands: `bulkMoveNodes`, `bulkDeleteNodes`, `bulkSetNodesVisible`,
+    `alignNodesHorizontal`, `alignNodesVertical`.
+
+- **P3-4 — Animation quality pass**:
+  - **Direction change deceleration**: when `smooth_speed: true` (default) and a flow
+    value changes sign, the animation fades to opacity 0 in 150 ms then re-accelerates
+    in the new direction over the next 150 ms (300 ms total), with no abrupt restart.
+  - **Adaptive particle count**: for `dots` and `trail` styles when `particle_count` is
+    not explicitly configured, the renderer tracks average frame time over 10 samples.
+    If frames consistently exceed the fps budget by 20% the count is reduced by 1
+    (minimum 1). If consistently under 80% budget it is gradually restored. Max one
+    change per flow per second.
+  - **rAF loop always active**: the `requestAnimationFrame` loop now starts unconditionally
+    (previously only started when fps < 60) so that smooth_speed and direction change
+    transitions always run even at the default 60 fps target.
+  - **Bezier path continuity**: SVG `<animateMotion><mpath>` already follows the exact
+    rendered bezier path — no approximation. No change required.
+  - **Reconnect continuity**: SVG `animateMotion` engine maintains particle positions
+    across `hass` reconnects because only the `dur` attribute changes. No change required.
+
+### Changed
+
+- `background.sun_entity` field added to `BackgroundConfig` type and validation.
+- `src/editor/commands.ts`: added `setSunEntity`, `bulkMoveNodes`, `bulkDeleteNodes`,
+  `bulkSetNodesVisible`, `alignNodesHorizontal`, `alignNodesVertical`.
+- `resolveTargetBackground()` in `flowme-card.ts` now delegates to pure
+  `resolveNightBackground()` from `utils.ts`.
+
 ## [1.0.12] — 2026-04-28
 
 Dedicated animation release. Full animation style system, particle shapes, direction modes,

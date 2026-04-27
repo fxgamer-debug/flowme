@@ -354,6 +354,50 @@ export function debounce<T extends (...args: unknown[]) => void>(
 }
 
 /**
+ * Resolve the background image URL for the current weather + sun state.
+ *
+ * Pure function — can be unit-tested without a DOM or HA instance.
+ *
+ * Lookup chain (SUN-1):
+ *  1. When sun is below_horizon and weatherState doesn't already end in '-night',
+ *     synthesise `<weatherState>-night` as the lookup key.
+ *  2. Exact match for lookupKey in weatherStates.
+ *  3. When sun is below horizon, try 'clear-night' as generic night fallback.
+ *  4. Fall back to defaultBg.
+ */
+export function resolveNightBackground(
+  weatherState: string,
+  sunState: string | undefined,
+  weatherStates: Record<string, string> | undefined,
+  defaultBg: string,
+): string {
+  if (!weatherStates) return defaultBg;
+
+  const belowHorizon = sunState === 'below_horizon';
+
+  let lookupKey = weatherState;
+  if (belowHorizon && !weatherState.endsWith('-night')) {
+    lookupKey = `${weatherState}-night`;
+  }
+
+  const match = weatherStates[lookupKey];
+  if (match) return match;
+
+  if (belowHorizon && lookupKey !== 'clear-night') {
+    const nightFallback = weatherStates['clear-night'];
+    if (nightFallback) return nightFallback;
+  }
+
+  // Try direct day state when night key wasn't found (so the card isn't blank)
+  if (lookupKey !== weatherState) {
+    const dayMatch = weatherStates[weatherState];
+    if (dayMatch) return dayMatch;
+  }
+
+  return defaultBg;
+}
+
+/**
  * Parse an `aspect_ratio` string like '16:10'. Returns the numeric ratio
  * width/height, or undefined if the string doesn't parse.
  */
