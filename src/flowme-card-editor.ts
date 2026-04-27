@@ -576,7 +576,7 @@ export class FlowmeCardEditor extends LitElement {
           type="number"
           step="any"
           min="0"
-          placeholder=${String((params[key] ?? '').toFixed ? (params[key] as number).toFixed(0) : params[key])}
+          placeholder=${typeof params[key] === 'number' ? (params[key] as number).toFixed(0) : ''}
           .value=${override[key] !== undefined ? String(override[key]) : ''}
           @change=${(e: Event) => {
             if (!this.config) return;

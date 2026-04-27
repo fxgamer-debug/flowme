@@ -3352,7 +3352,7 @@ let k = class extends H {
           type="number"
           step="any"
           min="0"
-          placeholder=${String((i[a] ?? "").toFixed ? i[a].toFixed(0) : i[a])}
+          placeholder=${typeof i[a] == "number" ? i[a].toFixed(0) : ""}
           .value=${s[a] !== void 0 ? String(s[a]) : ""}
           @change=${(d) => {
       if (!this.config) return;
