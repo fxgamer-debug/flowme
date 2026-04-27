@@ -301,7 +301,7 @@ export class SvgRenderer implements FlowRenderer {
     const isShimmer = shimmer && magnitude < threshold && magnitude > 0;
     const visible = DEBUG || magnitude >= threshold || isShimmer;
 
-    if (!visible || style === 'none') {
+    if (!visible) {
       this.setGroupOpacity(dom, 0);
       return;
     }

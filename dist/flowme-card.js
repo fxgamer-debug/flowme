@@ -1449,7 +1449,7 @@ class jt {
     const o = s.animation ?? {}, r = o.animation_style ?? "dots";
     n.style !== r && (this.teardownStyle(n), n.style = r);
     const a = this.profileFor(s), l = ee(s, a), d = Tt ? 0 : l.threshold, c = Math.abs(e), u = o.shimmer === !0 && c < d && c > 0;
-    if (!(Tt || c >= d || u) || r === "none") {
+    if (!(Tt || c >= d || u)) {
       this.setGroupOpacity(n, 0);
       return;
     }
