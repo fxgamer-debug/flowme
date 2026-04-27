@@ -2,6 +2,59 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.12] — 2026-04-28
+
+Dedicated animation release. Full animation style system, particle shapes, direction modes,
+shimmer/flicker effects, global fps cap and smooth speed transitions.
+
+### Added
+
+- **ANIM-1 — Animation style system**: New `animation:` block per flow with 8 styles:
+  - `dots` — filled particles (default, refactored from existing code)
+  - `dash` — animated dashed stroke; `dash_gap` controls gap/dash ratio
+  - `pulse` — expanding rings travelling along path; `pulse_width` controls stroke thickness
+  - `arrow` — chevron-shaped particles that orient to direction of travel
+  - `trail` — particles with fading elongated tail; `trail_length` controls tail length
+  - `fluid` — continuous gradient-like stroke flowing along the line
+  - `spark` — randomised-size particles with ±30% size variation and 0.5–1.0 opacity
+  - `none` — static line only, no animation
+
+- **Particle shapes**: `particle_shape` field (`circle` | `square` | `arrow` | `teardrop` | `diamond`).
+  `square` rotates with path tangent. `arrow` always points in direction of travel.
+  `teardrop` elongated along path direction. `diamond` stationary rotated square.
+  Ignored for `dash`, `pulse`, `fluid`.
+
+- **Direction modes**: `direction` field (`auto` | `forward` | `reverse` | `both`).
+  `both` renders two independent particle sets on the same path simultaneously.
+
+- **Shimmer**: `shimmer: true` — shows a slow (0.2×) low-opacity (0.3) animation when
+  value is at/near threshold instead of hiding the flow completely.
+
+- **Flicker**: `flicker: true` — subtle per-particle random ±15% opacity variation at
+  2–8 Hz for electrical/energy realism.
+
+- **Per-flow animation controls**: `particle_size` multiplier (0.5–3.0), `particle_count`
+  override (suppresses burst logic when set), `glow_intensity` multiplier (0 disables glow).
+
+- **Schema-only** (rendering in v1.0.13): `particle_spacing` (`even` | `random` | `clustered`).
+
+- **ANIM-2 — Global animation settings**: New top-level `animation:` block:
+  - `fps` (1–120, default 60): rAF-based frame-rate cap for power saving on always-on displays.
+  - `smooth_speed` (boolean, default true): interpolates animation duration changes over 500ms
+    using ease-in-out instead of restarting abruptly on sensor value changes.
+
+- **ANIM-3 — Editor UI**: Collapsible "Animation" section in the flow inspector:
+  - Live preview strip (full-width ~40px SVG) showing current style animating in real time.
+  - `animation_style` dropdown, `particle_shape` dropdown (hidden for incompatible styles).
+  - `direction` dropdown, `particle_size` slider, `particle_count` input, `glow_intensity` slider.
+  - `shimmer` and `flicker` checkboxes.
+  - Style-specific inputs: `pulse_width` (pulse), `trail_length` (trail), `dash_gap` (dash).
+  - "Reset to defaults" button.
+  - Global "Animation (global)" panel in sidebar for `fps` slider and `smooth_speed` toggle.
+
+- **Validation**: All new fields validated in `validate-config.ts` with clear error messages.
+- **Commands**: `setFlowAnimation`, `clearFlowAnimation`, `setAnimationConfig` in `editor/commands.ts`.
+
 ## [1.0.11] — 2026-04-28
 
 Background weather switching full fix, 6 new Phase 2 features, and per-element visibility system.

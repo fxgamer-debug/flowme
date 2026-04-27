@@ -1,5 +1,7 @@
 import type {
+  AnimationConfig,
   DomainColors,
+  FlowAnimationConfig,
   FlowConfig,
   FlowmeConfig,
   FlowmeDefaults,
@@ -526,5 +528,53 @@ export function clearSpeedCurveOverride(config: FlowmeConfig, flowId: string): F
     delete out.speed_curve_override;
     return out;
   });
+  return next;
+}
+
+/**
+ * Merge a partial {@link FlowAnimationConfig} into a flow's `animation` block.
+ * Use `setFlowAnimationField(config, flowId, 'animation_style', undefined)` to
+ * clear a single key back to its default.
+ */
+export function setFlowAnimation(
+  config: FlowmeConfig,
+  flowId: string,
+  patch: Partial<FlowAnimationConfig>,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const merged = { ...f.animation, ...patch };
+    // prune undefined values so they don't appear in YAML serialisation
+    for (const k of Object.keys(merged) as (keyof FlowAnimationConfig)[]) {
+      if (merged[k] === undefined) delete merged[k];
+    }
+    if (Object.keys(merged).length === 0) {
+      const out = { ...f };
+      delete out.animation;
+      return out;
+    }
+    return { ...f, animation: merged };
+  });
+  return next;
+}
+
+export function clearFlowAnimation(config: FlowmeConfig, flowId: string): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    delete out.animation;
+    return out;
+  });
+  return next;
+}
+
+export function setAnimationConfig(
+  config: FlowmeConfig,
+  patch: Partial<AnimationConfig>,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.animation = { ...next.animation, ...patch };
   return next;
 }

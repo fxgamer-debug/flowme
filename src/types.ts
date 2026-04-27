@@ -116,10 +116,94 @@ export interface FlowConfig {
    * See `SpeedCurveOverride`.
    */
   speed_curve_override?: SpeedCurveOverride;
+  /**
+   * Per-flow animation style and particle configuration (v1.0.12+).
+   * All fields optional — defaults preserve existing behaviour.
+   */
+  animation?: FlowAnimationConfig;
 }
 
 export const LINE_STYLES = ['corner', 'diagonal', 'curve', 'smooth'] as const;
 export type LineStyle = (typeof LINE_STYLES)[number];
+
+// ── Animation v1.0.12 ──────────────────────────────────────────────────────
+
+export const ANIMATION_STYLES = [
+  'dots', 'dash', 'pulse', 'arrow', 'trail', 'fluid', 'spark', 'none',
+] as const;
+export type AnimationStyle = (typeof ANIMATION_STYLES)[number];
+
+export const PARTICLE_SHAPES = ['circle', 'square', 'arrow', 'teardrop', 'diamond'] as const;
+export type ParticleShape = (typeof PARTICLE_SHAPES)[number];
+
+export const FLOW_DIRECTIONS = ['auto', 'forward', 'reverse', 'both'] as const;
+export type FlowDirection = (typeof FLOW_DIRECTIONS)[number];
+
+export const PARTICLE_SPACINGS = ['even', 'random', 'clustered'] as const;
+export type ParticleSpacing = (typeof PARTICLE_SPACINGS)[number];
+
+/**
+ * Per-flow animation configuration (v1.0.12+). All fields are optional
+ * — existing flows without them default to current behaviour.
+ */
+export interface FlowAnimationConfig {
+  /** Visual style for the flow animation. Default: 'dots'. */
+  animation_style?: AnimationStyle;
+  /** Shape of individual particles. Ignored for dash/pulse/fluid. Default: 'circle'. */
+  particle_shape?: ParticleShape;
+  /** Direction behaviour. Default: 'auto' (positive→forward, negative→reverse). */
+  direction?: FlowDirection;
+  /** Multiplier on defaults.dot_radius for particle size. Default: 1.0. */
+  particle_size?: number;
+  /**
+   * Number of particles on path at once. Overrides burst logic when set explicitly.
+   * Default: uses profile particle_count_curve / DEFAULT_PARTICLE_COUNT.
+   */
+  particle_count?: number;
+  /** Multiplier on glow opacity. 0 disables glow entirely. Default: 1.0. */
+  glow_intensity?: number;
+  /**
+   * When true and value is at/near threshold: show a very slow (0.2×) gentle
+   * animation with 0.3× opacity instead of hiding the flow completely.
+   * Default: false.
+   */
+  shimmer?: boolean;
+  /**
+   * When true: subtle random ±15% opacity variation per particle at 2–8 Hz.
+   * Adds realism to electrical/energy flows. Default: false.
+   */
+  flicker?: boolean;
+  /** pulse style only — ring stroke thickness in px. Default: 2. */
+  pulse_width?: number;
+  /** trail style only — tail length as multiplier of particle_size. Default: 2.0. */
+  trail_length?: number;
+  /** dash style only — ratio of gap length to dash length. Default: 0.5. */
+  dash_gap?: number;
+  /**
+   * Spacing mode for particles along the path.
+   * Schema-only in v1.0.12 — rendering deferred to v1.0.13.
+   * Default: 'even'.
+   */
+  particle_spacing?: ParticleSpacing;
+}
+
+/**
+ * Global animation settings (v1.0.12+). Applied to the renderer loop.
+ */
+export interface AnimationConfig {
+  /**
+   * Target frame rate cap (10–60). Default: 60.
+   * Lower values save battery on always-on tablets.
+   */
+  fps?: number;
+  /**
+   * When true, interpolate speed transitions over 500ms (ease-in-out)
+   * instead of abruptly restarting animation when sensor value changes.
+   * Direction changes (sign flip) still decelerate to zero then
+   * re-accelerate in new direction over 300ms. Default: true.
+   */
+  smooth_speed?: boolean;
+}
 
 export const OVERLAY_TYPES = ['custom'] as const;
 export type OverlayType = (typeof OVERLAY_TYPES)[number];
@@ -284,6 +368,10 @@ export interface FlowmeConfig {
    * Global layer visibility toggles (v1.0.11+). All fields default to true.
    */
   visibility?: VisibilityConfig;
+  /**
+   * Global animation settings (v1.0.12+).
+   */
+  animation?: AnimationConfig;
 }
 
 export type FlowShape = 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';

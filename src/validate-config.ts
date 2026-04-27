@@ -6,11 +6,20 @@ import type {
   DomainColors,
   NodeConfig,
   FlowConfig,
+  FlowAnimationConfig,
+  AnimationConfig,
   NodePosition,
   OverlayConfig,
   SpeedCurveOverride,
 } from './types.js';
-import { FLOW_DOMAINS, LINE_STYLES } from './types.js';
+import {
+  FLOW_DOMAINS,
+  LINE_STYLES,
+  ANIMATION_STYLES,
+  PARTICLE_SHAPES,
+  FLOW_DIRECTIONS,
+  PARTICLE_SPACINGS,
+} from './types.js';
 import { findUnsafeUrls } from './overlays/url-scan.js';
 
 export class FlowmeConfigError extends Error {
@@ -157,6 +166,9 @@ function validateFlow(
       `${path}.speed_curve_override`,
     );
   }
+  if (f['animation'] !== undefined) {
+    flow.animation = validateFlowAnimation(f['animation'], `${path}.animation`);
+  }
   return flow;
 }
 
@@ -277,6 +289,110 @@ function validateOpacity(raw: unknown): OpacityConfig {
   const out: OpacityConfig = {};
   for (const key of ['background', 'darken', 'nodes', 'flows', 'dots', 'glow', 'labels', 'values', 'overlays'] as const) {
     if (o[key] !== undefined) out[key] = validateOpacityFloat(o[key], `opacity.${key}`);
+  }
+  return out;
+}
+
+function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail(path, 'must be an object');
+  }
+  const o = raw as Record<string, unknown>;
+  const out: FlowAnimationConfig = {};
+
+  if (o['animation_style'] !== undefined) {
+    if (!ANIMATION_STYLES.includes(o['animation_style'] as never)) {
+      fail(`${path}.animation_style`, `must be one of ${ANIMATION_STYLES.join(', ')}`);
+    }
+    out.animation_style = o['animation_style'] as FlowAnimationConfig['animation_style'];
+  }
+  if (o['particle_shape'] !== undefined) {
+    if (!PARTICLE_SHAPES.includes(o['particle_shape'] as never)) {
+      fail(`${path}.particle_shape`, `must be one of ${PARTICLE_SHAPES.join(', ')}`);
+    }
+    out.particle_shape = o['particle_shape'] as FlowAnimationConfig['particle_shape'];
+  }
+  if (o['direction'] !== undefined) {
+    if (!FLOW_DIRECTIONS.includes(o['direction'] as never)) {
+      fail(`${path}.direction`, `must be one of ${FLOW_DIRECTIONS.join(', ')}`);
+    }
+    out.direction = o['direction'] as FlowAnimationConfig['direction'];
+  }
+  if (o['particle_spacing'] !== undefined) {
+    if (!PARTICLE_SPACINGS.includes(o['particle_spacing'] as never)) {
+      fail(`${path}.particle_spacing`, `must be one of ${PARTICLE_SPACINGS.join(', ')}`);
+    }
+    out.particle_spacing = o['particle_spacing'] as FlowAnimationConfig['particle_spacing'];
+  }
+  const readPositiveFloat = (key: string, max?: number): number | undefined => {
+    const v = o[key];
+    if (v === undefined) return undefined;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+      fail(`${path}.${key}`, 'must be a positive finite number');
+    }
+    if (max !== undefined && (v as number) > max) {
+      fail(`${path}.${key}`, `must be ≤ ${max}`);
+    }
+    return v as number;
+  };
+  const readBool = (key: string): boolean | undefined => {
+    const v = o[key];
+    if (v === undefined) return undefined;
+    if (typeof v !== 'boolean') fail(`${path}.${key}`, 'must be a boolean');
+    return v as boolean;
+  };
+
+  const ps = readPositiveFloat('particle_size');
+  if (ps !== undefined) out.particle_size = ps;
+  if (o['particle_count'] !== undefined) {
+    const v = o['particle_count'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) < 1 || !Number.isInteger(v)) {
+      fail(`${path}.particle_count`, 'must be a positive integer ≥ 1');
+    }
+    out.particle_count = v as number;
+  }
+  // glow_intensity allows 0 (to disable glow) as a special case
+  if (o['glow_intensity'] !== undefined) {
+    const v = o['glow_intensity'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) < 0) {
+      fail(`${path}.glow_intensity`, 'must be a non-negative finite number');
+    }
+    out.glow_intensity = v as number;
+  }
+  const sh = readBool('shimmer');
+  if (sh !== undefined) out.shimmer = sh;
+  const fl = readBool('flicker');
+  if (fl !== undefined) out.flicker = fl;
+  const pw = readPositiveFloat('pulse_width');
+  if (pw !== undefined) out.pulse_width = pw;
+  const tl = readPositiveFloat('trail_length');
+  if (tl !== undefined) out.trail_length = tl;
+  if (o['dash_gap'] !== undefined) {
+    const v = o['dash_gap'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) < 0 || (v as number) > 10) {
+      fail(`${path}.dash_gap`, 'must be a number between 0 and 10');
+    }
+    out.dash_gap = v as number;
+  }
+  return out;
+}
+
+function validateAnimationConfig(raw: unknown): AnimationConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail('animation', 'must be an object');
+  }
+  const o = raw as Record<string, unknown>;
+  const out: AnimationConfig = {};
+  if (o['fps'] !== undefined) {
+    const v = o['fps'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) < 1 || (v as number) > 120) {
+      fail('animation.fps', 'must be a number between 1 and 120');
+    }
+    out.fps = v as number;
+  }
+  if (o['smooth_speed'] !== undefined) {
+    if (typeof o['smooth_speed'] !== 'boolean') fail('animation.smooth_speed', 'must be a boolean');
+    out.smooth_speed = o['smooth_speed'] as boolean;
   }
   return out;
 }
@@ -425,6 +541,10 @@ export function validateConfig(raw: unknown): FlowmeConfig {
 
   if (c['visibility'] !== undefined) {
     config.visibility = validateVisibility(c['visibility']);
+  }
+
+  if (c['animation'] !== undefined) {
+    config.animation = validateAnimationConfig(c['animation']);
   }
 
   return config;

@@ -3,9 +3,11 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 
 import type {
+  AnimationConfig,
   DomainColors,
   FlowmeConfig,
   FlowmeDefaults,
+  FlowAnimationConfig,
   FlowConfig,
   HomeAssistant,
   NodeConfig,
@@ -15,7 +17,7 @@ import type {
   SpeedCurveOverride,
   VisibilityConfig,
 } from './types.js';
-import { LINE_STYLES } from './types.js';
+import { LINE_STYLES, ANIMATION_STYLES, PARTICLE_SHAPES, FLOW_DIRECTIONS } from './types.js';
 import { validateConfig } from './validate-config.js';
 import { parseAspectRatio, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
 import { getProfile, resolveFlowColor } from './flow-profiles/index.js';
@@ -52,6 +54,9 @@ import {
   setOverlaySize,
   setOverlayVisible,
   setTransitionDuration,
+  setAnimationConfig,
+  setFlowAnimation,
+  clearFlowAnimation,
   setVisibility,
   setWeatherEntity,
   setWeatherStateImage,
@@ -202,6 +207,7 @@ export class FlowmeCardEditor extends LitElement {
         ${this.renderSuggestBar()}
         ${this.renderInspector()}
         ${this.renderWeatherPanel()}
+        ${this.renderGlobalAnimationPanel()}
         ${this.renderOpacityPanel()}
         ${this.renderDomainColorsPanel()}
         ${this.renderVisibilityPanel()}
@@ -547,6 +553,7 @@ export class FlowmeCardEditor extends LitElement {
             </div>
           </label>
           ${this.renderSpeedCurveSection(flow)}
+          ${this.renderAnimationSection(flow)}
           <button class="danger" @click=${() => this.removeFlow(flow.id)}>Delete flow</button>
         </div>
       `;
@@ -639,6 +646,306 @@ export class FlowmeCardEditor extends LitElement {
                 this.pushPatch(prev, next, `reset speed curve for ${flow.id}`);
               }}>Reset to domain defaults</button>`
             : nothing}
+        </div>
+      </details>
+    `;
+  }
+
+  private renderAnimationSection(flow: FlowConfig): TemplateResult {
+    if (!this.config) return html``;
+    const anim: FlowAnimationConfig = flow.animation ?? {};
+    const style = anim.animation_style ?? 'dots';
+
+    const patch = (partial: Partial<FlowAnimationConfig>) => {
+      if (!this.config) return;
+      const prev = this.config;
+      const next = setFlowAnimation(prev, flow.id, partial);
+      this.pushPatch(prev, next, `update animation for ${flow.id}`);
+    };
+
+    // Styles that don't use discrete particles (shape picker irrelevant)
+    const noShapeStyles = new Set(['dash', 'pulse', 'fluid', 'none']);
+    const showShape = !noShapeStyles.has(style);
+    const showPulseWidth = style === 'pulse';
+    const showTrailLength = style === 'trail';
+    const showDashGap = style === 'dash';
+
+    // Live preview strip — a small SVG preview of the current animation style
+    const previewColor = flow.color ?? '#4ADE80';
+
+    return html`
+      <details class="anim-details">
+        <summary>Animation</summary>
+        <div class="anim-body">
+
+          <!-- Live preview strip -->
+          <div class="anim-preview-wrap">
+            <svg class="anim-preview" viewBox="0 0 200 40" xmlns="http://www.w3.org/2000/svg">
+              ${this.renderAnimPreview(style, anim, previewColor)}
+            </svg>
+          </div>
+
+          <label>Style
+            <select
+              .value=${style}
+              @change=${(e: Event) => {
+                patch({ animation_style: (e.target as HTMLSelectElement).value as FlowAnimationConfig['animation_style'] });
+              }}
+            >
+              ${ANIMATION_STYLES.map(
+                (s) => html`<option value=${s} ?selected=${style === s}>${s}</option>`,
+              )}
+            </select>
+          </label>
+
+          ${showShape ? html`
+            <label>Particle shape
+              <select
+                .value=${anim.particle_shape ?? 'circle'}
+                @change=${(e: Event) => {
+                  patch({ particle_shape: (e.target as HTMLSelectElement).value as FlowAnimationConfig['particle_shape'] });
+                }}
+              >
+                ${PARTICLE_SHAPES.map(
+                  (s) => html`<option value=${s} ?selected=${(anim.particle_shape ?? 'circle') === s}>${s}</option>`,
+                )}
+              </select>
+            </label>
+          ` : nothing}
+
+          <label>Direction
+            <select
+              .value=${anim.direction ?? 'auto'}
+              @change=${(e: Event) => {
+                patch({ direction: (e.target as HTMLSelectElement).value as FlowAnimationConfig['direction'] });
+              }}
+            >
+              ${FLOW_DIRECTIONS.map(
+                (d) => html`<option value=${d} ?selected=${(anim.direction ?? 'auto') === d}>${d}</option>`,
+              )}
+            </select>
+          </label>
+
+          <label>Particle size
+            <div class="inspector-slider-row">
+              <input type="range" min="0.5" max="3" step="0.1"
+                .value=${String(anim.particle_size ?? 1.0)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v)) patch({ particle_size: v });
+                }}
+              />
+              <span>${(anim.particle_size ?? 1.0).toFixed(1)}×</span>
+            </div>
+          </label>
+
+          <label>Particle count
+            <input type="number" min="1" max="20" step="1"
+              placeholder="profile default"
+              .value=${anim.particle_count !== undefined ? String(anim.particle_count) : ''}
+              @change=${(e: Event) => {
+                const raw = (e.target as HTMLInputElement).value.trim();
+                if (raw === '') { patch({ particle_count: undefined }); return; }
+                const v = parseInt(raw, 10);
+                if (Number.isFinite(v) && v >= 1) patch({ particle_count: v });
+              }}
+            />
+          </label>
+
+          <label>Glow intensity
+            <div class="inspector-slider-row">
+              <input type="range" min="0" max="2" step="0.1"
+                .value=${String(anim.glow_intensity ?? 1.0)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v)) patch({ glow_intensity: v });
+                }}
+              />
+              <span>${(anim.glow_intensity ?? 1.0).toFixed(1)}</span>
+            </div>
+          </label>
+
+          <label class="anim-toggle">
+            <input type="checkbox"
+              .checked=${anim.shimmer === true}
+              @change=${(e: Event) => patch({ shimmer: (e.target as HTMLInputElement).checked })}
+            />
+            Shimmer at threshold
+          </label>
+
+          <label class="anim-toggle">
+            <input type="checkbox"
+              .checked=${anim.flicker === true}
+              @change=${(e: Event) => patch({ flicker: (e.target as HTMLInputElement).checked })}
+            />
+            Flicker (random opacity variation)
+          </label>
+
+          ${showPulseWidth ? html`
+            <label>Pulse width (px)
+              <input type="number" min="1" max="20" step="0.5"
+                .value=${String(anim.pulse_width ?? 2)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v)) patch({ pulse_width: v });
+                }}
+              />
+            </label>
+          ` : nothing}
+
+          ${showTrailLength ? html`
+            <label>Trail length
+              <div class="inspector-slider-row">
+                <input type="range" min="0.5" max="6" step="0.25"
+                  .value=${String(anim.trail_length ?? 2.0)}
+                  @change=${(e: Event) => {
+                    const v = parseFloat((e.target as HTMLInputElement).value);
+                    if (Number.isFinite(v)) patch({ trail_length: v });
+                  }}
+                />
+                <span>${(anim.trail_length ?? 2.0).toFixed(2)}×</span>
+              </div>
+            </label>
+          ` : nothing}
+
+          ${showDashGap ? html`
+            <label>Dash gap ratio
+              <div class="inspector-slider-row">
+                <input type="range" min="0.1" max="3" step="0.1"
+                  .value=${String(anim.dash_gap ?? 0.5)}
+                  @change=${(e: Event) => {
+                    const v = parseFloat((e.target as HTMLInputElement).value);
+                    if (Number.isFinite(v)) patch({ dash_gap: v });
+                  }}
+                />
+                <span>${(anim.dash_gap ?? 0.5).toFixed(1)}</span>
+              </div>
+            </label>
+          ` : nothing}
+
+          ${flow.animation && Object.keys(flow.animation).length > 0
+            ? html`<button class="ghost" @click=${() => {
+                if (!this.config) return;
+                const prev = this.config;
+                const next = clearFlowAnimation(prev, flow.id);
+                this.pushPatch(prev, next, `reset animation for ${flow.id}`);
+              }}>Reset to defaults</button>`
+            : nothing}
+        </div>
+      </details>
+    `;
+  }
+
+  /**
+   * Render a small inline SVG preview strip showing the current animation style.
+   * Uses CSS animations (not SVG animateMotion) so it works even with no live data.
+   */
+  private renderAnimPreview(
+    style: string,
+    anim: FlowAnimationConfig,
+    color: string,
+  ): TemplateResult {
+    const r = 4 * (anim.particle_size ?? 1.0);
+    const count = Math.min(anim.particle_count ?? 3, 8);
+
+    if (style === 'none') {
+      return html`<line x1="10" y1="20" x2="190" y2="20" stroke=${color} stroke-width="2" stroke-opacity="0.3"/>`;
+    }
+    if (style === 'dash') {
+      const gap = (anim.dash_gap ?? 0.5);
+      const dashLen = 14;
+      const gapLen = dashLen * gap;
+      return html`
+        <line x1="10" y1="20" x2="190" y2="20"
+          stroke=${color} stroke-width="3"
+          stroke-dasharray="${dashLen} ${gapLen}" stroke-linecap="round"
+        >
+          <animate attributeName="stroke-dashoffset" from="0" to="-${dashLen + gapLen}"
+            dur="0.8s" repeatCount="indefinite"/>
+        </line>
+      `;
+    }
+    if (style === 'fluid') {
+      return html`
+        <line x1="10" y1="20" x2="190" y2="20"
+          stroke=${color} stroke-width="6" stroke-dasharray="60 200" stroke-linecap="round">
+          <animate attributeName="stroke-dashoffset" from="0" to="-260" dur="1.2s" repeatCount="indefinite"/>
+        </line>
+      `;
+    }
+    if (style === 'pulse') {
+      const positions = [40, 90, 140];
+      return html`
+        ${positions.map(
+          (cx, i) => html`
+            <circle cx=${cx} cy="20" r="0" fill="none"
+              stroke=${color} stroke-width=${anim.pulse_width ?? 2}>
+              <animate attributeName="r" values="0;12;0" dur="1.2s" repeatCount="indefinite"
+                begin="${(i * 0.4).toFixed(1)}s"/>
+              <animate attributeName="opacity" values="0;0.9;0" dur="1.2s" repeatCount="indefinite"
+                begin="${(i * 0.4).toFixed(1)}s"/>
+            </circle>
+          `,
+        )}
+      `;
+    }
+
+    // dots / arrow / trail / spark — show moving particles
+    const positions = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * 180 + 10);
+    return html`
+      <line x1="10" y1="20" x2="190" y2="20" stroke=${color} stroke-width="1.5" stroke-opacity="0.25"/>
+      ${positions.map(
+        (cx, i) => html`
+          <circle cx=${cx} cy="20" r=${r} fill=${color} opacity="0">
+            <animate attributeName="cx" values="${cx};190;10;${cx}" dur="1.4s"
+              repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
+            <animate attributeName="opacity" values="0;1;1;0" dur="1.4s"
+              repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
+          </circle>
+        `,
+      )}
+    `;
+  }
+
+  private renderGlobalAnimationPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    const animCfg: AnimationConfig = this.config.animation ?? {};
+
+    return html`
+      <details class="panel anim-global-panel">
+        <summary>Animation (global)</summary>
+        <div class="panel-body">
+          <label>
+            FPS cap
+            <div class="inspector-slider-row">
+              <input type="range" min="10" max="60" step="5"
+                .value=${String(animCfg.fps ?? 60)}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  const prev = this.config;
+                  const next = setAnimationConfig(prev, { fps: v });
+                  this.pushPatch(prev, next, 'set animation fps');
+                }}
+              />
+              <span>${animCfg.fps ?? 60} fps</span>
+            </div>
+          </label>
+          <label class="visibility-row">
+            <input type="checkbox"
+              .checked=${animCfg.smooth_speed !== false}
+              @change=${(e: Event) => {
+                if (!this.config) return;
+                const checked = (e.target as HTMLInputElement).checked;
+                const prev = this.config;
+                const next = setAnimationConfig(prev, { smooth_speed: checked });
+                this.pushPatch(prev, next, 'set smooth_speed');
+              }}
+            />
+            <span class="visibility-label">Smooth speed transitions</span>
+            <span class="visibility-val">${animCfg.smooth_speed !== false ? 'on' : 'off'}</span>
+          </label>
+          <p class="hint-sub">Smooth speed: interpolates duration changes over 500ms instead of restarting abruptly.</p>
         </div>
       </details>
     `;
@@ -2507,6 +2814,62 @@ export class FlowmeCardEditor extends LitElement {
     button.small {
       font-size: 10px;
       padding: 2px 6px;
+    }
+    /* Animation section */
+    .anim-details {
+      margin-top: 8px;
+      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+      padding-top: 8px;
+    }
+    .anim-details summary {
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      padding: 4px 0;
+    }
+    .anim-details summary::before { content: '▸ '; }
+    .anim-details[open] summary::before { content: '▾ '; }
+    .anim-details summary::-webkit-details-marker { display: none; }
+    .anim-body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 6px 0;
+    }
+    .anim-body label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+    }
+    .anim-body select,
+    .anim-body input[type='number'] {
+      font: inherit;
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+      background: var(--card-background-color, #1a1a1a);
+      color: var(--primary-text-color, #fff);
+    }
+    .anim-toggle {
+      flex-direction: row !important;
+      align-items: center;
+      gap: 8px !important;
+    }
+    .anim-preview-wrap {
+      border-radius: 6px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+    }
+    .anim-preview {
+      display: block;
+      width: 100%;
+      height: 40px;
+    }
+    .anim-global-panel {
+      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
     }
   `;
 }
