@@ -2,6 +2,7 @@ import type {
   FlowmeConfig,
   FlowmeDefaults,
   OpacityConfig,
+  VisibilityConfig,
   DomainColors,
   NodeConfig,
   FlowConfig,
@@ -9,7 +10,7 @@ import type {
   OverlayConfig,
   SpeedCurveOverride,
 } from './types.js';
-import { FLOW_DOMAINS } from './types.js';
+import { FLOW_DOMAINS, LINE_STYLES } from './types.js';
 import { findUnsafeUrls } from './overlays/url-scan.js';
 
 export class FlowmeConfigError extends Error {
@@ -68,6 +69,10 @@ function validateNode(raw: unknown, idx: number, seenIds: Set<string>): NodeConf
   if (typeof n['show_label'] === 'boolean') node.show_label = n['show_label'] as boolean;
   if (typeof n['show_value'] === 'boolean') node.show_value = n['show_value'] as boolean;
   if (n['opacity'] !== undefined) node.opacity = validateOpacityFloat(n['opacity'], `${path}.opacity`);
+  if (n['visible'] !== undefined) {
+    if (typeof n['visible'] !== 'boolean') fail(`${path}.visible`, 'must be a boolean');
+    node.visible = n['visible'] as boolean;
+  }
   return node;
 }
 
@@ -136,6 +141,16 @@ function validateFlow(
     flow.speed_multiplier = sm;
   }
   if (f['opacity'] !== undefined) flow.opacity = validateOpacityFloat(f['opacity'], `${path}.opacity`);
+  if (f['visible'] !== undefined) {
+    if (typeof f['visible'] !== 'boolean') fail(`${path}.visible`, 'must be a boolean');
+    flow.visible = f['visible'] as boolean;
+  }
+  if (f['line_style'] !== undefined) {
+    if (!LINE_STYLES.includes(f['line_style'] as never)) {
+      fail(`${path}.line_style`, `must be one of ${LINE_STYLES.join(', ')}`);
+    }
+    flow.line_style = f['line_style'] as FlowConfig['line_style'];
+  }
   if (f['speed_curve_override'] !== undefined) {
     flow.speed_curve_override = validateSpeedCurveOverride(
       f['speed_curve_override'],
@@ -266,6 +281,21 @@ function validateOpacity(raw: unknown): OpacityConfig {
   return out;
 }
 
+function validateVisibility(raw: unknown): VisibilityConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail('visibility', 'must be an object');
+  }
+  const v = raw as Record<string, unknown>;
+  const out: VisibilityConfig = {};
+  for (const key of ['nodes', 'lines', 'dots', 'labels', 'values', 'overlays'] as const) {
+    if (v[key] !== undefined) {
+      if (typeof v[key] !== 'boolean') fail(`visibility.${key}`, 'must be a boolean');
+      out[key] = v[key] as boolean;
+    }
+  }
+  return out;
+}
+
 function validateDomainColors(raw: unknown): DomainColors {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     fail('domain_colors', 'must be an object');
@@ -391,6 +421,10 @@ export function validateConfig(raw: unknown): FlowmeConfig {
 
   if (c['opacity'] !== undefined) {
     config.opacity = validateOpacity(c['opacity']);
+  }
+
+  if (c['visibility'] !== undefined) {
+    config.visibility = validateVisibility(c['visibility']);
   }
 
   return config;

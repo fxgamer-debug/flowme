@@ -4,6 +4,7 @@ import {
   debounce,
   percentToPixel,
   polylineToSvgPath,
+  polylineToSvgPathStyled,
   pointAtProgress,
   pathLengthPercent,
   resolveSpeedCurveParams,
@@ -183,7 +184,7 @@ export class SvgRenderer implements FlowRenderer {
 
       const path = document.createElementNS(SVG_NS, 'path');
       path.setAttribute('id', pathId);
-      path.setAttribute('d', polylineToSvgPath(points, size));
+      path.setAttribute('d', polylineToSvgPathStyled(points, size, flow.line_style ?? 'corner'));
       path.setAttribute('fill', 'none');
       defs.appendChild(path);
 
@@ -191,6 +192,9 @@ export class SvgRenderer implements FlowRenderer {
       group.setAttribute('data-flow-id', flow.id);
       if (flow.opacity !== undefined) {
         group.setAttribute('opacity', String(flow.opacity));
+      }
+      if (flow.visible === false) {
+        group.style.display = 'none';
       }
 
       const outline = document.createElementNS(SVG_NS, 'use');
@@ -263,7 +267,7 @@ export class SvgRenderer implements FlowRenderer {
       const toNode = nodesById.get(flow.to_node);
       if (!fromNode || !toNode) continue;
       const points = [fromNode.position, ...flow.waypoints, toNode.position];
-      dom.path.setAttribute('d', polylineToSvgPath(points, size));
+      dom.path.setAttribute('d', polylineToSvgPathStyled(points, size, flow.line_style ?? 'corner'));
       // pulse circles are positioned in viewBox space and need repositioning
       if (dom.shape === 'pulse') this.applyFlow(flow.id, this.latestValues.get(flow.id) ?? 0);
     }

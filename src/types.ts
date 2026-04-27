@@ -35,6 +35,11 @@ export interface NodeConfig {
   show_value?: boolean;
   /** Per-node opacity override, 0–1. Falls back to config.opacity.nodes. */
   opacity?: number;
+  /**
+   * When false the node circle, label and value are hidden. Default: true.
+   * v1.0.11+.
+   */
+  visible?: boolean;
 }
 
 /**
@@ -97,11 +102,24 @@ export interface FlowConfig {
   /** Per-flow opacity override, 0–1. Falls back to config.opacity.flows. */
   opacity?: number;
   /**
+   * When false the flow line and its animated dots are hidden. Default: true.
+   * v1.0.11+.
+   */
+  visible?: boolean;
+  /**
+   * How waypoints are connected. Default: 'corner' (current behaviour).
+   * v1.0.11+.
+   */
+  line_style?: LineStyle;
+  /**
    * Per-flow override of the sigmoid speed-curve parameters (v1.0.6+).
    * See `SpeedCurveOverride`.
    */
   speed_curve_override?: SpeedCurveOverride;
 }
+
+export const LINE_STYLES = ['corner', 'diagonal', 'curve', 'smooth'] as const;
+export type LineStyle = (typeof LINE_STYLES)[number];
 
 export const OVERLAY_TYPES = ['custom'] as const;
 export type OverlayType = (typeof OVERLAY_TYPES)[number];
@@ -201,6 +219,25 @@ export interface OpacityConfig {
   overlays?: number;
 }
 
+/**
+ * Global layer visibility toggles (v1.0.11+). Binary show/hide for entire
+ * rendering layers, independent of opacity settings. All fields default to true.
+ */
+export interface VisibilityConfig {
+  /** Show/hide all node circles, labels and values. Default: true. */
+  nodes?: boolean;
+  /** Show/hide all flow lines. Default: true. */
+  lines?: boolean;
+  /** Show/hide animated dots on all flows. Default: true. */
+  dots?: boolean;
+  /** Show/hide all node labels. Default: true. */
+  labels?: boolean;
+  /** Show/hide all sensor values on nodes. Default: true. */
+  values?: boolean;
+  /** Show/hide all custom overlays. Default: true. */
+  overlays?: boolean;
+}
+
 export interface BackgroundConfig {
   /** Default background image path. */
   default: string;
@@ -243,6 +280,10 @@ export interface FlowmeConfig {
    * Card-level opacity overrides (v1.0.10+). All fields are optional.
    */
   opacity?: OpacityConfig;
+  /**
+   * Global layer visibility toggles (v1.0.11+). All fields default to true.
+   */
+  visibility?: VisibilityConfig;
 }
 
 export type FlowShape = 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';

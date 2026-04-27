@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 
 import type {
+  DomainColors,
   FlowmeConfig,
   FlowmeDefaults,
   FlowConfig,
@@ -11,15 +12,20 @@ import type {
   NodePosition,
   OpacityConfig,
   OverlayConfig,
+  SpeedCurveOverride,
+  VisibilityConfig,
 } from './types.js';
+import { LINE_STYLES } from './types.js';
 import { validateConfig } from './validate-config.js';
-import { parseAspectRatio } from './utils.js';
+import { parseAspectRatio, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
+import { getProfile, resolveFlowColor } from './flow-profiles/index.js';
 import { UndoStack } from './editor/undo-stack.js';
 import {
   addFlow,
   addNode,
   addOverlay,
   clampPercent,
+  clearSpeedCurveOverride,
   deleteFlow,
   deleteNode,
   deleteOverlay,
@@ -32,14 +38,21 @@ import {
   renameWeatherState,
   setBackgroundDefault,
   setDefault,
+  setDomainColor,
+  setFlowColor,
+  setFlowLineStyle,
   setFlowOpacity,
+  setFlowSpeedCurveOverride,
+  setFlowVisible,
   setNodeOpacity,
+  setNodeVisible,
   setOpacity,
   setOverlayCardConfig,
   setOverlayOpacity,
   setOverlaySize,
   setOverlayVisible,
   setTransitionDuration,
+  setVisibility,
   setWeatherEntity,
   setWeatherStateImage,
   snapToGrid,
@@ -190,6 +203,8 @@ export class FlowmeCardEditor extends LitElement {
         ${this.renderInspector()}
         ${this.renderWeatherPanel()}
         ${this.renderOpacityPanel()}
+        ${this.renderDomainColorsPanel()}
+        ${this.renderVisibilityPanel()}
         ${this.renderDefaultsPanel()}
         ${this.errorMessage ? html`<pre class="error">${this.errorMessage}</pre>` : nothing}
       </div>
@@ -283,9 +298,10 @@ export class FlowmeCardEditor extends LitElement {
   private renderHandle(node: NodeConfig): TemplateResult {
     const selected = node.id === this.selectedNodeId;
     const inSuggestSet = this.suggestNodeIds.includes(node.id);
+    const isHidden = node.visible === false;
     return html`
       <div
-        class=${`handle ${selected ? 'selected' : ''} ${inSuggestSet ? 'suggest-selected' : ''}`}
+        class=${`handle ${selected ? 'selected' : ''} ${inSuggestSet ? 'suggest-selected' : ''} ${isHidden ? 'handle-hidden' : ''}`}
         data-node-id=${node.id}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
         @pointerdown=${this.onHandlePointerDown}
@@ -298,6 +314,17 @@ export class FlowmeCardEditor extends LitElement {
         <span class="handle-dot"></span>
         ${node.label ? html`<span class="handle-label">${node.label}</span>` : nothing}
         ${inSuggestSet ? html`<span class="suggest-badge">${this.suggestNodeIds.indexOf(node.id) + 1}</span>` : nothing}
+        <button
+          class="eye-toggle"
+          title=${isHidden ? 'Show node' : 'Hide node'}
+          @click=${(e: Event) => {
+            e.stopPropagation();
+            if (!this.config) return;
+            const prev = this.config;
+            const next = setNodeVisible(prev, node.id, isHidden);
+            this.pushPatch(prev, next, `${isHidden ? 'show' : 'hide'} node ${node.id}`);
+          }}
+        >${isHidden ? '◉' : '◎'}</button>
       </div>
     `;
   }
@@ -434,6 +461,54 @@ export class FlowmeCardEditor extends LitElement {
             <span>${flow.waypoints.length} waypoint(s)</span>
           </div>
           <label>
+            Line style
+            <select
+              .value=${flow.line_style ?? 'corner'}
+              @change=${(e: Event) => {
+                if (!this.config) return;
+                const val = (e.target as HTMLSelectElement).value;
+                const prev = this.config;
+                const next = setFlowLineStyle(prev, flow.id, val as typeof flow.line_style);
+                this.pushPatch(prev, next, `set line style of ${flow.id}`);
+              }}
+            >
+              ${LINE_STYLES.map(
+                (s) => html`<option value=${s} ?selected=${(flow.line_style ?? 'corner') === s}>${s}</option>`,
+              )}
+            </select>
+          </label>
+          <label>
+            Colour override
+            <div class="color-row">
+              ${(() => {
+                const profile = getProfile(flow.domain ?? this.config.domain);
+                const effective = resolveFlowColor(flow, profile, flow.domain ?? this.config.domain, 1, this.config.domain_colors);
+                return html`
+                  <input
+                    type="color"
+                    .value=${flow.color ?? effective}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const val = (e.target as HTMLInputElement).value;
+                      const prev = this.config;
+                      const next = setFlowColor(prev, flow.id, val);
+                      this.pushPatch(prev, next, `set colour of ${flow.id}`);
+                    }}
+                  />
+                  <span class="color-effective">${flow.color ? 'override' : 'domain default'}</span>
+                  ${flow.color
+                    ? html`<button class="ghost" @click=${() => {
+                        if (!this.config) return;
+                        const prev = this.config;
+                        const next = setFlowColor(prev, flow.id, undefined);
+                        this.pushPatch(prev, next, `clear colour of ${flow.id}`);
+                      }}>Clear</button>`
+                    : nothing}
+                `;
+              })()}
+            </div>
+          </label>
+          <label>
             Flow opacity
             <div class="inspector-slider-row">
               <input
@@ -454,6 +529,24 @@ export class FlowmeCardEditor extends LitElement {
               <span>${(flow.opacity ?? 1).toFixed(2)}</span>
             </div>
           </label>
+          <label>
+            Visible
+            <div class="row">
+              <input
+                type="checkbox"
+                .checked=${flow.visible !== false}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const checked = (e.target as HTMLInputElement).checked;
+                  const prev = this.config;
+                  const next = setFlowVisible(prev, flow.id, checked);
+                  this.pushPatch(prev, next, `${checked ? 'show' : 'hide'} flow ${flow.id}`);
+                }}
+              />
+              <span>${flow.visible !== false ? 'shown' : 'hidden'}</span>
+            </div>
+          </label>
+          ${this.renderSpeedCurveSection(flow)}
           <button class="danger" @click=${() => this.removeFlow(flow.id)}>Delete flow</button>
         </div>
       `;
@@ -464,6 +557,91 @@ export class FlowmeCardEditor extends LitElement {
       return this.renderOverlayInspector(overlay);
     }
     return nothing;
+  }
+
+  private renderSpeedCurveSection(flow: FlowConfig): TemplateResult {
+    if (!this.config) return html``;
+    const profile = getProfile(flow.domain ?? this.config.domain);
+    const params = resolveSpeedCurveParams(flow, profile);
+    const override: SpeedCurveOverride = flow.speed_curve_override ?? {};
+
+    const numInput = (
+      key: keyof SpeedCurveOverride,
+      label: string,
+      unit?: string,
+    ) => html`
+      <div class="speed-curve-row">
+        <label class="speed-curve-label">${label}${unit ? html` <small>(${unit})</small>` : nothing}</label>
+        <input
+          type="number"
+          step="any"
+          min="0"
+          placeholder=${String((params[key] ?? '').toFixed ? (params[key] as number).toFixed(0) : params[key])}
+          .value=${override[key] !== undefined ? String(override[key]) : ''}
+          @change=${(e: Event) => {
+            if (!this.config) return;
+            const raw = (e.target as HTMLInputElement).value.trim();
+            if (raw === '') {
+              // Clear this key
+              const partial: Partial<SpeedCurveOverride> = {};
+              for (const k of Object.keys(override) as (keyof SpeedCurveOverride)[]) {
+                if (k !== key) (partial as Record<string, unknown>)[k] = override[k];
+              }
+              const prev = this.config;
+              const next = setFlowSpeedCurveOverride(prev, flow.id, partial);
+              this.pushPatch(prev, next, `update speed curve ${key} for ${flow.id}`);
+            } else {
+              const v = parseFloat(raw);
+              if (!Number.isFinite(v)) return;
+              const prev = this.config;
+              const next = setFlowSpeedCurveOverride(prev, flow.id, { ...override, [key]: v });
+              this.pushPatch(prev, next, `update speed curve ${key} for ${flow.id}`);
+            }
+          }}
+        />
+      </div>
+    `;
+
+    // Live preview: compute duration at threshold, p50, peak
+    const previewValues = [params.threshold, params.p50, params.peak];
+    const previewDurations = previewValues.map((v) => {
+      const ms = sigmoidSpeedCurve(v, params);
+      return `${(ms / 1000).toFixed(1)}s`;
+    });
+
+    return html`
+      <details class="speed-curve-details">
+        <summary>Speed curve override</summary>
+        <div class="speed-curve-body">
+          <p class="hint-sub">
+            Leave blank to use domain profile defaults.
+            Domain: <strong>${profile.unit_label}</strong> (${flow.domain ?? this.config.domain})
+          </p>
+          ${numInput('threshold', 'Threshold', profile.unit_label)}
+          ${numInput('p50', 'Median (p50)', profile.unit_label)}
+          ${numInput('peak', 'Peak', profile.unit_label)}
+          ${numInput('max_duration', 'Max duration', 'ms')}
+          ${numInput('min_duration', 'Min duration', 'ms')}
+          ${numInput('steepness', 'Steepness', 'k')}
+          <div class="speed-curve-preview">
+            <span>Preview (at threshold / p50 / peak):</span>
+            <strong>${previewDurations[0]}</strong>
+            /
+            <strong>${previewDurations[1]}</strong>
+            /
+            <strong>${previewDurations[2]}</strong>
+          </div>
+          ${Object.keys(override).length > 0
+            ? html`<button class="ghost" @click=${() => {
+                if (!this.config) return;
+                const prev = this.config;
+                const next = clearSpeedCurveOverride(prev, flow.id);
+                this.pushPatch(prev, next, `reset speed curve for ${flow.id}`);
+              }}>Reset to domain defaults</button>`
+            : nothing}
+        </div>
+      </details>
+    `;
   }
 
   private renderOverlayInspector(overlay: OverlayConfig): TemplateResult {
@@ -655,6 +833,107 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
+  private renderDomainColorsPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    const dc: DomainColors = this.config.domain_colors ?? {};
+
+    const DOMAIN_DEFAULTS: DomainColors = {
+      solar: '#FFD700',
+      grid: '#1EB4FF',
+      battery: '#32DC50',
+      load: '#FF8C1E',
+    };
+
+    const colorRow = (key: keyof DomainColors, label: string) => {
+      const override = dc[key];
+      const defaultVal = DOMAIN_DEFAULTS[key]!;
+      return html`
+        <div class="color-picker-row">
+          <span class="color-picker-label">${label}</span>
+          <input
+            type="color"
+            .value=${override ?? defaultVal}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const val = (e.target as HTMLInputElement).value;
+              const prev = this.config;
+              const next = setDomainColor(prev, key, val);
+              this.pushPatch(prev, next, `set domain_colors.${key}`);
+            }}
+          />
+          <span class="color-picker-value">${override ? override : `${defaultVal} (default)`}</span>
+          ${override
+            ? html`<button class="ghost small" @click=${() => {
+                if (!this.config) return;
+                const prev = this.config;
+                const next = setDomainColor(prev, key, undefined);
+                this.pushPatch(prev, next, `reset domain_colors.${key}`);
+              }}>Reset</button>`
+            : nothing}
+        </div>
+      `;
+    };
+
+    return html`
+      <details class="panel domain-colors-panel">
+        <summary>Domain colours</summary>
+        <div class="panel-body">
+          <p class="hint-sub">
+            Override the default colour for each energy domain type. Changes apply to all
+            flows of that domain unless a per-flow colour is set.
+          </p>
+          ${colorRow('solar', 'Solar')}
+          ${colorRow('grid', 'Grid')}
+          ${colorRow('battery', 'Battery')}
+          ${colorRow('load', 'Load')}
+        </div>
+      </details>
+    `;
+  }
+
+  private renderVisibilityPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    const vis: VisibilityConfig = this.config.visibility ?? {};
+
+    const toggle = <K extends keyof VisibilityConfig>(key: K, label: string) => {
+      const value = vis[key] !== false;
+      return html`
+        <label class="visibility-row">
+          <span class="visibility-label">${label}</span>
+          <input
+            type="checkbox"
+            .checked=${value}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const checked = (e.target as HTMLInputElement).checked;
+              const prev = this.config;
+              const next = setVisibility(prev, key, checked);
+              this.pushPatch(prev, next, `set visibility.${key}`);
+            }}
+          />
+          <span class="visibility-val">${value ? 'visible' : 'hidden'}</span>
+        </label>
+      `;
+    };
+
+    return html`
+      <details class="panel visibility-panel">
+        <summary>Visibility</summary>
+        <div class="panel-body">
+          <p class="hint-sub">
+            Binary show/hide for each rendering layer. Independent of opacity.
+          </p>
+          ${toggle('nodes', 'Nodes')}
+          ${toggle('lines', 'Flow lines')}
+          ${toggle('dots', 'Animated dots')}
+          ${toggle('labels', 'Labels')}
+          ${toggle('values', 'Values')}
+          ${toggle('overlays', 'Overlays')}
+        </div>
+      </details>
+    `;
+  }
+
   private renderDefaultsPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const d: FlowmeDefaults = this.config.defaults ?? {};
@@ -712,6 +991,8 @@ export class FlowmeCardEditor extends LitElement {
     if (!this.config) return nothing;
     const bg = this.config.background;
     const stateEntries = Object.entries(bg.weather_states ?? {});
+    const liveWeatherState =
+      bg.weather_entity && this.hass ? this.hass.states[bg.weather_entity]?.state : undefined;
     return html`
       <details class="weather-panel" ?open=${stateEntries.length > 0 || !!bg.weather_entity}>
         <summary>Backgrounds &amp; weather</summary>
@@ -736,14 +1017,30 @@ export class FlowmeCardEditor extends LitElement {
               { includeDomains: ['weather'], placeholder: 'weather.forecast_home' },
             )}
           </label>
+          ${liveWeatherState !== undefined
+            ? html`<div class="weather-live-state">
+                Current state: <strong>${liveWeatherState}</strong>
+                ${bg.weather_states?.[liveWeatherState]
+                  ? html` → <span class="weather-match-ok">matched</span>`
+                  : html` → <span class="weather-match-miss">no mapping (using default)</span>`}
+              </div>`
+            : nothing}
           <label>
-            Transition duration (ms)
+            Fade transition (seconds)
             <input
               type="number"
               min="0"
-              step="100"
-              .value=${String(bg.transition_duration ?? 2000)}
-              @change=${this.onTransitionChange}
+              max="30"
+              step="1"
+              .value=${String(Math.round((bg.transition_duration ?? 5000) / 1000))}
+              @change=${(e: Event) => {
+                if (!this.config) return;
+                const secs = parseFloat((e.target as HTMLInputElement).value);
+                if (!Number.isFinite(secs) || secs < 0) return;
+                const prev = this.config;
+                const next = setTransitionDuration(prev, secs * 1000);
+                this.pushPatch(prev, next, 'set background transition duration');
+              }}
             />
           </label>
           <div class="weather-states">
@@ -785,6 +1082,18 @@ export class FlowmeCardEditor extends LitElement {
             </datalist>
             <button class="add-state" @click=${this.onWeatherStateAdd}>+ Add weather state</button>
           </div>
+          <details class="hint-details">
+            <summary>Standard Met.no state list (for reference)</summary>
+            <div class="hint-states">
+              ${FlowmeCardEditor.KNOWN_WEATHER_STATES.map(
+                (s) => html`<code>${s}</code>`,
+              )}
+              <p class="hint-sub">
+                Any state string is accepted — custom integrations can use any key.
+                State strings are matched exactly as Home Assistant provides them (lowercase, hyphenated).
+              </p>
+            </div>
+          </details>
         </div>
       </details>
     `;
@@ -805,15 +1114,6 @@ export class FlowmeCardEditor extends LitElement {
     const next = setWeatherEntity(prev, trimmed || undefined);
     this.pushPatch(prev, next, 'edit weather entity');
   }
-
-  private onTransitionChange = (event: Event): void => {
-    if (!this.config) return;
-    const raw = (event.target as HTMLInputElement).value;
-    const parsed = Number(raw);
-    const prev = this.config;
-    const next = setTransitionDuration(prev, Number.isFinite(parsed) ? parsed : undefined);
-    this.pushPatch(prev, next, 'edit transition duration');
-  };
 
   private onWeatherStateKeyChange(oldKey: string, event: Event): void {
     if (!this.config) return;
@@ -2019,6 +2319,194 @@ export class FlowmeCardEditor extends LitElement {
       background: var(--secondary-background-color, rgba(255, 255, 255, 0.05));
       color: var(--primary-text-color, inherit);
       cursor: pointer;
+    }
+    .weather-live-state {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .weather-match-ok {
+      color: #4ade80;
+      font-weight: 600;
+    }
+    .weather-match-miss {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+    .hint-details {
+      margin-top: 4px;
+    }
+    .hint-details summary {
+      font-size: 11px;
+      opacity: 0.7;
+      cursor: pointer;
+      list-style: none;
+      padding: 4px 0;
+    }
+    .hint-details summary::before {
+      content: '▸ ';
+    }
+    .hint-details[open] summary::before {
+      content: '▾ ';
+    }
+    .hint-details summary::-webkit-details-marker {
+      display: none;
+    }
+    .hint-states {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px 0;
+    }
+    .hint-states code {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      font-family: monospace;
+    }
+    .hint-states .hint-sub {
+      width: 100%;
+      margin: 4px 0 0;
+    }
+    /* Speed curve section */
+    .speed-curve-details {
+      margin-top: 8px;
+      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+      padding-top: 8px;
+    }
+    .speed-curve-details summary {
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      padding: 4px 0;
+    }
+    .speed-curve-details summary::before { content: '▸ '; }
+    .speed-curve-details[open] summary::before { content: '▾ '; }
+    .speed-curve-details summary::-webkit-details-marker { display: none; }
+    .speed-curve-body {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 6px 0;
+    }
+    .speed-curve-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .speed-curve-label {
+      white-space: nowrap;
+    }
+    .speed-curve-row input {
+      font: inherit;
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+      background: var(--card-background-color, #1a1a1a);
+      color: var(--primary-text-color, #fff);
+    }
+    .speed-curve-preview {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.06);
+    }
+    /* Color picker rows */
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .color-effective {
+      font-size: 11px;
+      opacity: 0.65;
+    }
+    .color-picker-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .color-picker-label {
+      min-width: 64px;
+    }
+    .color-picker-value {
+      font-size: 11px;
+      opacity: 0.65;
+    }
+    /* Panel generic */
+    .panel {
+      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+    }
+    .panel > summary {
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      padding: 8px 12px;
+    }
+    .panel > summary::before { content: '▸ '; }
+    .panel[open] > summary::before { content: '▾ '; }
+    .panel > summary::-webkit-details-marker { display: none; }
+    .panel-body {
+      padding: 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    /* Visibility panel */
+    .visibility-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .visibility-label {
+      min-width: 80px;
+    }
+    .visibility-val {
+      font-size: 11px;
+      opacity: 0.65;
+    }
+    /* Eye toggle on canvas handles */
+    .eye-toggle {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      font-size: 9px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #fff;
+      padding: 0;
+      line-height: 1;
+    }
+    .handle:hover .eye-toggle,
+    .handle.selected .eye-toggle {
+      display: flex;
+    }
+    .handle-hidden .handle-dot {
+      opacity: 0.3;
+      border: 2px dashed rgba(255,255,255,0.5);
+      background: transparent !important;
+    }
+    button.small {
+      font-size: 10px;
+      padding: 2px 6px;
     }
   `;
 }

@@ -2,10 +2,13 @@ import type {
   FlowConfig,
   FlowmeConfig,
   FlowmeDefaults,
+  LineStyle,
   NodeConfig,
   NodePosition,
   OpacityConfig,
   OverlayConfig,
+  SpeedCurveOverride,
+  VisibilityConfig,
 } from '../types.js';
 
 /** Deep-ish clone that preserves only the shapes we care about. */
@@ -407,5 +410,120 @@ export function renameWeatherState(
   if (url === undefined) return config;
   delete map[oldKey];
   map[newKey] = url;
+  return next;
+}
+
+export function setFlowLineStyle(
+  config: FlowmeConfig,
+  flowId: string,
+  style: LineStyle | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    if (style === undefined || style === 'corner') delete out.line_style;
+    else out.line_style = style;
+    return out;
+  });
+  return next;
+}
+
+export function setFlowColor(
+  config: FlowmeConfig,
+  flowId: string,
+  color: string | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    if (color === undefined) delete out.color;
+    else out.color = color;
+    return out;
+  });
+  return next;
+}
+
+export function setNodeVisible(
+  config: FlowmeConfig,
+  nodeId: string,
+  visible: boolean,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.nodes = next.nodes.map((n) => {
+    if (n.id !== nodeId) return n;
+    const out = { ...n };
+    if (visible) delete out.visible;
+    else out.visible = false;
+    return out;
+  });
+  return next;
+}
+
+export function setFlowVisible(
+  config: FlowmeConfig,
+  flowId: string,
+  visible: boolean,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    if (visible) delete out.visible;
+    else out.visible = false;
+    return out;
+  });
+  return next;
+}
+
+export function setVisibility<K extends keyof VisibilityConfig>(
+  config: FlowmeConfig,
+  key: K,
+  value: boolean,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.visibility = { ...next.visibility, [key]: value };
+  return next;
+}
+
+export function setDomainColor(
+  config: FlowmeConfig,
+  key: keyof import('../types.js').DomainColors,
+  color: string | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  if (color === undefined) {
+    if (next.domain_colors) {
+      delete next.domain_colors[key];
+      if (Object.keys(next.domain_colors).length === 0) delete next.domain_colors;
+    }
+  } else {
+    next.domain_colors = { ...next.domain_colors, [key]: color };
+  }
+  return next;
+}
+
+export function setFlowSpeedCurveOverride(
+  config: FlowmeConfig,
+  flowId: string,
+  partial: Partial<SpeedCurveOverride>,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    return { ...f, speed_curve_override: { ...f.speed_curve_override, ...partial } };
+  });
+  return next;
+}
+
+export function clearSpeedCurveOverride(config: FlowmeConfig, flowId: string): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    delete out.speed_curve_override;
+    return out;
+  });
   return next;
 }

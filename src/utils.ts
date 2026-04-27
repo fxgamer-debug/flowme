@@ -85,6 +85,107 @@ export function polylineToSvgPath(points: readonly NodePosition[], size: Size): 
 }
 
 /**
+ * Build an SVG path `d` string from a series of percentage positions using
+ * the requested line style. Particles follow this path via <animateMotion>
+ * <mpath> regardless of style since SVG animateMotion supports all path shapes.
+ *
+ * - `corner`   — right-angle routing between waypoints (M H V segments)
+ * - `diagonal` — straight lines at any angle between waypoints (M L, same as polylineToSvgPath)
+ * - `curve`    — smooth cubic Bézier through waypoints using midpoint tangents
+ * - `smooth`   — quadratic arc at each waypoint for rounded corners
+ */
+export function polylineToSvgPathStyled(
+  points: readonly NodePosition[],
+  size: Size,
+  style: 'corner' | 'diagonal' | 'curve' | 'smooth',
+): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) {
+    const p = percentToPixel(points[0]!, size);
+    return `M ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+  }
+
+  const px = points.map((p) => percentToPixel(p, size));
+
+  if (style === 'diagonal') {
+    // Same as polylineToSvgPath — straight lines at any angle
+    const parts = [`M ${px[0]!.x.toFixed(2)} ${px[0]!.y.toFixed(2)}`];
+    for (let i = 1; i < px.length; i++) {
+      parts.push(`L ${px[i]!.x.toFixed(2)} ${px[i]!.y.toFixed(2)}`);
+    }
+    return parts.join(' ');
+  }
+
+  if (style === 'corner') {
+    // Right-angle routing: move horizontally then vertically between segments
+    const parts = [`M ${px[0]!.x.toFixed(2)} ${px[0]!.y.toFixed(2)}`];
+    for (let i = 1; i < px.length; i++) {
+      const prev = px[i - 1]!;
+      const curr = px[i]!;
+      // Go to the corner point (same x as current, same y as previous)
+      parts.push(`L ${curr.x.toFixed(2)} ${prev.y.toFixed(2)}`);
+      parts.push(`L ${curr.x.toFixed(2)} ${curr.y.toFixed(2)}`);
+    }
+    return parts.join(' ');
+  }
+
+  if (style === 'curve') {
+    // Smooth cubic Bézier using midpoint tangents (Catmull-Rom style)
+    const parts = [`M ${px[0]!.x.toFixed(2)} ${px[0]!.y.toFixed(2)}`];
+    for (let i = 1; i < px.length; i++) {
+      const p0 = px[i - 1]!;
+      const p1 = px[i]!;
+      // Control points: 1/3 along the segment from each endpoint
+      const dx = (p1.x - p0.x) / 3;
+      const dy = (p1.y - p0.y) / 3;
+      const cp1x = (p0.x + dx).toFixed(2);
+      const cp1y = (p0.y + dy).toFixed(2);
+      const cp2x = (p1.x - dx).toFixed(2);
+      const cp2y = (p1.y - dy).toFixed(2);
+      parts.push(`C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`);
+    }
+    return parts.join(' ');
+  }
+
+  // style === 'smooth': quadratic arcs at each waypoint for rounded corners
+  // Radius is 15% of the shorter segment length, capped at 20px
+  const R_RATIO = 0.3;
+  const R_MAX = 20;
+
+  const parts = [`M ${px[0]!.x.toFixed(2)} ${px[0]!.y.toFixed(2)}`];
+  for (let i = 1; i < px.length; i++) {
+    const prev = px[i - 1]!;
+    const curr = px[i]!;
+    const next = px[i + 1];
+
+    if (!next) {
+      // Last segment — straight line to end
+      parts.push(`L ${curr.x.toFixed(2)} ${curr.y.toFixed(2)}`);
+      continue;
+    }
+
+    // Segment lengths
+    const d1 = Math.sqrt((curr.x - prev.x) ** 2 + (curr.y - prev.y) ** 2);
+    const d2 = Math.sqrt((next.x - curr.x) ** 2 + (next.y - curr.y) ** 2);
+    const r = Math.min(Math.min(d1, d2) * R_RATIO, R_MAX);
+
+    // Arc entry point (r before curr on the prev→curr segment)
+    const t1 = r / (d1 || 1);
+    const ex = curr.x - (curr.x - prev.x) * t1;
+    const ey = curr.y - (curr.y - prev.y) * t1;
+
+    // Arc exit point (r after curr on the curr→next segment)
+    const t2 = r / (d2 || 1);
+    const ex2 = curr.x + (next.x - curr.x) * t2;
+    const ey2 = curr.y + (next.y - curr.y) * t2;
+
+    parts.push(`L ${ex.toFixed(2)} ${ey.toFixed(2)}`);
+    parts.push(`Q ${curr.x.toFixed(2)} ${curr.y.toFixed(2)} ${ex2.toFixed(2)} ${ey2.toFixed(2)}`);
+  }
+  return parts.join(' ');
+}
+
+/**
  * Parse a numeric-ish sensor state. HA state strings may be 'unavailable',
  * 'unknown', plain numbers, or numbers with units. Return 0 for anything
  * that isn't a finite parseable number.

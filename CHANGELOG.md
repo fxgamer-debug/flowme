@@ -2,6 +2,70 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.11] — 2026-04-28
+
+Background weather switching full fix, 6 new Phase 2 features, and per-element visibility system.
+
+### Fixed
+
+- **BG-1 — Weather background switching**: Fixed a bug where HA sometimes passes the same `hass`
+  object reference with mutated state inside, causing weather-based background swaps to be silently
+  missed. The `set hass()` setter now explicitly compares the weather entity state value and calls
+  `syncWeatherBackground()` immediately when it changes, without waiting for the LitElement reactive
+  update cycle. Added `dlog` tracing for weather state received / image selected when `debug: true`.
+  State matching is exact-string (no case transforms). Falls back to `background.default` only when
+  no key matches. Added unit tests covering all 16 standard Met.no state→image mappings.
+
+### Added
+
+- **P2-1 — Flow line styles**: New `line_style` field on `FlowConfig` with four options:
+  - `corner` — right-angle H→V routing between waypoints (default, preserves existing behaviour)
+  - `diagonal` — straight lines at any angle between waypoints
+  - `curve` — smooth cubic Bézier through waypoints using midpoint tangents
+  - `smooth` — quadratic arc at each waypoint for rounded corners
+  Added `polylineToSvgPathStyled()` to `utils.ts`. SVG `<animateMotion><mpath>` particles follow
+  the same path shape natively. Editor flow inspector now includes a `<select>` dropdown for
+  `line_style`. New `setFlowLineStyle` command.
+
+- **P2-2 — Background fade default 5s**: Changed `DEFAULT_TRANSITION_MS` from 2000 ms to 5000 ms.
+  Background fade transition duration input in the editor now shows seconds (0–30) and is correctly
+  labelled. Stored in config as milliseconds.
+
+- **P2-3 — Per-flow colour override in editor UI**: Flow inspector now includes a colour picker
+  showing the effective colour with an "override" / "domain default" indicator and a "Clear" button.
+  Added `setFlowColor` command. Also added a collapsible "Domain colours" panel with colour pickers
+  for `solar`, `grid`, `battery`, `load` domain types, showing current override vs default.
+  Added `setDomainColor` command.
+
+- **P2-4 — Per-element visibility toggles**: Complete visibility system:
+  - `visible?: boolean` field added to `NodeConfig` and `FlowConfig` (new, validated).
+  - New top-level `visibility?: VisibilityConfig` block in `FlowmeConfig` with global layer toggles:
+    `nodes`, `lines`, `dots`, `labels`, `values`, `overlays`.
+  - Eye-icon buttons appear on node drag handles in the editor (hover/selected state).
+  - Visibility checkbox added to flow inspector panel.
+  - New "Visibility" collapsible panel in the editor sidebar for global layer toggles.
+  - Global visibility applied via CSS custom properties (`--flowme-vis-*: none`) on the stage.
+  - Per-node `visible: false` applies `display: none` inline. Per-flow `visible: false` applies
+    `style.display = 'none'` on the SVG group in the renderer.
+  - Commands: `setNodeVisible`, `setFlowVisible`, `setVisibility<K>`.
+
+- **P2-5 — Weather states editor free-form**: Weather panel improvements:
+  - "Current live state:" banner shows the live HA weather entity state and whether it is mapped.
+  - "Standard Met.no state list" collapsible hint block with all standard state strings.
+  - State keys are free-form — any custom integration state string is accepted.
+
+- **P2-6 — Speed curve override editor UI**: New collapsible "Speed curve override" section in the
+  flow inspector with inputs for `threshold`, `p50`, `peak`, `max_duration`, `min_duration`,
+  `steepness`. Placeholders show resolved (effective) values. Domain profile unit label shown next
+  to threshold/p50/peak inputs. Live preview row shows calculated animation duration at threshold,
+  p50, and peak. "Reset to domain defaults" button clears the override.
+  Commands: `setFlowSpeedCurveOverride`, `clearSpeedCurveOverride`.
+
+- **Types**: `LineStyle` (`'corner' | 'diagonal' | 'curve' | 'smooth'`) and `LINE_STYLES` constant
+  exported from `types.ts`. `VisibilityConfig` interface added. `visible?: boolean` on `NodeConfig`
+  and `FlowConfig`. `line_style?: LineStyle` on `FlowConfig`. All new fields validated in
+  `validate-config.ts`.
+
 ## [1.0.10] — 2026-04-27
 
 Phase 1 correctness fixes: opacity editor UI, defaults editor UI, suggest-path workflow,

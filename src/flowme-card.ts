@@ -7,6 +7,7 @@ import type {
   HomeAssistant,
   NodeConfig,
   OpacityConfig,
+  VisibilityConfig,
 } from './types.js';
 import { FlowmeConfigError, validateConfig } from './validate-config.js';
 import { createRenderer } from './animation/renderer-factory.js';
@@ -19,8 +20,8 @@ import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.10';
-const DEFAULT_TRANSITION_MS = 2000;
+const CARD_VERSION = '1.0.11';
+const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
 console.info(
@@ -53,6 +54,26 @@ function buildOpacityVars(opacity?: OpacityConfig): string {
   return pairs.join('');
 }
 
+/**
+ * Build CSS custom-property inline-style string from the visibility config block.
+ * A layer value of `false` maps to `display:none` via a CSS variable set to `none`.
+ */
+function buildVisibilityVars(visibility?: VisibilityConfig): string {
+  if (!visibility) return '';
+  const pairs: string[] = [];
+  const add = (key: keyof VisibilityConfig, cssVar: string) => {
+    const v = visibility[key];
+    if (v === false) pairs.push(`${cssVar}:none;`);
+  };
+  add('nodes', '--flowme-vis-nodes');
+  add('lines', '--flowme-vis-lines');
+  add('dots', '--flowme-vis-dots');
+  add('labels', '--flowme-vis-labels');
+  add('values', '--flowme-vis-values');
+  add('overlays', '--flowme-vis-overlays');
+  return pairs.join('');
+}
+
 @customElement('flowme-card')
 export class FlowmeCard extends LitElement {
   private _hass?: HomeAssistant;
@@ -79,6 +100,21 @@ export class FlowmeCard extends LitElement {
         watchValues[id] = value.states[id]?.state;
       }
       dlog('hass setter called. config entity states:', watchValues);
+
+      // BG-1 fix: HA sometimes passes the same object reference with mutated
+      // state inside. Check the weather entity state explicitly so we never
+      // miss a state change even when prev === value by reference.
+      const weatherEntityId = cfg?.background.weather_entity;
+      if (weatherEntityId) {
+        const prevState = prev?.states[weatherEntityId]?.state;
+        const nextState = value.states[weatherEntityId]?.state;
+        dlog('[weather] state:', nextState, '(was:', prevState, ')');
+        if (prevState !== nextState) {
+          // State changed — sync background immediately without waiting for
+          // the reactive update cycle (which may be skipped when prev === value).
+          this.syncWeatherBackground();
+        }
+      }
     } else {
       dlog('hass setter called with undefined');
     }
@@ -305,12 +341,13 @@ export class FlowmeCard extends LitElement {
     const transitionMs = config.background.transition_duration ?? DEFAULT_TRANSITION_MS;
 
     const opacityVars = buildOpacityVars(config.opacity);
+    const visibilityVars = buildVisibilityVars(config.visibility);
 
     return html`
       <ha-card>
         <div
           class="stage"
-          style=${`padding-top: ${paddingTop};${opacityVars}`}
+          style=${`padding-top: ${paddingTop};${opacityVars}${visibilityVars}`}
         >
           <div
             class=${`background ${this.activeLayer === 'A' ? 'visible' : ''}`}
@@ -342,7 +379,10 @@ export class FlowmeCard extends LitElement {
     if (bg.weather_entity && bg.weather_states && this.hass) {
       const weather = this.hass.states[bg.weather_entity];
       if (weather) {
+        // Exact string match — HA provides lowercase hyphenated state strings.
+        // Never transform the state before matching (no toLowerCase, no replace).
         const match = bg.weather_states[weather.state];
+        dlog('[weather]', weather.state, '→', match ?? '(no match, using default)');
         if (match) return match;
       }
     }
@@ -434,11 +474,12 @@ export class FlowmeCard extends LitElement {
       }
     }
 
+    const nodeHidden = node.visible === false;
     return html`
       <div
         class="node"
         data-node-id=${node.id}
-        style=${`left: ${node.position.x}%; top: ${node.position.y}%; --flowme-dot-size: ${size}px;${node.opacity !== undefined ? ` opacity: ${node.opacity};` : ''}`}
+        style=${`left: ${node.position.x}%; top: ${node.position.y}%; --flowme-dot-size: ${size}px;${node.opacity !== undefined ? ` opacity: ${node.opacity};` : ''}${nodeHidden ? ' display: none;' : ''}`}
       >
         <span
           class="node-dot"
@@ -572,6 +613,7 @@ export class FlowmeCard extends LitElement {
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
       pointer-events: none;
       opacity: var(--flowme-opacity-nodes, 1);
+      display: var(--flowme-vis-nodes, flex);
     }
     .node-dot {
       display: inline-block;
@@ -583,10 +625,12 @@ export class FlowmeCard extends LitElement {
       font-weight: 600;
       white-space: nowrap;
       opacity: var(--flowme-opacity-labels, 1);
+      display: var(--flowme-vis-labels, block);
     }
     .node-value {
       opacity: calc(0.85 * var(--flowme-opacity-values, 1));
       white-space: nowrap;
+      display: var(--flowme-vis-values, block);
     }
     .overlay {
       position: absolute;
@@ -611,6 +655,9 @@ export class FlowmeCard extends LitElement {
       font-family: var(--paper-font-body1_-_font-family, inherit);
       line-height: 1.4;
       overflow-wrap: break-word;
+    }
+    .overlay {
+      display: var(--flowme-vis-overlays, block);
     }
     .overlay-custom {
       padding: 0;
