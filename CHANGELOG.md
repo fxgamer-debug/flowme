@@ -2,6 +2,101 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.14] — 2026-04-28
+
+### Added
+
+- **SHAPE-1 — `custom_svg` particle shape**: Flows can now use an arbitrary SVG
+  path as the particle shape, e.g. a lightning bolt, leaf, or house icon.
+  - Add `particle_shape: custom_svg` and `custom_svg_path: "M 0 -8 L 5 8 L -5 8 Z"` to
+    a flow's `animation:` block. The path `d=` string is used as-is.
+  - The shape is automatically scaled to fit the configured `particle_size`/`dot_radius`
+    bounding box via `getBBox()` (falls back gracefully in test environments).
+  - `animateMotion rotate="auto"` keeps the shape tangent to the path direction.
+  - Supported for `dots` and `trail` styles only; other styles fall back to `circle`
+    with a `console.warn`.
+  - Editor UI: when `custom_svg` is selected, a text input for the `d=` string appears
+    with a 40×40 inline SVG live preview.
+
+- **GRADIENT-1 — Value gradient colour interpolation**: A flow's particle or line colour
+  can be driven by a secondary sensor entity value, interpolating in HSL colour space.
+  - Add `value_gradient:` to a flow with `entity`, `low_value`, `high_value`,
+    `low_color` (hex), `high_color` (hex), and optional `mode: flow | line | both`.
+  - Colour updates on every `hass` state change; no additional interpolation lag.
+  - Falls back to the flow's normal colour if the entity is unavailable/unknown.
+  - Works with all `animation_style` values and all `particle_shape` values.
+  - Editor UI: "Value gradient" collapsible section in the flow inspector with
+    entity picker, low/high value and colour inputs, mode dropdown, and a live
+    gradient preview strip.
+  - Unit test: `tests/unit/value-gradient.test.ts` — 6 tests for
+    `interpolateGradientColor` (at low, at high, midpoint, below clamp, above clamp,
+    equal low/high fallback).
+
+  **Example — HVAC temperature gradient:**
+  ```yaml
+  flows:
+    - id: hvac_flow
+      animation:
+        animation_style: fluid
+      value_gradient:
+        entity: sensor.indoor_temperature
+        low_value: 18
+        high_value: 28
+        low_color: "#1EB4FF"   # cool blue
+        high_color: "#FF4500"  # hot orange
+        mode: both
+  ```
+
+  **Example — solar power health:**
+  ```yaml
+  value_gradient:
+    entity: sensor.solar_power
+    low_value: 0
+    high_value: 5000
+    low_color: "#888888"
+    high_color: "#FFD700"
+    mode: flow
+  ```
+
+- **SPACING-1 — Extended particle spacing modes**: Six spacing modes are now
+  fully rendered (previously `even`, `random`, `clustered` were schema-only):
+  - **`even`** (default): equal intervals, unchanged.
+  - **`random`**: randomised positions with minimum gap enforcement; offsets
+    are re-randomised slowly every ~3 s for organic motion.
+  - **`clustered`**: particles grouped into tight clusters separated by large
+    gaps. Sub-config: `cluster_size` (default 3), `cluster_gap` (default 2.0×).
+  - **`pulse`**: rhythmically bunching/spreading — all particles compress to the
+    front `pulse_ratio` fraction of the cycle. Sub-config: `pulse_frequency` Hz
+    (default 1.0), `pulse_ratio` 0–1 (default 0.3).
+  - **`wave_spacing`**: sinusoidal density wave along the path — particles
+    alternate between dense and sparse regions. Sub-config: `wave_frequency`
+    (default 1.0), `wave_amplitude` 0–1 (default 0.7).
+  - **`wave_lateral`**: particles oscillate perpendicular to the path direction
+    (snake/sine-wave visual). Driven by `requestAnimationFrame`; limited to
+    `dots`/`trail` styles. Sub-config: `wave_frequency` (default 1.0),
+    `wave_amplitude` px (default 8).
+  - All spacing modes are applied to `dots`, `arrows`, and `trail` animation styles.
+  - Editor UI: spacing dropdown + conditional sub-config inputs. Preview strip
+    shows a wavy animation for `wave_lateral`.
+
+  **Example — clustered energy bursts:**
+  ```yaml
+  animation:
+    animation_style: dots
+    particle_spacing: clustered
+    cluster_size: 4
+    cluster_gap: 3.0
+  ```
+
+  **Example — lateral wave on fluid flow:**
+  ```yaml
+  animation:
+    animation_style: trail
+    particle_spacing: wave_lateral
+    wave_frequency: 1.5
+    wave_amplitude: 12
+  ```
+
 ## [1.0.13.3] — 2026-04-28
 
 ### Fixed

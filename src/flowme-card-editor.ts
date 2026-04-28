@@ -15,11 +15,12 @@ import type {
   OpacityConfig,
   OverlayConfig,
   SpeedCurveOverride,
+  ValueGradientConfig,
   VisibilityConfig,
 } from './types.js';
-import { LINE_STYLES, ANIMATION_STYLES, PARTICLE_SHAPES, FLOW_DIRECTIONS } from './types.js';
+import { LINE_STYLES, ANIMATION_STYLES, PARTICLE_SHAPES, PARTICLE_SPACINGS, FLOW_DIRECTIONS } from './types.js';
 import { validateConfig } from './validate-config.js';
-import { parseAspectRatio, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
+import { interpolateGradientColor, parseAspectRatio, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
 import { getProfile, resolveFlowColor } from './flow-profiles/index.js';
 import { UndoStack } from './editor/undo-stack.js';
 import {
@@ -67,6 +68,9 @@ import {
   bulkSetNodesVisible,
   alignNodesHorizontal,
   alignNodesVertical,
+  setValueGradient,
+  patchValueGradient,
+  clearValueGradient,
 } from './editor/commands.js';
 import './editor/toolbar.js';
 import type { ToolbarAction } from './editor/toolbar.js';
@@ -605,6 +609,7 @@ export class FlowmeCardEditor extends LitElement {
           </label>
           ${this.renderSpeedCurveSection(flow)}
           ${this.renderAnimationSection(flow)}
+          ${this.renderValueGradientSection(flow)}
           <button class="danger" @click=${() => this.removeFlow(flow.id)}>Delete flow</button>
         </div>
       `;
@@ -762,6 +767,22 @@ export class FlowmeCardEditor extends LitElement {
                 )}
               </select>
             </label>
+            ${(anim.particle_shape ?? 'circle') === 'custom_svg' ? html`
+              <label>SVG path (d= attribute)
+                <input type="text"
+                  placeholder="M 0 -8 L 5 8 L -5 8 Z"
+                  .value=${anim.custom_svg_path ?? ''}
+                  @change=${(e: Event) => {
+                    patch({ custom_svg_path: (e.target as HTMLInputElement).value.trim() });
+                  }}
+                />
+                <svg class="custom-svg-preview" viewBox="-20 -20 40 40" width="40" height="40"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path d=${anim.custom_svg_path || 'M 0 -8 L 5 8 L -5 8 Z'}
+                        fill=${previewColor} />
+                </svg>
+              </label>
+            ` : nothing}
           ` : nothing}
 
           <label>Direction
@@ -802,6 +823,88 @@ export class FlowmeCardEditor extends LitElement {
               }}
             />
           </label>
+
+          <label>Particle spacing
+            <select
+              .value=${anim.particle_spacing ?? 'even'}
+              @change=${(e: Event) => {
+                patch({ particle_spacing: (e.target as HTMLSelectElement).value as FlowAnimationConfig['particle_spacing'] });
+              }}
+            >
+              ${PARTICLE_SPACINGS.map(
+                (s) => html`<option value=${s} ?selected=${(anim.particle_spacing ?? 'even') === s}>${s}</option>`,
+              )}
+            </select>
+          </label>
+
+          ${(anim.particle_spacing === 'clustered') ? html`
+            <label>Cluster size
+              <input type="number" min="1" max="10" step="1"
+                .value=${String(anim.cluster_size ?? 3)}
+                @change=${(e: Event) => {
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (Number.isFinite(v) && v >= 1) patch({ cluster_size: v });
+                }}
+              />
+            </label>
+            <label>Cluster gap (×)
+              <input type="number" min="0.5" max="10" step="0.5"
+                .value=${String(anim.cluster_gap ?? 2.0)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v) && v > 0) patch({ cluster_gap: v });
+                }}
+              />
+            </label>
+          ` : nothing}
+
+          ${(anim.particle_spacing === 'pulse') ? html`
+            <label>Pulse frequency (Hz)
+              <input type="number" min="0.1" max="10" step="0.1"
+                .value=${String(anim.pulse_frequency ?? 1.0)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v) && v > 0) patch({ pulse_frequency: v });
+                }}
+              />
+            </label>
+            <label>Pulse ratio
+              <div class="inspector-slider-row">
+                <input type="range" min="0.1" max="0.9" step="0.05"
+                  .value=${String(anim.pulse_ratio ?? 0.3)}
+                  @change=${(e: Event) => {
+                    const v = parseFloat((e.target as HTMLInputElement).value);
+                    if (Number.isFinite(v)) patch({ pulse_ratio: v });
+                  }}
+                />
+                <span>${(anim.pulse_ratio ?? 0.3).toFixed(2)}</span>
+              </div>
+            </label>
+          ` : nothing}
+
+          ${(anim.particle_spacing === 'wave_spacing' || anim.particle_spacing === 'wave_lateral') ? html`
+            <label>Wave frequency
+              <input type="number" min="0.1" max="10" step="0.1"
+                .value=${String(anim.wave_frequency ?? 1.0)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v) && v > 0) patch({ wave_frequency: v });
+                }}
+              />
+            </label>
+            <label>${anim.particle_spacing === 'wave_lateral' ? 'Wave amplitude (px)' : 'Wave amplitude (0–1)'}
+              <input type="number"
+                min=${anim.particle_spacing === 'wave_lateral' ? '1' : '0.05'}
+                max=${anim.particle_spacing === 'wave_lateral' ? '40' : '1'}
+                step=${anim.particle_spacing === 'wave_lateral' ? '1' : '0.05'}
+                .value=${String(anim.wave_amplitude ?? (anim.particle_spacing === 'wave_lateral' ? 8 : 0.7))}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v) && v > 0) patch({ wave_amplitude: v });
+                }}
+              />
+            </label>
+          ` : nothing}
 
           <label>Glow intensity
             <div class="inspector-slider-row">
@@ -941,6 +1044,26 @@ export class FlowmeCardEditor extends LitElement {
       `;
     }
 
+    // wave_lateral — particles moving along a wavy path
+    if (anim.particle_spacing === 'wave_lateral') {
+      const waveCx = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * 180 + 10);
+      return html`
+        <line x1="10" y1="20" x2="190" y2="20" stroke=${color} stroke-width="1.5" stroke-opacity="0.25"/>
+        ${waveCx.map(
+          (cx, i) => html`
+            <circle cx=${cx} cy="20" r=${r} fill=${color} opacity="0">
+              <animate attributeName="cx" values="${cx};190;10;${cx}" dur="1.4s"
+                repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
+              <animate attributeName="cy" values="20;${10 + (i % 2 === 0 ? 6 : -6)};20;${10 + (i % 2 === 0 ? -6 : 6)};20"
+                dur="1.4s" repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
+              <animate attributeName="opacity" values="0;1;1;0" dur="1.4s"
+                repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
+            </circle>
+          `,
+        )}
+      `;
+    }
+
     // dots / arrow / trail / spark — show moving particles
     const positions = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * 180 + 10);
     return html`
@@ -955,6 +1078,136 @@ export class FlowmeCardEditor extends LitElement {
           </circle>
         `,
       )}
+    `;
+  }
+
+  private renderValueGradientSection(flow: FlowConfig): TemplateResult {
+    if (!this.config) return html``;
+    const vg = flow.value_gradient;
+    const enabled = !!vg;
+
+    // Default gradient config for when user enables it
+    const defaultVg: ValueGradientConfig = {
+      entity: '',
+      low_value: 0,
+      high_value: 100,
+      low_color: '#1EB4FF',
+      high_color: '#FF4500',
+      mode: 'flow',
+    };
+
+    const patch = (partial: Partial<ValueGradientConfig>) => {
+      if (!this.config) return;
+      const prev = this.config;
+      const next = patchValueGradient(prev, flow.id, partial);
+      this.pushPatch(prev, next, `update gradient for ${flow.id}`);
+    };
+
+    // Build live preview gradient if enabled
+    let previewBar = nothing as TemplateResult | typeof nothing;
+    if (vg && vg.low_color && vg.high_color) {
+      try {
+        const midColor = interpolateGradientColor(
+          (vg.low_value + vg.high_value) / 2,
+          vg,
+        );
+        const gradStyle = `background: linear-gradient(to right, ${vg.low_color}, ${midColor}, ${vg.high_color});`;
+        previewBar = html`
+          <div class="gradient-preview-bar" style=${gradStyle}></div>
+          <div class="gradient-preview-labels">
+            <span>${vg.low_color}</span><span>${vg.high_color}</span>
+          </div>
+        `;
+      } catch {
+        // ignore parse errors during editing
+      }
+    }
+
+    return html`
+      <details class="anim-details">
+        <summary>Value gradient</summary>
+        <div class="anim-body">
+
+          <label class="anim-toggle">
+            <input type="checkbox"
+              .checked=${enabled}
+              @change=${(e: Event) => {
+                if (!this.config) return;
+                const prev = this.config;
+                const next = (e.target as HTMLInputElement).checked
+                  ? setValueGradient(prev, flow.id, defaultVg)
+                  : clearValueGradient(prev, flow.id);
+                this.pushPatch(prev, next, `${enabled ? 'disable' : 'enable'} gradient for ${flow.id}`);
+              }}
+            />
+            Enable value gradient
+          </label>
+
+          ${enabled && vg ? html`
+            <label>Entity
+              <input type="text" placeholder="sensor.my_power"
+                .value=${vg.entity}
+                @change=${(e: Event) => patch({ entity: (e.target as HTMLInputElement).value.trim() })}
+              />
+            </label>
+
+            <label>Low value
+              <input type="number" step="any"
+                .value=${String(vg.low_value)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v)) patch({ low_value: v });
+                }}
+              />
+            </label>
+
+            <label>Low colour
+              <div class="color-row">
+                <input type="color"
+                  .value=${vg.low_color}
+                  @input=${(e: Event) => patch({ low_color: (e.target as HTMLInputElement).value })}
+                />
+                <span>${vg.low_color}</span>
+              </div>
+            </label>
+
+            <label>High value
+              <input type="number" step="any"
+                .value=${String(vg.high_value)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v)) patch({ high_value: v });
+                }}
+              />
+            </label>
+
+            <label>High colour
+              <div class="color-row">
+                <input type="color"
+                  .value=${vg.high_color}
+                  @input=${(e: Event) => patch({ high_color: (e.target as HTMLInputElement).value })}
+                />
+                <span>${vg.high_color}</span>
+              </div>
+            </label>
+
+            <label>Mode
+              <select
+                .value=${vg.mode ?? 'flow'}
+                @change=${(e: Event) => {
+                  patch({ mode: (e.target as HTMLSelectElement).value as ValueGradientConfig['mode'] });
+                }}
+              >
+                <option value="flow" ?selected=${(vg.mode ?? 'flow') === 'flow'}>flow (particles only)</option>
+                <option value="line" ?selected=${vg.mode === 'line'}>line (base line only)</option>
+                <option value="both" ?selected=${vg.mode === 'both'}>both</option>
+              </select>
+            </label>
+
+            ${previewBar}
+          ` : nothing}
+        </div>
+      </details>
     `;
   }
 
@@ -3364,6 +3617,36 @@ export class FlowmeCardEditor extends LitElement {
     }
     .anim-global-panel {
       border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+    }
+    .custom-svg-preview {
+      display: block;
+      margin-top: 4px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+    }
+    .gradient-preview-bar {
+      height: 20px;
+      border-radius: 4px;
+      margin: 6px 0 2px;
+    }
+    .gradient-preview-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      opacity: 0.7;
+      margin-bottom: 6px;
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .color-row input[type="color"] {
+      width: 40px;
+      height: 28px;
+      padding: 2px;
+      cursor: pointer;
     }
   `;
 }

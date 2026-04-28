@@ -1,4 +1,4 @@
-import type { FlowConfig, FlowProfile, NodePosition, SpeedCurveOverride } from './types.js';
+import type { FlowConfig, FlowProfile, NodePosition, SpeedCurveOverride, ValueGradientConfig } from './types.js';
 
 export function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
@@ -409,4 +409,84 @@ export function parseAspectRatio(value: string | undefined): number | undefined 
   const h = Number.parseInt(match[2] as string, 10);
   if (!w || !h) return undefined;
   return w / h;
+}
+
+// ── Gradient colour interpolation (v1.0.14) ───────────────────────────────
+
+/** Parse a 3- or 6-digit hex colour string to [r, g, b] in 0–255. */
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
+
+/** Convert [r, g, b] (0–255) to HSL [h(0–360), s(0–1), l(0–1)]. */
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
+  else if (max === gn) h = (bn - rn) / d + 2;
+  else h = (rn - gn) / d + 4;
+  return [h * 60, s, l];
+}
+
+function hueToRgb(p: number, q: number, t: number): number {
+  let tt = t;
+  if (tt < 0) tt += 1;
+  if (tt > 1) tt -= 1;
+  if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+  if (tt < 1 / 2) return q;
+  if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+  return p;
+}
+
+/** Convert HSL [h(0–360), s(0–1), l(0–1)] to hex string. */
+function hslToHex(h: number, s: number, l: number): string {
+  const hn = h / 360;
+  let r: number, g: number, b: number;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hueToRgb(p, q, hn + 1 / 3);
+    g = hueToRgb(p, q, hn);
+    b = hueToRgb(p, q, hn - 1 / 3);
+  }
+  const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/**
+ * Interpolate between two hex colours in HSL space based on a numeric value.
+ *
+ * Pure function — safe to call in unit tests without DOM or HA.
+ *
+ * @param value  Current sensor value
+ * @param config ValueGradientConfig with low/high bounds and colours
+ * @returns      CSS hex string (e.g. "#a3c4ff")
+ */
+export function interpolateGradientColor(value: number, config: ValueGradientConfig): string {
+  const range = config.high_value - config.low_value;
+  const t = range === 0 ? 0 : Math.max(0, Math.min(1, (value - config.low_value) / range));
+
+  const [r1, g1, b1] = hexToRgb(config.low_color);
+  const [r2, g2, b2] = hexToRgb(config.high_color);
+  const [h1, s1, l1] = rgbToHsl(r1, g1, b1);
+  const [h2, s2, l2] = rgbToHsl(r2, g2, b2);
+
+  // Interpolate hue along the short path around the colour wheel
+  let dh = h2 - h1;
+  if (dh > 180) dh -= 360;
+  if (dh < -180) dh += 360;
+  const h = ((h1 + dh * t) + 360) % 360;
+  const s = lerp(s1, s2, t);
+  const l = lerp(l1, l2, t);
+  return hslToHex(h, s, l);
 }

@@ -11,6 +11,7 @@ import type {
   OpacityConfig,
   OverlayConfig,
   SpeedCurveOverride,
+  ValueGradientConfig,
   VisibilityConfig,
 } from '../types.js';
 
@@ -656,5 +657,34 @@ export function setAnimationConfig(
 ): FlowmeConfig {
   const next = cloneConfig(config);
   next.animation = { ...next.animation, ...patch };
+  return next;
+}
+
+export function setValueGradient(
+  config: FlowmeConfig,
+  flowId: string,
+  gradient: ValueGradientConfig,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  const flow = next.flows.find((f) => f.id === flowId);
+  if (flow) flow.value_gradient = gradient;
+  return next;
+}
+
+export function patchValueGradient(
+  config: FlowmeConfig,
+  flowId: string,
+  partial: Partial<ValueGradientConfig>,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  const flow = next.flows.find((f) => f.id === flowId);
+  if (flow) flow.value_gradient = { ...(flow.value_gradient as ValueGradientConfig), ...partial };
+  return next;
+}
+
+export function clearValueGradient(config: FlowmeConfig, flowId: string): FlowmeConfig {
+  const next = cloneConfig(config);
+  const flow = next.flows.find((f) => f.id === flowId);
+  if (flow) delete flow.value_gradient;
   return next;
 }

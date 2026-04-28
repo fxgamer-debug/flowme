@@ -14,13 +14,13 @@ import { createRenderer } from './animation/renderer-factory.js';
 import { SvgRenderer } from './animation/svg-renderer.js';
 import type { FlowRenderer } from './animation/types.js';
 import { getProfile, NEUTRAL_NODE_COLOR, resolveFlowColor } from './flow-profiles/index.js';
-import { parseAspectRatio, parseSensorValue, resolveNightBackground, scaleSensorValue } from './utils.js';
+import { interpolateGradientColor, parseAspectRatio, parseSensorValue, resolveNightBackground, scaleSensorValue } from './utils.js';
 import { renderOverlayHost } from './overlays/render.js';
 import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.13.3';
+const CARD_VERSION = '1.0.14';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -91,6 +91,7 @@ export class FlowmeCard extends LitElement {
       const cfg = this.config;
       const watchIds = [
         ...(cfg?.flows.map((f) => f.entity) ?? []),
+        ...(cfg?.flows.map((f) => f.value_gradient?.entity).filter(Boolean) ?? []),
         ...(cfg?.nodes.map((n) => n.entity).filter(Boolean) ?? []),
         cfg?.background.weather_entity,
         cfg?.background.sun_entity,
@@ -254,6 +255,25 @@ export class FlowmeCard extends LitElement {
           }
         }
         this.renderer.updateFlow(flow.id, scaled.value);
+
+        // GRADIENT-1: compute and push gradient colour when configured
+        if (flow.value_gradient && this.renderer.setGradientColor) {
+          const gradEntity = flow.value_gradient.entity;
+          const gradState = this.hass.states[gradEntity];
+          if (gradState && gradState.state !== 'unavailable' && gradState.state !== 'unknown') {
+            const gradVal = parseFloat(gradState.state);
+            if (Number.isFinite(gradVal)) {
+              const gradColor = interpolateGradientColor(gradVal, flow.value_gradient);
+              this.renderer.setGradientColor(flow.id, gradColor);
+            } else {
+              dlog(`flow "${flow.id}" gradient entity "${gradEntity}" state "${gradState.state}" is not a number`);
+              this.renderer.setGradientColor(flow.id, null);
+            }
+          } else {
+            dlog(`flow "${flow.id}" gradient entity "${gradEntity}" unavailable/unknown — falling back to flow color`);
+            this.renderer.setGradientColor(flow.id, null);
+          }
+        }
       }
     }
 

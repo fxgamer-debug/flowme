@@ -470,6 +470,118 @@ npm run check               # lint + type-check + type-check:tests + test + buil
 
 See [TESTING.md](TESTING.md) for the manual pre-release checklist and [HACS.md](HACS.md) for the HACS submission checklist.
 
+---
+
+## Custom SVG particle shapes (v1.0.14+)
+
+Any SVG path can be used as a particle shape. The path `d=` attribute string is
+scaled automatically to the configured particle size:
+
+```yaml
+flows:
+  - id: solar_flow
+    entity: sensor.solar_power
+    animation:
+      animation_style: dots
+      particle_shape: custom_svg
+      custom_svg_path: "M 0 -8 L 5 8 L -5 8 Z"   # triangle
+      particle_size: 1.5
+```
+
+Other examples:
+- Arrow: `"M -6 0 L 0 -8 L 6 0 L 2 0 L 2 8 L -2 8 L -2 0 Z"`
+- Diamond: `"M 0 -8 L 6 0 L 0 8 L -6 0 Z"`
+- Circle outline (path): `"M 0 -8 A 8 8 0 1 1 0 8 A 8 8 0 1 1 0 -8"`
+
+`custom_svg` is supported for `dots` and `trail` animation styles. Other styles
+fall back to `circle` with a `console.warn`.
+
+---
+
+## Value gradient colour interpolation (v1.0.14+)
+
+Drive flow or particle colour from a sensor entity value, interpolating in HSL
+colour space:
+
+```yaml
+flows:
+  - id: hvac_flow
+    entity: sensor.hvac_power
+    animation:
+      animation_style: fluid
+    value_gradient:
+      entity: sensor.indoor_temperature
+      low_value: 18          # °C
+      high_value: 28
+      low_color: "#1EB4FF"   # cool blue
+      high_color: "#FF4500"  # hot orange
+      mode: both             # applies to both particles and line stroke
+```
+
+| `mode` | What gets the gradient colour |
+|--------|-------------------------------|
+| `flow` (default) | animated particles only |
+| `line` | background outline stroke only |
+| `both` | both particles and stroke |
+
+**More domain examples:**
+
+```yaml
+# Solar intensity — grey at zero, gold at peak
+value_gradient:
+  entity: sensor.solar_power
+  low_value: 0
+  high_value: 5000
+  low_color: "#888888"
+  high_color: "#FFD700"
+
+# Battery SOC — red at low, green at full
+value_gradient:
+  entity: sensor.battery_state_of_charge
+  low_value: 0
+  high_value: 100
+  low_color: "#FF4444"
+  high_color: "#44FF44"
+
+# Network traffic — light to intense
+value_gradient:
+  entity: sensor.wan_download_mbps
+  low_value: 0
+  high_value: 500
+  low_color: "#4488FF"
+  high_color: "#FF44FF"
+```
+
+Falls back to the flow's configured `color`/domain default if the entity is
+unavailable or reports a non-numeric value.
+
+---
+
+## Particle spacing modes (v1.0.14+)
+
+```yaml
+flows:
+  - id: my_flow
+    animation:
+      animation_style: dots
+      particle_spacing: clustered   # even | random | clustered | pulse | wave_spacing | wave_lateral
+      cluster_size: 4               # clustered: particles per cluster (default 3)
+      cluster_gap: 2.5              # clustered: gap multiplier (default 2.0)
+```
+
+| Mode | Description | Sub-config keys |
+|------|-------------|-----------------|
+| `even` | Equal intervals (default) | — |
+| `random` | Organic random positions, slowly re-randomised | — |
+| `clustered` | Tight groups separated by gaps | `cluster_size`, `cluster_gap` |
+| `pulse` | Rhythmically bunching and spreading | `pulse_frequency`, `pulse_ratio` |
+| `wave_spacing` | Sinusoidal density wave along path | `wave_frequency`, `wave_amplitude` |
+| `wave_lateral` | Particles oscillate perpendicular to path | `wave_frequency`, `wave_amplitude` (px) |
+
+`wave_lateral` is driven by `requestAnimationFrame` and supported for `dots`/`trail` only.
+
+---
+
 ## Roadmap
 
 - **v0.1.0** — MVP: energy only, SVG renderer, minimal editor.

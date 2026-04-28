@@ -11,6 +11,7 @@ import type {
   NodePosition,
   OverlayConfig,
   SpeedCurveOverride,
+  ValueGradientConfig,
 } from './types.js';
 import {
   FLOW_DOMAINS,
@@ -169,6 +170,9 @@ function validateFlow(
   if (f['animation'] !== undefined) {
     flow.animation = validateFlowAnimation(f['animation'], `${path}.animation`);
   }
+  if (f['value_gradient'] !== undefined) {
+    flow.value_gradient = validateValueGradient(f['value_gradient'], `${path}.value_gradient`);
+  }
   return flow;
 }
 
@@ -324,6 +328,15 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
     }
     out.particle_spacing = o['particle_spacing'] as FlowAnimationConfig['particle_spacing'];
   }
+  if (o['custom_svg_path'] !== undefined) {
+    if (typeof o['custom_svg_path'] !== 'string') {
+      fail(`${path}.custom_svg_path`, 'must be a string (SVG path d= attribute)');
+    }
+    if ((o['custom_svg_path'] as string).length === 0) {
+      console.warn(`[flowme] ${path}.custom_svg_path is empty — will fall back to circle`);
+    }
+    out.custom_svg_path = o['custom_svg_path'] as string;
+  }
   const readPositiveFloat = (key: string, max?: number): number | undefined => {
     const v = o[key];
     if (v === undefined) return undefined;
@@ -373,6 +386,66 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
       fail(`${path}.dash_gap`, 'must be a number between 0 and 10');
     }
     out.dash_gap = v as number;
+  }
+  // spacing sub-config fields
+  const cs = readPositiveFloat('cluster_size');
+  if (cs !== undefined) out.cluster_size = Math.max(1, Math.round(cs));
+  const cg = readPositiveFloat('cluster_gap');
+  if (cg !== undefined) out.cluster_gap = cg;
+  const pf = readPositiveFloat('pulse_frequency', 20);
+  if (pf !== undefined) out.pulse_frequency = pf;
+  if (o['pulse_ratio'] !== undefined) {
+    const v = o['pulse_ratio'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) <= 0 || (v as number) >= 1) {
+      fail(`${path}.pulse_ratio`, 'must be a number between 0 (exclusive) and 1 (exclusive)');
+    }
+    out.pulse_ratio = v as number;
+  }
+  const wf = readPositiveFloat('wave_frequency', 20);
+  if (wf !== undefined) out.wave_frequency = wf;
+  const wa = readPositiveFloat('wave_amplitude');
+  if (wa !== undefined) out.wave_amplitude = wa;
+  return out;
+}
+
+/** Validate a CSS hex colour string e.g. "#FF4500" or "#f00". */
+function validateHexColor(val: unknown, path: string): string {
+  if (typeof val !== 'string' || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(val)) {
+    fail(path, 'must be a CSS hex colour string, e.g. "#FF4500" or "#f00"');
+  }
+  return val as string;
+}
+
+function validateValueGradient(raw: unknown, path: string): ValueGradientConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail(path, 'must be an object');
+  }
+  const o = raw as Record<string, unknown>;
+  if (typeof o['entity'] !== 'string' || !(o['entity'] as string).length) {
+    fail(`${path}.entity`, 'must be a non-empty entity id string');
+  }
+  if (typeof o['low_value'] !== 'number' || !Number.isFinite(o['low_value'])) {
+    fail(`${path}.low_value`, 'must be a finite number');
+  }
+  if (typeof o['high_value'] !== 'number' || !Number.isFinite(o['high_value'])) {
+    fail(`${path}.high_value`, 'must be a finite number');
+  }
+  if ((o['low_value'] as number) >= (o['high_value'] as number)) {
+    // warn rather than error — still usable, colour will just be clamped to one end
+    console.warn(`[flowme] ${path}: low_value should be less than high_value`);
+  }
+  const out: ValueGradientConfig = {
+    entity: o['entity'] as string,
+    low_value: o['low_value'] as number,
+    high_value: o['high_value'] as number,
+    low_color: validateHexColor(o['low_color'], `${path}.low_color`),
+    high_color: validateHexColor(o['high_color'], `${path}.high_color`),
+  };
+  if (o['mode'] !== undefined) {
+    if (!['flow', 'line', 'both'].includes(o['mode'] as string)) {
+      fail(`${path}.mode`, 'must be one of: flow, line, both');
+    }
+    out.mode = o['mode'] as ValueGradientConfig['mode'];
   }
   return out;
 }

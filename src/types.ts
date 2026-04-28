@@ -121,6 +121,12 @@ export interface FlowConfig {
    * All fields optional — defaults preserve existing behaviour.
    */
   animation?: FlowAnimationConfig;
+  /**
+   * Value-gradient colour interpolation (v1.0.14+). When set, particle and/or
+   * line colour is driven by a secondary sensor entity's numeric value,
+   * interpolating linearly between low_color and high_color in HSL space.
+   */
+  value_gradient?: ValueGradientConfig;
 }
 
 export const LINE_STYLES = ['corner', 'diagonal', 'curve', 'smooth'] as const;
@@ -133,14 +139,36 @@ export const ANIMATION_STYLES = [
 ] as const;
 export type AnimationStyle = (typeof ANIMATION_STYLES)[number];
 
-export const PARTICLE_SHAPES = ['circle', 'square', 'arrow', 'teardrop', 'diamond'] as const;
+export const PARTICLE_SHAPES = ['circle', 'square', 'arrow', 'teardrop', 'diamond', 'custom_svg'] as const;
 export type ParticleShape = (typeof PARTICLE_SHAPES)[number];
 
 export const FLOW_DIRECTIONS = ['auto', 'forward', 'reverse', 'both'] as const;
 export type FlowDirection = (typeof FLOW_DIRECTIONS)[number];
 
-export const PARTICLE_SPACINGS = ['even', 'random', 'clustered'] as const;
+export const PARTICLE_SPACINGS = ['even', 'random', 'clustered', 'pulse', 'wave_spacing', 'wave_lateral'] as const;
 export type ParticleSpacing = (typeof PARTICLE_SPACINGS)[number];
+
+/**
+ * Value-gradient colour interpolation (v1.0.14+). When configured, the flow
+ * line and/or particles interpolate colour based on a secondary sensor value.
+ */
+export interface ValueGradientConfig {
+  /** Sensor entity id providing the gradient value. */
+  entity: string;
+  /** At or below this value, `low_color` is used. */
+  low_value: number;
+  /** At or above this value, `high_color` is used. */
+  high_value: number;
+  /** CSS hex colour string for the low end, e.g. "#1EB4FF". */
+  low_color: string;
+  /** CSS hex colour string for the high end, e.g. "#FF4500". */
+  high_color: string;
+  /**
+   * Which elements receive the gradient colour.
+   * 'flow' = particles only (default), 'line' = base line only, 'both' = both.
+   */
+  mode?: 'flow' | 'line' | 'both';
+}
 
 /**
  * Per-flow animation configuration (v1.0.12+). All fields are optional
@@ -180,11 +208,31 @@ export interface FlowAnimationConfig {
   /** dash style only — ratio of gap length to dash length. Default: 0.5. */
   dash_gap?: number;
   /**
-   * Spacing mode for particles along the path.
-   * Schema-only in v1.0.12 — rendering deferred to v1.0.13.
-   * Default: 'even'.
+   * Spacing mode for particles along the path. Default: 'even'.
+   * v1.0.12 schema; v1.0.14 rendering.
    */
   particle_spacing?: ParticleSpacing;
+  /**
+   * SVG path d= string for custom particle shape.
+   * Only used when particle_shape === 'custom_svg'. v1.0.14+.
+   * Example: "M 0 -8 L 5 8 L -5 8 Z" (triangle pointing up).
+   */
+  custom_svg_path?: string;
+  /** clustered spacing — particles per cluster. Default: 3. */
+  cluster_size?: number;
+  /** clustered spacing — gap between clusters as multiplier of cluster length. Default: 2.0. */
+  cluster_gap?: number;
+  /** pulse spacing — pulses per second. Default: 1.0. */
+  pulse_frequency?: number;
+  /** pulse spacing — fraction of cycle spent bunched (0–1). Default: 0.3. */
+  pulse_ratio?: number;
+  /** wave_spacing / wave_lateral — complete waves along path. Default: 1.0. */
+  wave_frequency?: number;
+  /**
+   * wave_spacing — density variation (0=even, 1=max). Default: 0.7.
+   * wave_lateral — max perpendicular offset in px. Default: 8.
+   */
+  wave_amplitude?: number;
 }
 
 /**

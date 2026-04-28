@@ -65,6 +65,8 @@ interface FlowDomNodes {
   group: SVGGElement;
   path: SVGPathElement;
   pathId: string;
+  /** The faint background outline <use> element (used for gradient line colour). */
+  outline?: SVGUseElement;
   /** Active animation style currently rendered */
   style: AnimStyle;
   particles: ParticleDom[];
@@ -118,6 +120,13 @@ export class SvgRenderer implements FlowRenderer {
   private lastAdaptiveChange = new Map<string, number>();
   // Animation resume (P3-4): track last particle offsets
   private particleOffsets = new Map<string, number[]>();
+  // GRADIENT-1: per-flow gradient colour (resolved by FlowmeCard from hass state)
+  private gradientColors = new Map<string, string>();
+  // SPACING-1: random spacing — per-particle offsets refreshed slowly
+  private randomOffsets = new Map<string, number[]>();
+  private randomOffsetsLastUpdate = new Map<string, number>();
+  // SPACING-1: wave_lateral — per-flow JS-driven position state
+  private lateralPhase = new Map<string, number>();
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
@@ -149,6 +158,21 @@ export class SvgRenderer implements FlowRenderer {
   }
 
   /**
+   * GRADIENT-1: Set the resolved gradient colour for a flow.
+   * Called by FlowmeCard whenever the gradient entity's state changes.
+   * The colour replaces the normal flow colour in the next render frame.
+   * Pass undefined/null to clear and fall back to the flow's own color.
+   */
+  setGradientColor(flowId: string, color: string | null): void {
+    if (color) {
+      this.gradientColors.set(flowId, color);
+    } else {
+      this.gradientColors.delete(flowId);
+    }
+    this.applyUpdate();
+  }
+
+  /**
    * ANIM-2 fps cap: schedule a rAF loop that enforces the configured fps.
    * Called once after init; no-op when fps is 60 (default — rAF is already ~60Hz).
    */
@@ -167,6 +191,8 @@ export class SvgRenderer implements FlowRenderer {
         if (smoothSpeed && (this.speedTransitionStart.size > 0 || this.dirChanging.size > 0)) {
           this.flushUpdates();
         }
+        // wave_lateral: update perpendicular offsets every frame
+        this.updateLateralWaves(now);
       }
       this.rafHandle = requestAnimationFrame(loop);
     };
@@ -198,6 +224,10 @@ export class SvgRenderer implements FlowRenderer {
     this.adaptiveCount.clear();
     this.lastAdaptiveChange.clear();
     this.particleOffsets.clear();
+    this.gradientColors.clear();
+    this.randomOffsets.clear();
+    this.randomOffsetsLastUpdate.clear();
+    this.lateralPhase.clear();
   }
 
   // ── internal ──────────────────────────────────────────────────────────────
@@ -255,6 +285,7 @@ export class SvgRenderer implements FlowRenderer {
 
       const dom: FlowDomNodes = {
         group, path, pathId,
+        outline,
         style: this.animStyle(flow),
         particles: [],
       };
@@ -368,7 +399,19 @@ export class SvgRenderer implements FlowRenderer {
     this.lastDirection.set(flowId, intendedDirection);
 
     const domain = flow.domain ?? this.config?.domain;
-    const color = resolveFlowColor(flow, profile, domain, direction, this.config?.domain_colors);
+    const baseColor = resolveFlowColor(flow, profile, domain, direction, this.config?.domain_colors);
+
+    // GRADIENT-1: gradient color overrides base color per the mode setting
+    const gradientColor = this.gradientColors.get(flowId);
+    const gradMode = flow.value_gradient?.mode ?? 'flow';
+    // particleColor is used by dot/arrow/trail styles; lineColor for the path line
+    const particleColor = gradientColor && gradMode !== 'line' ? gradientColor : baseColor;
+    const lineColor = gradientColor && gradMode !== 'flow' ? gradientColor : baseColor;
+    // `color` is the legacy single-color variable used by most branches
+    const color = particleColor;
+
+    // Apply gradient line colour to the background outline stroke
+    if (dom.outline) dom.outline.setAttribute('stroke', lineColor);
 
     this.setGroupOpacity(dom, effectiveGroupOpacity);
 
@@ -583,6 +626,149 @@ export class SvgRenderer implements FlowRenderer {
     return `drop-shadow(0 0 ${blur}px ${color})`;
   }
 
+  // ── SPACING-1: particle begin-offset computation ─────────────────────────
+
+  /**
+   * Compute `begin` offsets (in seconds, negative = pre-delay before cycle
+   * start) for all particles given the configured spacing mode.
+   *
+   * Returns an array of `count` numbers, each representing the `begin`
+   * attribute value for `animateMotion`.
+   */
+  private resolveParticleBegins(
+    flowId: string,
+    count: number,
+    durMs: number,
+    anim: NonNullable<FlowConfig['animation']>,
+  ): number[] {
+    const spacing = anim.particle_spacing ?? 'even';
+    const durS = durMs / 1000;
+    const evenInterval = durS / count;
+
+    switch (spacing) {
+      case 'even':
+      default:
+        return Array.from({ length: count }, (_, i) => -(evenInterval * i));
+
+      case 'random': {
+        const now = performance.now();
+        const lastUpdate = this.randomOffsetsLastUpdate.get(flowId) ?? 0;
+        const UPDATE_INTERVAL_MS = 3000;
+        let offsets = this.randomOffsets.get(flowId);
+        if (!offsets || offsets.length !== count || (now - lastUpdate) > UPDATE_INTERVAL_MS) {
+          // Generate new random offsets with minimum gap of 10% of even interval
+          const minGap = evenInterval * 0.1;
+          const newOffsets: number[] = [];
+          for (let i = 0; i < count; i++) {
+            let candidate: number;
+            let tries = 0;
+            do {
+              candidate = -(Math.random() * durS);
+              tries++;
+            } while (
+              tries < 20 &&
+              newOffsets.some((o) => {
+                const diff = Math.abs(((candidate - o) % durS) + durS) % durS;
+                return diff < minGap && diff > durS - minGap;
+              })
+            );
+            newOffsets.push(candidate);
+          }
+          this.randomOffsets.set(flowId, newOffsets);
+          this.randomOffsetsLastUpdate.set(flowId, now);
+          offsets = newOffsets;
+        }
+        return offsets;
+      }
+
+      case 'clustered': {
+        const clusterSize = Math.max(1, Math.round(anim.cluster_size ?? 3));
+        const clusterGap = anim.cluster_gap ?? 2.0;
+        const intraInterval = evenInterval * 0.3;
+        const begins: number[] = [];
+        let pos = 0;
+        for (let i = 0; i < count; i++) {
+          const posInCluster = i % clusterSize;
+          if (i > 0 && posInCluster === 0) {
+            // start of a new cluster — advance by the gap
+            pos += intraInterval * clusterSize * clusterGap;
+          }
+          begins.push(-(pos % durS));
+          pos += intraInterval;
+        }
+        return begins;
+      }
+
+      case 'pulse': {
+        const pulsePeriodS = 1 / Math.max(0.01, anim.pulse_frequency ?? 1.0);
+        const bunchedRatio = anim.pulse_ratio ?? 0.3;
+        const now = (performance.now() / 1000) % pulsePeriodS;
+        const isBunched = now < pulsePeriodS * bunchedRatio;
+        if (isBunched) {
+          // Compress all particles to first 10% of duration — tight bunch
+          return Array.from({ length: count }, (_, i) => -(evenInterval * 0.1 * i));
+        } else {
+          // Spread: even spacing
+          return Array.from({ length: count }, (_, i) => -(evenInterval * i));
+        }
+      }
+
+      case 'wave_spacing': {
+        const waveFreq = anim.wave_frequency ?? 1.0;
+        const waveAmp = anim.wave_amplitude ?? 0.7;
+        return Array.from({ length: count }, (_, i) => {
+          const phase = (i / count) * Math.PI * 2 * waveFreq;
+          const jitter = Math.sin(phase) * waveAmp * (durS / 2);
+          return -(evenInterval * i + jitter);
+        });
+      }
+
+      case 'wave_lateral':
+        // Lateral movement is handled per-frame in updateLateralWave —
+        // begin offsets remain evenly spaced so animateMotion handles timing
+        return Array.from({ length: count }, (_, i) => -(evenInterval * i));
+    }
+  }
+
+  /**
+   * SPACING-1 wave_lateral: update perpendicular particle offsets each rAF frame.
+   * For each flow using wave_lateral spacing, moves each particle's SVG transform
+   * to apply a sine-wave perpendicular displacement based on the particle's current
+   * progress along the path.
+   */
+  private updateLateralWaves(nowMs: number): void {
+    if (!this.config) return;
+    for (const flow of this.config.flows) {
+      if ((flow.animation?.particle_spacing ?? 'even') !== 'wave_lateral') continue;
+      const dom = this.flowNodes.get(flow.id);
+      if (!dom || dom.particles.length === 0) continue;
+
+      const waveFreq = flow.animation?.wave_frequency ?? 1.0;
+      const waveAmp = flow.animation?.wave_amplitude ?? 8;
+      const durMs = this.currentDurMs.get(flow.id) ?? 2000;
+      const count = dom.particles.length;
+
+      for (let i = 0; i < count; i++) {
+        const p = dom.particles[i];
+        if (!p) continue;
+        // Particle progress along the path [0,1] at current time
+        const progress = ((nowMs / durMs + i / count) % 1 + 1) % 1;
+        // Lateral offset using sine wave
+        const phase = progress * Math.PI * 2 * waveFreq;
+        const lateralPx = Math.sin(phase) * waveAmp;
+        // Apply perpendicular offset — we rotate 90° to get the perpendicular
+        // For simplicity use translateY which is perpendicular to horizontal flow
+        // (works well with diagonal/curve paths in the viewport coordinate space)
+        const existingTransform = p.shape.getAttribute('data-base-transform') ?? '';
+        if (!existingTransform && p.shape.hasAttribute('transform')) {
+          p.shape.setAttribute('data-base-transform', p.shape.getAttribute('transform') ?? '');
+        }
+        const base = p.shape.getAttribute('data-base-transform') ?? '';
+        p.shape.setAttribute('transform', `${base} translateY(${lateralPx.toFixed(2)})`);
+      }
+    }
+  }
+
   // ── animation style implementations ──────────────────────────────────────
 
   /**
@@ -628,6 +814,9 @@ export class SvgRenderer implements FlowRenderer {
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    const animCfg = flow.animation ?? {};
+    const begins = this.resolveParticleBegins(flow.id, desired, durMs, animCfg);
+
     const installMotion = (particles: ParticleDom[], dir: number) => {
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i]!;
@@ -637,7 +826,7 @@ export class SvgRenderer implements FlowRenderer {
         fresh.setAttribute('repeatCount', 'indefinite');
         fresh.setAttribute('dur', durStr);
         fresh.setAttribute('rotate', 'auto');
-        fresh.setAttribute('begin', `${((-durMs * i) / (particles.length * 1000)).toFixed(3)}s`);
+        fresh.setAttribute('begin', `${(begins[i] ?? 0).toFixed(3)}s`);
         if (dir < 0) {
           fresh.setAttribute('keyPoints', '1;0');
           fresh.setAttribute('keyTimes', '0;1');
@@ -825,6 +1014,7 @@ export class SvgRenderer implements FlowRenderer {
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    const arrowBegins = this.resolveParticleBegins(flow.id, desired, durMs, flow.animation ?? {});
     for (let i = 0; i < dom.particles.length; i++) {
       const p = dom.particles[i]!;
       this.updateParticleColor(p, color, flow, profile, flicker);
@@ -832,7 +1022,7 @@ export class SvgRenderer implements FlowRenderer {
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
       fresh.setAttribute('rotate', 'auto');
-      fresh.setAttribute('begin', `${((-durMs * i) / (dom.particles.length * 1000)).toFixed(3)}s`);
+      fresh.setAttribute('begin', `${(arrowBegins[i] ?? 0).toFixed(3)}s`);
       if (direction < 0) {
         fresh.setAttribute('keyPoints', '1;0');
         fresh.setAttribute('keyTimes', '0;1');
@@ -874,6 +1064,7 @@ export class SvgRenderer implements FlowRenderer {
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    const trailBegins = this.resolveParticleBegins(flow.id, desired, durMs, flow.animation ?? {});
     for (let i = 0; i < dom.particles.length; i++) {
       const p = dom.particles[i]!;
       this.updateParticleColor(p, color, flow, profile, flicker);
@@ -881,7 +1072,7 @@ export class SvgRenderer implements FlowRenderer {
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
       fresh.setAttribute('rotate', 'auto');
-      fresh.setAttribute('begin', `${((-durMs * i) / (dom.particles.length * 1000)).toFixed(3)}s`);
+      fresh.setAttribute('begin', `${(trailBegins[i] ?? 0).toFixed(3)}s`);
       if (direction < 0) {
         fresh.setAttribute('keyPoints', '1;0');
         fresh.setAttribute('keyTimes', '0;1');
@@ -1015,6 +1206,7 @@ export class SvgRenderer implements FlowRenderer {
       return (p.shape.getAttribute('data-kind') as ParticleKind | null) ?? 'arrow';
     }
     if (tag === 'ellipse') return 'teardrop';
+    if (tag === 'path') return (p.shape.getAttribute('data-kind') as ParticleKind | null) ?? 'custom_svg';
     return 'circle';
   }
 
@@ -1028,6 +1220,7 @@ export class SvgRenderer implements FlowRenderer {
     const r = this.resolveParticleRadius(flow);
     const glow = this.resolveGlow(flow, profile);
     let shape: SVGGraphicsElement;
+    let alreadyAppended = false;
 
     switch (kind) {
       case 'square': {
@@ -1078,6 +1271,40 @@ export class SvgRenderer implements FlowRenderer {
         shape = poly;
         break;
       }
+      case 'custom_svg': {
+        const pathD = flow.animation?.custom_svg_path ?? '';
+        if (!pathD) {
+          console.warn('[flowme] particle_shape: custom_svg requires custom_svg_path — falling back to circle');
+          const circle = document.createElementNS(SVG_NS, 'circle');
+          circle.setAttribute('r', String(r));
+          circle.setAttribute('fill', color);
+          circle.setAttribute('opacity', '0');
+          shape = circle;
+          break;
+        }
+        const pathEl = document.createElementNS(SVG_NS, 'path');
+        pathEl.setAttribute('d', pathD);
+        pathEl.setAttribute('fill', color);
+        pathEl.setAttribute('opacity', '0');
+        pathEl.setAttribute('data-kind', 'custom_svg');
+        // Append to group first so getBBox() works in a real SVG context
+        dom.group.appendChild(pathEl);
+        alreadyAppended = true;
+        try {
+          const bbox = (pathEl as SVGGraphicsElement).getBBox();
+          const maxDim = Math.max(bbox.width, bbox.height, 1);
+          const targetSize = r * 2;
+          const scale = targetSize / maxDim;
+          // Translate to centre the path on origin, then scale to fit
+          const tx = -(bbox.x + bbox.width / 2);
+          const ty = -(bbox.y + bbox.height / 2);
+          pathEl.setAttribute('transform', `scale(${scale.toFixed(4)}) translate(${tx.toFixed(4)},${ty.toFixed(4)})`);
+        } catch {
+          // getBBox() can fail in JSDOM/SSR — skip scaling
+        }
+        shape = pathEl as unknown as SVGGraphicsElement;
+        break;
+      }
       default: {
         const circle = document.createElementNS(SVG_NS, 'circle');
         circle.setAttribute('r', String(r));
@@ -1100,7 +1327,7 @@ export class SvgRenderer implements FlowRenderer {
     mpath.setAttribute('href', `#${dom.pathId}`);
     animateMotion.appendChild(mpath);
     shape.appendChild(animateMotion);
-    dom.group.appendChild(shape);
+    if (!alreadyAppended) dom.group.appendChild(shape);
     return { shape, animateMotion };
   }
 

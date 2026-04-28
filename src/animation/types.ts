@@ -7,6 +7,11 @@ export interface FlowRenderer {
   init(container: HTMLElement, config: FlowmeConfig): Promise<void>;
   /** Push a new sensor value for the named flow. Safe to call frequently. */
   updateFlow(flowId: string, value: number): void;
+  /**
+   * GRADIENT-1: Set the resolved gradient colour for a flow.
+   * Optional — renderers that don't support gradients can omit this method.
+   */
+  setGradientColor?(flowId: string, color: string | null): void;
   /** Tear down DOM, observers, timers. */
   destroy(): void;
 }
