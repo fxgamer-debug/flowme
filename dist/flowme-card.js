@@ -918,7 +918,7 @@ function Ae(e, t) {
 function ns(e, t) {
   (!e || typeof e != "object" || Array.isArray(e)) && v(t, "must be an object");
   const i = e;
-  (typeof i.entity != "string" || !i.entity.length) && v(`${t}.entity`, "must be a non-empty entity id string"), (typeof i.low_value != "number" || !Number.isFinite(i.low_value)) && v(`${t}.low_value`, "must be a finite number"), (typeof i.high_value != "number" || !Number.isFinite(i.high_value)) && v(`${t}.high_value`, "must be a finite number"), i.low_value >= i.high_value && console.warn(`[flowme] ${t}: low_value should be less than high_value`);
+  typeof i.entity != "string" && v(`${t}.entity`, "must be a string entity id"), (typeof i.low_value != "number" || !Number.isFinite(i.low_value)) && v(`${t}.low_value`, "must be a finite number"), (typeof i.high_value != "number" || !Number.isFinite(i.high_value)) && v(`${t}.high_value`, "must be a finite number"), i.low_value >= i.high_value && console.warn(`[flowme] ${t}: low_value should be less than high_value`);
   const s = {
     entity: i.entity,
     low_value: i.low_value,
@@ -1819,14 +1819,16 @@ class Qt {
         for (let u = 0; u < o; u++) {
           const h = n.particles[u];
           if (!h) continue;
-          h.animateMotion.setAttribute("dur", "999999s"), h.animateMotion.setAttribute("begin", "indefinite");
+          if (!h.animateMotion.hasAttribute("data-js-driven")) {
+            const y = document.createElementNS("http://www.w3.org/2000/svg", "animateMotion");
+            y.setAttribute("data-js-driven", "1"), y.setAttribute("begin", "indefinite"), y.setAttribute("dur", "1s"), h.animateMotion.replaceWith(y), h.animateMotion = y, h.shape.appendChild(y);
+          }
           const f = d[u] ?? 0;
           if (p > 0 && c)
             try {
               const y = c.getPointAtLength(f * p), g = Math.max(0.5, p * 0.01), m = c.getPointAtLength(Math.max(0, f * p - g)), x = c.getPointAtLength(Math.min(p, f * p + g)), _ = Math.atan2(x.y - m.y, x.x - m.x) * (180 / Math.PI);
               h.shape.setAttribute("transform", `translate(${y.x.toFixed(2)},${y.y.toFixed(2)}) rotate(${_.toFixed(1)})`);
             } catch {
-              h.animateMotion.setAttribute("dur", `${a.toFixed(3)}s`), h.animateMotion.setAttribute("begin", `${(-(f * a)).toFixed(4)}s`);
             }
         }
       }
@@ -3323,7 +3325,7 @@ let M = class extends V {
       e,
       /*commitToHa*/
       !1
-    )), this.unsubscribe = null, this.dragPointerId = null, this.dragTarget = null, this.dragStartConfig = null, this.dragShiftHeld = !1, this.dragStartPx = null, this.dragMoved = !1, this.rubberBandJustSelected = !1, this.onDefaultBgChange = (e) => {
+    )), this.unsubscribe = null, this._ownCommit = !1, this.dragPointerId = null, this.dragTarget = null, this.dragStartConfig = null, this.dragShiftHeld = !1, this.dragStartPx = null, this.dragMoved = !1, this.rubberBandJustSelected = !1, this.onDefaultBgChange = (e) => {
       if (!this.config) return;
       const t = e.target.value, i = this.config, s = nn(i, t);
       this.pushPatch(i, s, "edit default background");
@@ -3599,7 +3601,7 @@ let M = class extends V {
   }
   setConfig(e) {
     try {
-      this.config = kt(e), this.undoStack.clear(), this.errorMessage = "";
+      this.config = kt(e), this._ownCommit || this.undoStack.clear(), this.errorMessage = "";
     } catch (t) {
       this.errorMessage = t instanceof Error ? t.message : String(t);
     }
@@ -4439,7 +4441,7 @@ let M = class extends V {
           `}
 
         <button class="ghost full-width" @click=${n}>
-          + Add waypoint at midpoint
+          + Add waypoint
         </button>
       </div>
     `;
@@ -5290,12 +5292,13 @@ let M = class extends V {
     this.config = e, t ? this.commitToHa(e) : this.commitToHa(e);
   }
   commitToHa(e) {
+    this._ownCommit = !0;
     const t = new CustomEvent("config-changed", {
       detail: { config: e },
       bubbles: !0,
       composed: !0
     });
-    this.dispatchEvent(t);
+    this.dispatchEvent(t), this._ownCommit = !1;
   }
   refreshUndoState() {
     this.canUndo = this.undoStack.canUndo(), this.canRedo = this.undoStack.canRedo(), this.undoLabel = this.undoStack.topUndoDescription() ?? "", this.redoLabel = this.undoStack.topRedoDescription() ?? "";
@@ -5367,19 +5370,27 @@ M.styles = Et`
       inset: 0;
       width: 100%;
       height: 100%;
-      pointer-events: none;
+      overflow: visible;
     }
     .connectors .segment {
-      stroke: rgba(255, 255, 255, 0.55);
-      stroke-width: 0.6;
-      stroke-dasharray: 1.5 1.5;
+      stroke: rgba(255, 255, 255, 0.5);
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
       vector-effect: non-scaling-stroke;
-      pointer-events: stroke;
+      pointer-events: visibleStroke;
+      fill: none;
       cursor: crosshair;
+      opacity: 0.5;
+      transition: opacity 0.15s;
+    }
+    .connectors .segment:hover {
+      opacity: 1;
+      stroke: white;
     }
     .connectors .segment.selected {
       stroke: var(--primary-color, #03a9f4);
       stroke-width: 2.5;
+      opacity: 1;
       filter: drop-shadow(0 0 3px var(--primary-color, #03a9f4));
     }
     .handle {
@@ -6101,7 +6112,7 @@ M.styles = Et`
       stroke: transparent;
       stroke-width: 20;
       vector-effect: non-scaling-stroke;
-      pointer-events: stroke;
+      pointer-events: visibleStroke;
       cursor: crosshair;
       fill: none;
     }
@@ -6420,7 +6431,7 @@ var to = Object.defineProperty, eo = Object.getOwnPropertyDescriptor, et = (e, t
     (r = e[o]) && (n = (s ? r(t, i, n) : r(n)) || n);
   return s && n && to(t, i, n), n;
 };
-const io = "1.0.14.3", ti = 5e3;
+const io = "1.0.14.4", ti = 5e3;
 console.info(
   `%c flowme %c v${io} `,
   "color: white; background: #4ADE80; font-weight: 700;",

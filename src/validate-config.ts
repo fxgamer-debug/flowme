@@ -421,8 +421,8 @@ function validateValueGradient(raw: unknown, path: string): ValueGradientConfig 
     fail(path, 'must be an object');
   }
   const o = raw as Record<string, unknown>;
-  if (typeof o['entity'] !== 'string' || !(o['entity'] as string).length) {
-    fail(`${path}.entity`, 'must be a non-empty entity id string');
+  if (typeof o['entity'] !== 'string') {
+    fail(`${path}.entity`, 'must be a string entity id');
   }
   if (typeof o['low_value'] !== 'number' || !Number.isFinite(o['low_value'])) {
     fail(`${path}.low_value`, 'must be a finite number');

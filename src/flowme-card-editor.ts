@@ -147,6 +147,9 @@ export class FlowmeCardEditor extends LitElement {
   private readonly stageRef: Ref<HTMLDivElement> = createRef();
   private undoStack = new UndoStack((next) => this.applyConfig(next, /*commitToHa*/ false));
   private unsubscribe: (() => void) | null = null;
+  /** True while we are in the middle of dispatching a config-changed event.
+   *  Prevents setConfig (called back by HA) from clearing the undo stack. */
+  private _ownCommit = false;
   private dragPointerId: number | null = null;
   private dragTarget: DragTarget | null = null;
   private dragStartConfig: FlowmeConfig | null = null;
@@ -181,7 +184,13 @@ export class FlowmeCardEditor extends LitElement {
   setConfig(config: unknown): void {
     try {
       this.config = validateConfig(config);
-      this.undoStack.clear();
+      // Only clear undo when HA pushes a genuinely external config change.
+      // When we dispatch config-changed ourselves (_ownCommit), HA echoes
+      // setConfig back to us — clearing the stack then would wipe every undo
+      // entry the moment the user makes any edit.
+      if (!this._ownCommit) {
+        this.undoStack.clear();
+      }
       this.errorMessage = '';
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);
@@ -1171,7 +1180,7 @@ export class FlowmeCardEditor extends LitElement {
           `}
 
         <button class="ghost full-width" @click=${addAtMidpoint}>
-          + Add waypoint at midpoint
+          + Add waypoint
         </button>
       </div>
     `;
@@ -2808,12 +2817,14 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   private commitToHa(config: FlowmeConfig): void {
+    this._ownCommit = true;
     const event = new CustomEvent('config-changed', {
       detail: { config },
       bubbles: true,
       composed: true,
     });
     this.dispatchEvent(event);
+    this._ownCommit = false;
   }
 
   private refreshUndoState(): void {
@@ -2872,19 +2883,27 @@ export class FlowmeCardEditor extends LitElement {
       inset: 0;
       width: 100%;
       height: 100%;
-      pointer-events: none;
+      overflow: visible;
     }
     .connectors .segment {
-      stroke: rgba(255, 255, 255, 0.55);
-      stroke-width: 0.6;
-      stroke-dasharray: 1.5 1.5;
+      stroke: rgba(255, 255, 255, 0.5);
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
       vector-effect: non-scaling-stroke;
-      pointer-events: stroke;
+      pointer-events: visibleStroke;
+      fill: none;
       cursor: crosshair;
+      opacity: 0.5;
+      transition: opacity 0.15s;
+    }
+    .connectors .segment:hover {
+      opacity: 1;
+      stroke: white;
     }
     .connectors .segment.selected {
       stroke: var(--primary-color, #03a9f4);
       stroke-width: 2.5;
+      opacity: 1;
       filter: drop-shadow(0 0 3px var(--primary-color, #03a9f4));
     }
     .handle {
@@ -3606,7 +3625,7 @@ export class FlowmeCardEditor extends LitElement {
       stroke: transparent;
       stroke-width: 20;
       vector-effect: non-scaling-stroke;
-      pointer-events: stroke;
+      pointer-events: visibleStroke;
       cursor: crosshair;
       fill: none;
     }

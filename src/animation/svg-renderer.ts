@@ -868,9 +868,19 @@ export class SvgRenderer implements FlowRenderer {
         const p = dom.particles[i];
         if (!p) continue;
 
-        // Freeze the animateMotion so we can drive position ourselves
-        p.animateMotion.setAttribute('dur', '999999s');
-        p.animateMotion.setAttribute('begin', 'indefinite');
+        // Replace the running animateMotion with an inert placeholder so the
+        // SMIL engine does not contribute any motion transform.  Simply changing
+        // 'begin' on an already-running animation does not stop it in all
+        // browsers; replacing the element is the only reliable way.
+        if (!p.animateMotion.hasAttribute('data-js-driven')) {
+          const inert = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+          inert.setAttribute('data-js-driven', '1');
+          inert.setAttribute('begin', 'indefinite');
+          inert.setAttribute('dur', '1s');
+          p.animateMotion.replaceWith(inert);
+          p.animateMotion = inert;
+          p.shape.appendChild(inert);
+        }
 
         const pos = positions[i] ?? 0;
 
@@ -884,9 +894,7 @@ export class SvgRenderer implements FlowRenderer {
             const angle = Math.atan2(ptB.y - ptA.y, ptB.x - ptA.x) * (180 / Math.PI);
             p.shape.setAttribute('transform', `translate(${pt.x.toFixed(2)},${pt.y.toFixed(2)}) rotate(${angle.toFixed(1)})`);
           } catch {
-            // getPointAtLength unavailable — fall back to begin= timing
-            p.animateMotion.setAttribute('dur', `${durS.toFixed(3)}s`);
-            p.animateMotion.setAttribute('begin', `${(-(pos * durS)).toFixed(4)}s`);
+            // getPointAtLength unavailable in this environment; skip frame
           }
         }
       }

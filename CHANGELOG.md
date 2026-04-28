@@ -2,6 +2,54 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.14.4] — 2026-04-29
+
+### Changed
+
+- **BUG-6 — "Add waypoint" button label**: Renamed "Add waypoint at midpoint" to "Add waypoint".
+  The midpoint insertion behaviour is an implementation detail that doesn't need to be surfaced.
+
+### Fixed
+
+- **AUDIT-1 — Codebase audit**: Full audit of `src/`, `tests/`, and `dev/` for hardcoded
+  coordinates, personal entity IDs, and personal information. No findings: all entity IDs and
+  coordinates in dev/test files are generic placeholders (`sensor.pv_total_power`,
+  `sensor.example_power`, x:20/y:30 etc.). No personal names or Romanian words found anywhere.
+
+- **BUG-1 — Value gradient editor sub-fields not appearing (third occurrence)**: Root cause
+  identified: `validateConfig` threw a validation error when `value_gradient.entity` was an
+  empty string, causing `pushPatch` to silently revert the entire config change before it could
+  update the editor UI. Fixed by relaxing `validateValueGradient` to accept an empty entity
+  string — the renderer already handles missing/unavailable entities gracefully.
+
+- **BUG-2 — `wave_spacing` and `pulse` rendering at top-left corner (0,0)**: The `animateMotion`
+  element was already running when JS-driven positioning tried to use `transform` on the shape.
+  SVG applies both the `animateMotion` motion supplement *and* the `transform` attribute, placing
+  the particle at a wrong combined position. Fixed by replacing the running `animateMotion` with
+  an inert placeholder element (no path reference, `begin=indefinite`) before applying the
+  JS-driven `translate(x,y) rotate(angle)` transform. The inert element contributes zero motion
+  transform, leaving the `transform` attribute as the sole position source.
+
+- **BUG-3 — Flow lines not visible in editor canvas**: The `.connectors` SVG had
+  `pointer-events: none` on the container element, which prevented child `.segment` elements
+  from being clickable regardless of their own `pointer-events: visibleStroke` setting. Also
+  increased stroke visibility: `stroke-width: 2`, `stroke-dasharray: 4 4`, `opacity: 0.5`
+  (unselected) with `opacity: 1` and white stroke on hover. Selected flows retain the
+  primary-colour highlight.
+
+- **BUG-4 — Undo/redo completely non-functional**: Root cause: `setConfig` called
+  `undoStack.clear()` unconditionally. Since Home Assistant calls `setConfig` on the editor
+  every time a `config-changed` event is dispatched (which happens on every edit via
+  `commitToHa`), the undo stack was wiped immediately after every operation. Fixed by adding
+  an `_ownCommit` flag that `commitToHa` sets before dispatching and clears after. `setConfig`
+  now only clears the undo stack when `_ownCommit` is false (i.e., when HA pushes a genuinely
+  external configuration change such as opening a different card).
+
+- **BUG-5 — Undo available after disabling value gradient but not after enabling it**: Resolved
+  as a direct consequence of the BUG-1 fix. Previously, the enable path threw a validation
+  error and never reached `pushPatch`, so no undo entry was created. With empty-entity
+  validation relaxed, both enable and disable paths succeed and push to the undo stack.
+
 ## [1.0.14.3] — 2026-04-28
 
 ### Fixed
