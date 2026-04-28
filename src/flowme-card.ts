@@ -20,7 +20,7 @@ import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.14.2';
+const CARD_VERSION = '1.0.14.3';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -212,82 +212,101 @@ export class FlowmeCard extends LitElement {
       this.renderer = createRenderer();
       this.rendererReadyFor = this.config;
       const activeConfig = this.config;
-      void this.renderer.init(mount, activeConfig).catch((err) => {
-        dlog('renderer init failed — falling back to SVG renderer', err);
-        this.teardownRenderer();
-        this.renderer = new SvgRenderer();
-        this.rendererReadyFor = activeConfig;
-        void this.renderer.init(mount, activeConfig).catch((err2) => {
-          console.error('[flowme] SVG renderer init also failed', err2);
+      void this.renderer.init(mount, activeConfig)
+        .then(() => {
+          // After init, push current hass values (including gradient colours)
+          // so flows render immediately without waiting for the next hass change.
+          if (this.hass) this.pushAllValuesToRenderer();
+        })
+        .catch((err) => {
+          dlog('renderer init failed — falling back to SVG renderer', err);
+          this.teardownRenderer();
+          this.renderer = new SvgRenderer();
+          this.rendererReadyFor = activeConfig;
+          void this.renderer.init(mount, activeConfig)
+            .then(() => { if (this.hass) this.pushAllValuesToRenderer(); })
+            .catch((err2) => {
+              console.error('[flowme] SVG renderer init also failed', err2);
+            });
         });
-      });
     }
 
     if (changed.has('hass') && this.renderer && this.hass) {
-      dlog('willUpdate hass-changed → pushing values for', this.config.flows.length, 'flow(s) to renderer', this.renderer.constructor.name);
-      for (const flow of this.config.flows) {
-        const state = this.hass.states[flow.entity];
-        const rawParsed = parseSensorValue(state?.state);
-        const profile = getProfile(flow.domain ?? this.config.domain);
-        const sensorUnit = state?.attributes?.['unit_of_measurement'] as string | undefined;
-        const scaled = scaleSensorValue(rawParsed, sensorUnit, profile.unit_scale);
-        dlog(
-          'updateFlow →', flow.id,
-          'entity=', flow.entity,
-          'raw=', state?.state,
-          'parsed=', rawParsed,
-          'sensorUnit=', sensorUnit ?? '(none)',
-          'matchedUnit=', scaled.matchedUnit ?? '(none → passthrough)',
-          'factor=', scaled.factor,
-          'scaledToBase(' + profile.unit_label + ')=', scaled.value,
-        );
-        if (!state) {
-          const key = `${flow.id}:${flow.entity}`;
-          if (!this.warnedMissing.has(key)) {
-            this.warnedMissing.add(key);
-            dlog(`flow "${flow.id}" references entity "${flow.entity}" but it is not present in hass.states — check spelling / domain permissions`);
-          }
-        } else if (state.state === 'unavailable' || state.state === 'unknown') {
-          const key = `${flow.id}:${flow.entity}:unavailable`;
-          if (!this.warnedMissing.has(key)) {
-            this.warnedMissing.add(key);
-            dlog(`flow "${flow.id}" entity "${flow.entity}" is currently ${state.state} — no flow will render until it reports a number`);
-          }
-        }
-        this.renderer.updateFlow(flow.id, scaled.value);
-
-        // GRADIENT-1: compute and push gradient colour when configured
-        if (flow.value_gradient && this.renderer.setGradientColor) {
-          const gradEntity = flow.value_gradient.entity;
-          const gradState = this.hass.states[gradEntity];
-          if (gradState && gradState.state !== 'unavailable' && gradState.state !== 'unknown') {
-            const gradVal = parseFloat(gradState.state);
-            if (Number.isFinite(gradVal)) {
-              const vg = flow.value_gradient;
-              const clamped = Math.max(vg.low_value, Math.min(vg.high_value, gradVal));
-              const gradColor = interpolateGradientColor(gradVal, vg);
-              dlog(
-                '[gradient]', flow.id,
-                'entity value:', gradVal,
-                'clamped:', clamped,
-                'range:', `${vg.low_value}–${vg.high_value}`,
-                'colour:', gradColor,
-              );
-              this.renderer.setGradientColor(flow.id, gradColor);
-            } else {
-              dlog(`flow "${flow.id}" gradient entity "${gradEntity}" state "${gradState.state}" is not a number`);
-              this.renderer.setGradientColor(flow.id, null);
-            }
-          } else {
-            dlog(`flow "${flow.id}" gradient entity "${gradEntity}" unavailable/unknown — falling back to flow color`);
-            this.renderer.setGradientColor(flow.id, null);
-          }
-        }
-      }
+      this.pushAllValuesToRenderer();
     }
 
     if (changed.has('config') || changed.has('hass')) {
       this.syncWeatherBackground();
+    }
+  }
+
+  /**
+   * Push the current hass state values for every flow to the renderer,
+   * including gradient colours. Called both on hass changes and after
+   * a fresh renderer is initialised so colours never need a hass event
+   * to become visible.
+   */
+  private pushAllValuesToRenderer(): void {
+    if (!this.config || !this.renderer || !this.hass) return;
+    dlog('pushAllValuesToRenderer → flows:', this.config.flows.length, 'renderer:', this.renderer.constructor.name);
+    for (const flow of this.config.flows) {
+      const state = this.hass.states[flow.entity];
+      const rawParsed = parseSensorValue(state?.state);
+      const profile = getProfile(flow.domain ?? this.config.domain);
+      const sensorUnit = state?.attributes?.['unit_of_measurement'] as string | undefined;
+      const scaled = scaleSensorValue(rawParsed, sensorUnit, profile.unit_scale);
+      dlog(
+        'updateFlow →', flow.id,
+        'entity=', flow.entity,
+        'raw=', state?.state,
+        'parsed=', rawParsed,
+        'sensorUnit=', sensorUnit ?? '(none)',
+        'matchedUnit=', scaled.matchedUnit ?? '(none → passthrough)',
+        'factor=', scaled.factor,
+        'scaledToBase(' + profile.unit_label + ')=', scaled.value,
+      );
+      if (!state) {
+        const key = `${flow.id}:${flow.entity}`;
+        if (!this.warnedMissing.has(key)) {
+          this.warnedMissing.add(key);
+          dlog(`flow "${flow.id}" references entity "${flow.entity}" but it is not present in hass.states — check spelling / domain permissions`);
+        }
+      } else if (state.state === 'unavailable' || state.state === 'unknown') {
+        const key = `${flow.id}:${flow.entity}:unavailable`;
+        if (!this.warnedMissing.has(key)) {
+          this.warnedMissing.add(key);
+          dlog(`flow "${flow.id}" entity "${flow.entity}" is currently ${state.state} — no flow will render until it reports a number`);
+        }
+      }
+      this.renderer.updateFlow(flow.id, scaled.value);
+
+      // GRADIENT-1: compute and push gradient colour when configured
+      if (flow.value_gradient && this.renderer.setGradientColor) {
+        const gradEntity = flow.value_gradient.entity;
+        const gradState = this.hass.states[gradEntity];
+        if (gradState && gradState.state !== 'unavailable' && gradState.state !== 'unknown') {
+          const gradVal = parseFloat(gradState.state);
+          if (Number.isFinite(gradVal)) {
+            const vg = flow.value_gradient;
+            const clamped = Math.max(vg.low_value, Math.min(vg.high_value, gradVal));
+            const gradColor = interpolateGradientColor(gradVal, vg);
+            dlog(
+              '[gradient]', flow.id,
+              'entity value:', gradVal,
+              'clamped:', clamped,
+              'range:', `${vg.low_value}–${vg.high_value}`,
+              'colour:', gradColor,
+            );
+            this.renderer.setGradientColor(flow.id, gradColor);
+          } else {
+            dlog(`flow "${flow.id}" gradient entity "${gradEntity}" state "${gradState.state}" is not a number`);
+            this.renderer.setGradientColor(flow.id, null);
+          }
+        } else {
+          dlog(`flow "${flow.id}" gradient entity "${gradEntity}" unavailable/unknown — falling back to flow color`);
+          this.renderer.setGradientColor(flow.id, null);
+        }
+      }
     }
   }
 

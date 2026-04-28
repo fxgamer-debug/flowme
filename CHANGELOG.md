@@ -2,6 +2,46 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.14.3] — 2026-04-28
+
+### Fixed
+
+- **BUG-1 — Value gradient not visible on card**: The gradient colour was only pushed to
+  the renderer when `hass` changed. After a config edit (which creates a fresh renderer)
+  the renderer started with no `latestValues`, so `setGradientColor` triggered a flush
+  that did nothing. Fixed by extracting all value/gradient pushing into a shared
+  `pushAllValuesToRenderer()` helper that is called both on `hass` changes and immediately
+  after a new renderer finishes `init()`.
+
+- **BUG-2 — `wave_lateral` glitching (particles appear/disappear)**: Removed the complex
+  path-tangent sampling and `data-base-transform` concatenation logic. Because
+  `animateMotion rotate="auto"` already aligns the element's local coordinate system with
+  the path tangent, a simple `translate(0, offsetPx)` on the shape element is always
+  perpendicular to the path — no manual tangent needed. This also eliminates the transform
+  corruption that caused glitching.
+
+- **BUG-3 — `wave_spacing` particles zipping at extreme speed**: Rewrote `wave_spacing`
+  and `pulse` to drive particle positions directly via `SVGPathElement.getPointAtLength()`
+  each rAF frame instead of updating `animateMotion begin=` offsets. Calling
+  `beginElement()` every frame was restarting the animation from scratch each frame,
+  causing the visible flashing/zipping. JS-driven absolute positioning avoids this entirely.
+
+### Added
+
+- **FEATURE-1 — Waypoint editor UI in flow inspector panel**: When a flow is selected,
+  a "Waypoints" section appears in the inspector showing every waypoint as an editable
+  row (index number, x% and y% number inputs, delete × button). An "Add waypoint at
+  midpoint" button inserts a new waypoint at the midpoint of the longest segment.
+  Waypoint handles on the canvas are now only shown for the selected flow (previously
+  shown for all flows). Handles have been restyled as squares with a primary-colour border
+  to distinguish them from circular node handles. All waypoint operations push undo commands.
+
+- **FEATURE-2 — Undo/redo keyboard shortcut now reliable**: Added `document.addEventListener`
+  with `capture: true` as a secondary registration alongside the existing `window`
+  listener. This ensures Ctrl+Z / Cmd+Z is intercepted even when HA panels or
+  inner iframes capture keyboard events before they reach `window`. Added
+  `stopImmediatePropagation()` to prevent the handler from firing twice.
+
 ## [1.0.14.2] — 2026-04-28
 
 ### Fixed

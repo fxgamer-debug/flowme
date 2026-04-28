@@ -759,76 +759,51 @@ export class SvgRenderer implements FlowRenderer {
       const waveAmp = flow.animation?.wave_amplitude ?? 20;
       const count = dom.particles.length;
 
-      // Try to use SVG path geometry for tangent computation
-      const svgPath = dom.path as SVGPathElement | null;
-      let totalLen = 0;
-      try {
-        totalLen = svgPath ? svgPath.getTotalLength() : 0;
-      } catch {
-        totalLen = 0;
-      }
-
       // Use wall-clock time for a continuously advancing phase — never resets.
       // Each particle is offset by 2π/count around the wave cycle so they
-      // form a smooth snake pattern across the full path.
+      // form a smooth snake pattern.
       const phasePerParticle = (Math.PI * 2) / count;
-      // 0.002 makes one full wave cycle per (500 / wave_frequency) ms
+      // 0.002 → one full wave cycle per (500 / wave_frequency) ms
       const globalPhase = (nowMs * waveFreq * 0.002) % (Math.PI * 2);
 
       for (let i = 0; i < count; i++) {
         const p = dom.particles[i];
         if (!p) continue;
 
-        // Each particle sits at a fixed path position determined by animateMotion;
-        // we sample the tangent at the particle's logical position along the path.
-        const progress = (i / count);
-
-        // Continuous lateral offset — phase never resets
+        // Continuous lateral offset — phase advances with wall-clock time
         const phase = globalPhase + i * phasePerParticle;
         const offsetPx = Math.sin(phase) * waveAmp;
 
-        let tx = 0;
-        let ty = offsetPx; // fallback: fixed Y
-
-        if (totalLen > 0 && svgPath) {
-          // Sample path tangent by getting two nearby points
-          const DELTA = Math.max(0.5, totalLen * 0.005);
-          const len = progress * totalLen;
-          try {
-            const pa = svgPath.getPointAtLength(Math.max(0, len - DELTA));
-            const pb = svgPath.getPointAtLength(Math.min(totalLen, len + DELTA));
-            const dx = pb.x - pa.x;
-            const dy = pb.y - pa.y;
-            const mag = Math.sqrt(dx * dx + dy * dy);
-            if (mag > 0.001) {
-              // Perpendicular to tangent: (-dy/mag, dx/mag)
-              const nx = -dy / mag;
-              const ny = dx / mag;
-              tx = nx * offsetPx;
-              ty = ny * offsetPx;
-            }
-          } catch {
-            // getPointAtLength not available (e.g. JSDOM) — use fixed Y fallback
-            ty = offsetPx;
+        // Because animateMotion uses rotate="auto", the element's local coordinate
+        // system is already aligned with the path tangent at its current position.
+        // translate(0, offsetPx) therefore always moves the particle perpendicular
+        // to the path — no manual tangent computation needed.
+        //
+        // For custom_svg particles we must preserve the existing scale/translate
+        // base transform (stored as data-base-transform the first time).
+        // For all other shapes there is no base transform.
+        const isCustomSvg = p.shape.getAttribute('data-kind') === 'custom_svg';
+        if (isCustomSvg) {
+          if (!p.shape.hasAttribute('data-base-transform')) {
+            p.shape.setAttribute('data-base-transform', p.shape.getAttribute('transform') ?? '');
           }
+          const base = p.shape.getAttribute('data-base-transform') ?? '';
+          p.shape.setAttribute('transform', `${base} translate(0,${offsetPx.toFixed(2)})`);
+        } else {
+          // Overwrite transform directly — no base transform for standard shapes
+          p.shape.setAttribute('transform', `translate(0,${offsetPx.toFixed(2)})`);
         }
-
-        // Store base transform once (from initial makeParticle scaling)
-        if (!p.shape.hasAttribute('data-base-transform')) {
-          p.shape.setAttribute('data-base-transform', p.shape.getAttribute('transform') ?? '');
-        }
-        const base = p.shape.getAttribute('data-base-transform') ?? '';
-        p.shape.setAttribute('transform', `${base} translate(${tx.toFixed(2)},${ty.toFixed(2)})`);
       }
     }
   }
 
   /**
-   * wave_spacing: recompute animateMotion begin= values every rAF frame so
-   * ALL particles are distributed across the full path simultaneously with
-   * varying density — not a moving group.
+   * wave_spacing / pulse: position particles directly via SVGPathElement.getPointAtLength()
+   * every rAF frame. This avoids the SVG animateMotion begin= restart problem (calling
+   * beginElement() every frame causes visible flashing/zipping).
    *
-   * pulse: drive abrupt compression + gradual expansion from wall-clock time.
+   * Particles are hidden from animateMotion by setting their animateMotion dur to
+   * a very large value and using JS-driven absolute SVG coordinates instead.
    */
   private updateTimeBasedSpacing(nowMs: number): void {
     if (!this.config) return;
@@ -842,16 +817,17 @@ export class SvgRenderer implements FlowRenderer {
       const durMs = this.currentDurMs.get(flow.id) ?? 2000;
       const durS = durMs / 1000;
       const anim = flow.animation ?? {};
-      const begins: number[] = [];
+
+      // Compute normalised [0,1] path positions for each particle
+      const positions: number[] = [];
 
       if (spacing === 'wave_spacing') {
-        // Spatial density function: all N particles visible across full path at once.
-        // Particle i's normalised position oscillates around its even-spaced slot
-        // using a travelling sine wave so density visibly varies.
+        // Travelling sine-wave density: all N particles span the full path
+        // simultaneously with visibly varying gaps.
         const waveFreq = anim.wave_frequency ?? 2.0;
-        const waveAmp = anim.wave_amplitude ?? 0.85;
-        const speed = 1 / durS; // path fractions per second
-        const time = (nowMs / 1000) * speed; // advances with animation speed
+        const waveAmp = Math.min(anim.wave_amplitude ?? 0.85, 0.95); // clamp to avoid positions > 1
+        // time advances at the same rate as the animation (one full path per durS)
+        const time = (nowMs * 0.001) / durS;
 
         const rawPositions: number[] = [];
         for (let i = 0; i < count; i++) {
@@ -859,48 +835,59 @@ export class SvgRenderer implements FlowRenderer {
           const sine = Math.sin(base * Math.PI * 2 * waveFreq) * waveAmp * (1 / count);
           rawPositions.push(((base + sine) % 1 + 1) % 1);
         }
-        // Sort ascending so particles never "cross" (which would look wrong)
         rawPositions.sort((a, b) => a - b);
-        for (const pos of rawPositions) {
-          // Convert normalised position → negative begin= offset in seconds
-          begins.push(-(pos * durS));
-        }
+        positions.push(...rawPositions);
       } else {
-        // pulse: heartbeat / pump stroke
+        // pulse: heartbeat / pump stroke — abrupt compress then gradual expand
         const pulseFreq = anim.pulse_frequency ?? 1.5;
         const pulseRatio = anim.pulse_ratio ?? 0.25;
         const cyclePos = (nowMs * pulseFreq * 0.001) % 1;
-        const evenInterval = durS / count;
-        let spacing: number;
+        // leader position advances uniformly
+        const leaderPos = (nowMs * 0.001 / durS) % 1;
+        const evenInterval = 1 / count;
+        let intervalScale: number;
 
         if (cyclePos < pulseRatio) {
-          // Bunched phase — abrupt compression toward the leader
           const bunchFactor = 1 - (cyclePos / pulseRatio);
-          spacing = evenInterval * (1 - bunchFactor * 0.9);
+          intervalScale = 1 - bunchFactor * 0.9; // compress toward 0
         } else {
-          // Spread phase — gradual expansion back to normal
           const spreadFactor = (cyclePos - pulseRatio) / (1 - pulseRatio);
-          spacing = evenInterval * spreadFactor;
+          intervalScale = spreadFactor; // expand back to normal
         }
-
-        let pos = 0;
         for (let i = 0; i < count; i++) {
-          begins.push(-(pos % durS));
-          pos += spacing;
+          positions.push(((leaderPos + i * evenInterval * intervalScale) % 1 + 1) % 1);
         }
       }
 
-      // Apply updated begin= offsets to the animateMotion elements
+      // Apply positions: hide animateMotion, use JS-driven SVG translate instead
+      const svgPath = dom.path as SVGPathElement | null;
+      let totalLen = 0;
+      try { totalLen = svgPath ? svgPath.getTotalLength() : 0; } catch { totalLen = 0; }
+
       for (let i = 0; i < count; i++) {
-        const motionEl = dom.particles[i]?.animateMotion;
-        if (!motionEl) continue;
-        const b = begins[i] ?? 0;
-        motionEl.setAttribute('begin', `${b.toFixed(4)}s`);
-        // Poke the animation to restart with the new begin time
-        try {
-          (motionEl as SVGAnimateMotionElement & { beginElement?: () => void }).beginElement?.();
-        } catch {
-          // not all browsers support beginElement
+        const p = dom.particles[i];
+        if (!p) continue;
+
+        // Freeze the animateMotion so we can drive position ourselves
+        p.animateMotion.setAttribute('dur', '999999s');
+        p.animateMotion.setAttribute('begin', 'indefinite');
+
+        const pos = positions[i] ?? 0;
+
+        if (totalLen > 0 && svgPath) {
+          try {
+            const pt = svgPath.getPointAtLength(pos * totalLen);
+            // Use a small delta to compute tangent for rotate="auto" emulation
+            const DELTA = Math.max(0.5, totalLen * 0.01);
+            const ptA = svgPath.getPointAtLength(Math.max(0, pos * totalLen - DELTA));
+            const ptB = svgPath.getPointAtLength(Math.min(totalLen, pos * totalLen + DELTA));
+            const angle = Math.atan2(ptB.y - ptA.y, ptB.x - ptA.x) * (180 / Math.PI);
+            p.shape.setAttribute('transform', `translate(${pt.x.toFixed(2)},${pt.y.toFixed(2)}) rotate(${angle.toFixed(1)})`);
+          } catch {
+            // getPointAtLength unavailable — fall back to begin= timing
+            p.animateMotion.setAttribute('dur', `${durS.toFixed(3)}s`);
+            p.animateMotion.setAttribute('begin', `${(-(pos * durS)).toFixed(4)}s`);
+          }
         }
       }
     }

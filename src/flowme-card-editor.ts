@@ -165,13 +165,17 @@ export class FlowmeCardEditor extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.unsubscribe = this.undoStack.subscribe(() => this.refreshUndoState());
+    // Register on window (for when focus is outside shadow DOM) and on the
+    // document with capture (to intercept before HA panels can swallow the event).
     window.addEventListener('keydown', this.onKeyDown);
+    document.addEventListener('keydown', this.onKeyDown, true);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.unsubscribe?.();
     window.removeEventListener('keydown', this.onKeyDown);
+    document.removeEventListener('keydown', this.onKeyDown, true);
   }
 
   setConfig(config: unknown): void {
@@ -234,7 +238,7 @@ export class FlowmeCardEditor extends LitElement {
           <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
             ${this.config.flows.map((f) => this.renderFlowConnector(f))}
           </svg>
-          ${this.config.flows.map((f) => this.renderWaypointHandles(f))}
+          ${this.config.flows.filter((f) => f.id === this.selectedFlowId).map((f) => this.renderWaypointHandles(f))}
           ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
           ${this.config.nodes.map((n) => this.renderHandle(n))}
           ${this.renderSuggestPreview()}
@@ -518,9 +522,7 @@ export class FlowmeCardEditor extends LitElement {
               { includeDomains: ['sensor', 'input_number', 'number'] },
             )}
           </label>
-          <div class="row">
-            <span>${flow.waypoints.length} waypoint(s)</span>
-          </div>
+          ${this.renderWaypointList(flow)}
           <label>
             Line style
             <select
@@ -1078,6 +1080,100 @@ export class FlowmeCardEditor extends LitElement {
           </circle>
         `,
       )}
+    `;
+  }
+
+  private renderWaypointList(flow: FlowConfig): TemplateResult {
+    if (!this.config) return html``;
+    const nodesById = new Map(this.config.nodes.map((n) => [n.id, n]));
+    const fromNode = nodesById.get(flow.from_node);
+    const toNode = nodesById.get(flow.to_node);
+
+    const addAtMidpoint = () => {
+      if (!this.config) return;
+      // Find the longest segment and insert a waypoint at its midpoint
+      const allPoints = [
+        ...(fromNode ? [fromNode.position] : []),
+        ...flow.waypoints,
+        ...(toNode ? [toNode.position] : []),
+      ];
+      let longestIdx = 0;
+      let longestDist = 0;
+      for (let i = 0; i < allPoints.length - 1; i++) {
+        const a = allPoints[i]!;
+        const b = allPoints[i + 1]!;
+        const dist = Math.hypot(b.x - a.x, b.y - a.y);
+        if (dist > longestDist) { longestDist = dist; longestIdx = i; }
+      }
+      const a = allPoints[longestIdx]!;
+      const b = allPoints[longestIdx + 1]!;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      // Insertion index = longestIdx − 0 (from_node doesn't count)
+      const insertionIndex = longestIdx > 0 ? longestIdx - 1 + 1 : 0;
+      const prev = this.config;
+      const next = insertWaypoint(prev, flow.id, insertionIndex, mid);
+      this.pushPatch(prev, next, `add waypoint to ${flow.id}`);
+    };
+
+    return html`
+      <div class="waypoint-section">
+        <div class="waypoint-section-header">
+          Waypoints
+          <span class="waypoint-count">${flow.waypoints.length}</span>
+        </div>
+
+        ${flow.waypoints.length === 0
+          ? html`<div class="waypoint-empty">No waypoints — click on the flow line to add one.</div>`
+          : html`
+            <div class="waypoint-list">
+              ${flow.waypoints.map((wp, index) => html`
+                <div class="waypoint-row">
+                  <span class="waypoint-index">#${index + 1}</span>
+                  <label class="waypoint-coord">
+                    x%
+                    <input type="number" min="0" max="100" step="0.5"
+                      .value=${wp.x.toFixed(1)}
+                      @change=${(e: Event) => {
+                        if (!this.config) return;
+                        const v = parseFloat((e.target as HTMLInputElement).value);
+                        if (!Number.isFinite(v)) return;
+                        const prev = this.config;
+                        const next = moveWaypoint(prev, flow.id, index, { x: v, y: wp.y });
+                        this.pushPatch(prev, next, `move waypoint ${index} of ${flow.id}`);
+                      }}
+                    />
+                  </label>
+                  <label class="waypoint-coord">
+                    y%
+                    <input type="number" min="0" max="100" step="0.5"
+                      .value=${wp.y.toFixed(1)}
+                      @change=${(e: Event) => {
+                        if (!this.config) return;
+                        const v = parseFloat((e.target as HTMLInputElement).value);
+                        if (!Number.isFinite(v)) return;
+                        const prev = this.config;
+                        const next = moveWaypoint(prev, flow.id, index, { x: wp.x, y: v });
+                        this.pushPatch(prev, next, `move waypoint ${index} of ${flow.id}`);
+                      }}
+                    />
+                  </label>
+                  <button class="icon-btn" title="Delete waypoint"
+                    @click=${() => {
+                      if (!this.config) return;
+                      const prev = this.config;
+                      const next = deleteWaypoint(prev, flow.id, index);
+                      this.pushPatch(prev, next, `delete waypoint ${index} of ${flow.id}`);
+                    }}
+                  >×</button>
+                </div>
+              `)}
+            </div>
+          `}
+
+        <button class="ghost full-width" @click=${addAtMidpoint}>
+          + Add waypoint at midpoint
+        </button>
+      </div>
     `;
   }
 
@@ -2672,9 +2768,11 @@ export class FlowmeCardEditor extends LitElement {
     const key = event.key.toLowerCase();
     if (key === 'z' && !event.shiftKey) {
       event.preventDefault();
+      event.stopImmediatePropagation();
       this.undoStack.undo();
     } else if ((key === 'z' && event.shiftKey) || key === 'y') {
       event.preventDefault();
+      event.stopImmediatePropagation();
       this.undoStack.redo();
     }
   };
@@ -2890,11 +2988,16 @@ export class FlowmeCardEditor extends LitElement {
       transform: translate(-50%, -50%);
       width: 10px;
       height: 10px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.9);
-      border: 2px solid rgba(0, 0, 0, 0.6);
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 2px solid var(--primary-color, #03a9f4);
       cursor: grab;
       touch-action: none;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+    }
+    .waypoint:hover {
+      background: #fff;
+      transform: translate(-50%, -50%) scale(1.3);
     }
     .waypoint:active {
       cursor: grabbing;
@@ -3636,6 +3739,78 @@ export class FlowmeCardEditor extends LitElement {
       background: rgba(0,0,0,0.4);
       border: 1px solid var(--divider-color, rgba(255,255,255,0.1));
     }
+    .waypoint-section {
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 4px;
+      margin-bottom: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .waypoint-section-header {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.7;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .waypoint-count {
+      background: var(--primary-color, #03a9f4);
+      color: #fff;
+      border-radius: 10px;
+      padding: 0 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .waypoint-empty {
+      font-size: 11px;
+      opacity: 0.6;
+      font-style: italic;
+    }
+    .waypoint-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .waypoint-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .waypoint-index {
+      font-size: 10px;
+      opacity: 0.5;
+      min-width: 20px;
+    }
+    .waypoint-coord {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      flex: 1;
+    }
+    .waypoint-coord input[type="number"] {
+      width: 52px;
+      padding: 2px 4px;
+      font-size: 11px;
+    }
+    .icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--error-color, #f44);
+      font-size: 14px;
+      padding: 0 4px;
+      line-height: 1;
+      opacity: 0.7;
+    }
+    .icon-btn:hover { opacity: 1; }
+    .full-width { width: 100%; }
     .gradient-section {
       border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
       border-radius: 6px;
