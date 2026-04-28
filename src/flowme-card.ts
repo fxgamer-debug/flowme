@@ -20,7 +20,7 @@ import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.0.14';
+const CARD_VERSION = '1.0.14.1';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -263,7 +263,16 @@ export class FlowmeCard extends LitElement {
           if (gradState && gradState.state !== 'unavailable' && gradState.state !== 'unknown') {
             const gradVal = parseFloat(gradState.state);
             if (Number.isFinite(gradVal)) {
-              const gradColor = interpolateGradientColor(gradVal, flow.value_gradient);
+              const vg = flow.value_gradient;
+              const clamped = Math.max(vg.low_value, Math.min(vg.high_value, gradVal));
+              const gradColor = interpolateGradientColor(gradVal, vg);
+              dlog(
+                '[gradient]', flow.id,
+                'entity value:', gradVal,
+                'clamped:', clamped,
+                'range:', `${vg.low_value}–${vg.high_value}`,
+                'colour:', gradColor,
+              );
               this.renderer.setGradientColor(flow.id, gradColor);
             } else {
               dlog(`flow "${flow.id}" gradient entity "${gradEntity}" state "${gradState.state}" is not a number`);

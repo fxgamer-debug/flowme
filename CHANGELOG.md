@@ -2,6 +2,62 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.14.1] — 2026-04-28
+
+### Fixed
+
+- **BUG-1 — `custom_svg` warning message**: Improved the `console.warn` when
+  `particle_shape: custom_svg` is configured but `custom_svg_path` is empty or
+  missing. Message now includes the flow id:
+  `[FlowMe] particle_shape is custom_svg but custom_svg_path is empty or invalid — falling back to circle. Flow: <flowId>`
+
+- **BUG-2 — Value gradient editor sub-fields not appearing**: When "Enable value
+  gradient" was checked, no additional fields appeared because the `<details>`
+  element was closed and LitElement's DOM diffing preserved the closed state.
+  Fixed by:
+  - Adding `?open=${enabled}` on the `<details>` so it opens automatically when
+    the gradient is enabled.
+  - Changed the condition to `${vg ? html`...` : nothing}` (checking the
+    gradient object directly rather than `enabled && vg`) to ensure fields
+    render immediately after the config update.
+  - Changed default `mode` to `'both'` (was `'flow'`) per spec.
+  - Reorganised layout: low/high value+colour fields are now side-by-side in a
+    `gradient-row` div. Mode dropdown label changed to "Apply gradient to" with
+    human-readable options ("Particles only", "Line only", "Particles and line").
+  - Added a "Remove gradient" button inside the section.
+
+- **BUG-3 — Particle spacing modes look identical**: Default sub-config values
+  were too subtle to see a difference. Updated defaults:
+  - `wave_lateral`: `wave_frequency` 1.0 → **2.0**, `wave_amplitude` 8 → **20 px**
+  - `wave_spacing`: `wave_frequency` 1.0 → **2.0**, `wave_amplitude` 0.7 → **0.85**
+  - `pulse`: `pulse_frequency` 1.0 → **1.5 Hz**, `pulse_ratio` 0.3 → **0.25**
+  - `clustered`: `cluster_gap` 2.0 → **3.0×**
+
+- **BUG-4 — `wave_lateral` oscillated along fixed Y axis**: Particles were
+  always offset by `translateY` regardless of path direction, causing
+  oscillation to be wrong on vertical and diagonal segments. Fixed:
+  - Compute the path tangent at each particle's position using
+    `SVGPathElement.getTotalLength()` + `getPointAtLength()`.
+  - Derive the perpendicular (normal) vector: `(-dy, dx)` normalised.
+  - Apply the sine offset along the perpendicular: `translate(nx*offset, ny*offset)`.
+  - Falls back to fixed Y offset if `getTotalLength()` is unavailable (JSDOM/SSR).
+
+- **BUG-5 — `line_style: curve` rendered as straight lines**: The cubic Bézier
+  control points were placed 1/3 along each segment making the curve
+  indistinguishable from a straight line (diagonal). Fixed with a proper
+  **Catmull-Rom → cubic Bézier** conversion:
+  - Build augmented point array with ghost start/end for natural tangents.
+  - For each segment `P[i]→P[i+1]`:
+    - `CP1 = P[i]   + (P[i+1] - P[i-1]) / 6`
+    - `CP2 = P[i+1] - (P[i+2] - P[i])   / 6`
+  - Particles follow the exact same bezier path via `animateMotion <mpath>`.
+  - Debug log added: `rlog('skeleton: ... | line_style=', ...)` visible when
+    `debug: true` in the card config.
+
+- **BUG-6 — Value gradient debug logging**: Added detailed `dlog` output (shown
+  when `debug: true`) whenever a gradient colour is computed:
+  `[gradient] <flowId> entity value: <raw> clamped: <clamped> range: <lo>–<hi> colour: <hex>`
+
 ## [1.0.14] — 2026-04-28
 
 ### Added

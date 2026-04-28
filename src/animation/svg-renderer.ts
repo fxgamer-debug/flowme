@@ -292,7 +292,7 @@ export class SvgRenderer implements FlowRenderer {
 
       this.svg.appendChild(group);
       this.flowNodes.set(flow.id, dom);
-      rlog('skeleton:', flow.id, '| style=', dom.style);
+      rlog('skeleton:', flow.id, '| style=', dom.style, '| line_style=', flow.line_style ?? 'corner (default)');
     }
   }
 
@@ -683,7 +683,7 @@ export class SvgRenderer implements FlowRenderer {
 
       case 'clustered': {
         const clusterSize = Math.max(1, Math.round(anim.cluster_size ?? 3));
-        const clusterGap = anim.cluster_gap ?? 2.0;
+        const clusterGap = anim.cluster_gap ?? 3.0;
         const intraInterval = evenInterval * 0.3;
         const begins: number[] = [];
         let pos = 0;
@@ -700,8 +700,8 @@ export class SvgRenderer implements FlowRenderer {
       }
 
       case 'pulse': {
-        const pulsePeriodS = 1 / Math.max(0.01, anim.pulse_frequency ?? 1.0);
-        const bunchedRatio = anim.pulse_ratio ?? 0.3;
+        const pulsePeriodS = 1 / Math.max(0.01, anim.pulse_frequency ?? 1.5);
+        const bunchedRatio = anim.pulse_ratio ?? 0.25;
         const now = (performance.now() / 1000) % pulsePeriodS;
         const isBunched = now < pulsePeriodS * bunchedRatio;
         if (isBunched) {
@@ -714,8 +714,8 @@ export class SvgRenderer implements FlowRenderer {
       }
 
       case 'wave_spacing': {
-        const waveFreq = anim.wave_frequency ?? 1.0;
-        const waveAmp = anim.wave_amplitude ?? 0.7;
+        const waveFreq = anim.wave_frequency ?? 2.0;
+        const waveAmp = anim.wave_amplitude ?? 0.85;
         return Array.from({ length: count }, (_, i) => {
           const phase = (i / count) * Math.PI * 2 * waveFreq;
           const jitter = Math.sin(phase) * waveAmp * (durS / 2);
@@ -732,9 +732,19 @@ export class SvgRenderer implements FlowRenderer {
 
   /**
    * SPACING-1 wave_lateral: update perpendicular particle offsets each rAF frame.
-   * For each flow using wave_lateral spacing, moves each particle's SVG transform
-   * to apply a sine-wave perpendicular displacement based on the particle's current
-   * progress along the path.
+   *
+   * For each particle we:
+   * 1. Compute its current progress along the path [0,1]
+   * 2. Sample the SVG path at two nearby points to get the local tangent vector
+   * 3. Derive the perpendicular (normal) vector: perp = (-dy, dx) normalised
+   * 4. Apply sine-wave oscillation along the perpendicular direction:
+   *      translate(perp.x * offset, perp.y * offset)
+   *
+   * This means:
+   *   - Horizontal segments: particles oscillate vertically ✓
+   *   - Vertical segments:   particles oscillate horizontally ✓
+   *   - Diagonal segments:   particles oscillate perpendicular to angle ✓
+   *   - Curved segments:     particles follow curvature perpendicular ✓
    */
   private updateLateralWaves(nowMs: number): void {
     if (!this.config) return;
@@ -743,28 +753,63 @@ export class SvgRenderer implements FlowRenderer {
       const dom = this.flowNodes.get(flow.id);
       if (!dom || dom.particles.length === 0) continue;
 
-      const waveFreq = flow.animation?.wave_frequency ?? 1.0;
-      const waveAmp = flow.animation?.wave_amplitude ?? 8;
+      const waveFreq = flow.animation?.wave_frequency ?? 2.0;
+      const waveAmp = flow.animation?.wave_amplitude ?? 20;
       const durMs = this.currentDurMs.get(flow.id) ?? 2000;
       const count = dom.particles.length;
+
+      // Try to use SVG path geometry for tangent computation
+      const svgPath = dom.path as SVGPathElement | null;
+      let totalLen = 0;
+      try {
+        totalLen = svgPath ? svgPath.getTotalLength() : 0;
+      } catch {
+        totalLen = 0;
+      }
 
       for (let i = 0; i < count; i++) {
         const p = dom.particles[i];
         if (!p) continue;
+
         // Particle progress along the path [0,1] at current time
         const progress = ((nowMs / durMs + i / count) % 1 + 1) % 1;
-        // Lateral offset using sine wave
+
+        // Lateral offset magnitude using sine wave
         const phase = progress * Math.PI * 2 * waveFreq;
-        const lateralPx = Math.sin(phase) * waveAmp;
-        // Apply perpendicular offset — we rotate 90° to get the perpendicular
-        // For simplicity use translateY which is perpendicular to horizontal flow
-        // (works well with diagonal/curve paths in the viewport coordinate space)
-        const existingTransform = p.shape.getAttribute('data-base-transform') ?? '';
-        if (!existingTransform && p.shape.hasAttribute('transform')) {
+        const offsetPx = Math.sin(phase) * waveAmp;
+
+        let tx = 0;
+        let ty = offsetPx; // fallback: fixed Y
+
+        if (totalLen > 0 && svgPath) {
+          // Sample path tangent by getting two nearby points
+          const DELTA = Math.max(0.5, totalLen * 0.005);
+          const len = progress * totalLen;
+          try {
+            const pa = svgPath.getPointAtLength(Math.max(0, len - DELTA));
+            const pb = svgPath.getPointAtLength(Math.min(totalLen, len + DELTA));
+            const dx = pb.x - pa.x;
+            const dy = pb.y - pa.y;
+            const mag = Math.sqrt(dx * dx + dy * dy);
+            if (mag > 0.001) {
+              // Perpendicular to tangent: (-dy/mag, dx/mag)
+              const nx = -dy / mag;
+              const ny = dx / mag;
+              tx = nx * offsetPx;
+              ty = ny * offsetPx;
+            }
+          } catch {
+            // getPointAtLength not available (e.g. JSDOM) — use fixed Y fallback
+            ty = offsetPx;
+          }
+        }
+
+        // Store base transform once (from initial makeParticle scaling)
+        if (!p.shape.hasAttribute('data-base-transform')) {
           p.shape.setAttribute('data-base-transform', p.shape.getAttribute('transform') ?? '');
         }
         const base = p.shape.getAttribute('data-base-transform') ?? '';
-        p.shape.setAttribute('transform', `${base} translateY(${lateralPx.toFixed(2)})`);
+        p.shape.setAttribute('transform', `${base} translate(${tx.toFixed(2)},${ty.toFixed(2)})`);
       }
     }
   }
@@ -1274,7 +1319,7 @@ export class SvgRenderer implements FlowRenderer {
       case 'custom_svg': {
         const pathD = flow.animation?.custom_svg_path ?? '';
         if (!pathD) {
-          console.warn('[flowme] particle_shape: custom_svg requires custom_svg_path — falling back to circle');
+          console.warn(`[FlowMe] particle_shape is custom_svg but custom_svg_path is empty or invalid — falling back to circle. Flow: ${flow.id}`);
           const circle = document.createElementNS(SVG_NS, 'circle');
           circle.setAttribute('r', String(r));
           circle.setAttribute('fill', color);

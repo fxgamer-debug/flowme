@@ -1093,7 +1093,7 @@ export class FlowmeCardEditor extends LitElement {
       high_value: 100,
       low_color: '#1EB4FF',
       high_color: '#FF4500',
-      mode: 'flow',
+      mode: 'both',
     };
 
     const patch = (partial: Partial<ValueGradientConfig>) => {
@@ -1124,7 +1124,7 @@ export class FlowmeCardEditor extends LitElement {
     }
 
     return html`
-      <details class="anim-details">
+      <details class="anim-details" ?open=${enabled}>
         <summary>Value gradient</summary>
         <div class="anim-body">
 
@@ -1133,78 +1133,88 @@ export class FlowmeCardEditor extends LitElement {
               .checked=${enabled}
               @change=${(e: Event) => {
                 if (!this.config) return;
+                const checked = (e.target as HTMLInputElement).checked;
                 const prev = this.config;
-                const next = (e.target as HTMLInputElement).checked
+                const next = checked
                   ? setValueGradient(prev, flow.id, defaultVg)
                   : clearValueGradient(prev, flow.id);
-                this.pushPatch(prev, next, `${enabled ? 'disable' : 'enable'} gradient for ${flow.id}`);
+                this.pushPatch(prev, next, `${checked ? 'enable' : 'disable'} gradient for ${flow.id}`);
               }}
             />
             Enable value gradient
           </label>
 
-          ${enabled && vg ? html`
-            <label>Entity
-              <input type="text" placeholder="sensor.my_power"
+          ${vg ? html`
+            <label>Gradient entity
+              <input type="text" placeholder="sensor.my_temperature"
                 .value=${vg.entity}
                 @change=${(e: Event) => patch({ entity: (e.target as HTMLInputElement).value.trim() })}
               />
             </label>
 
-            <label>Low value
-              <input type="number" step="any"
-                .value=${String(vg.low_value)}
-                @change=${(e: Event) => {
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  if (Number.isFinite(v)) patch({ low_value: v });
-                }}
-              />
-            </label>
-
-            <label>Low colour
-              <div class="color-row">
-                <input type="color"
-                  .value=${vg.low_color}
-                  @input=${(e: Event) => patch({ low_color: (e.target as HTMLInputElement).value })}
+            <div class="gradient-row">
+              <label>Low value
+                <input type="number" step="any"
+                  .value=${String(vg.low_value)}
+                  @change=${(e: Event) => {
+                    const v = parseFloat((e.target as HTMLInputElement).value);
+                    if (Number.isFinite(v)) patch({ low_value: v });
+                  }}
                 />
-                <span>${vg.low_color}</span>
-              </div>
-            </label>
+              </label>
+              <label>Low colour
+                <div class="color-row">
+                  <input type="color"
+                    .value=${vg.low_color}
+                    @input=${(e: Event) => patch({ low_color: (e.target as HTMLInputElement).value })}
+                  />
+                  <span>${vg.low_color}</span>
+                </div>
+              </label>
+            </div>
 
-            <label>High value
-              <input type="number" step="any"
-                .value=${String(vg.high_value)}
-                @change=${(e: Event) => {
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  if (Number.isFinite(v)) patch({ high_value: v });
-                }}
-              />
-            </label>
-
-            <label>High colour
-              <div class="color-row">
-                <input type="color"
-                  .value=${vg.high_color}
-                  @input=${(e: Event) => patch({ high_color: (e.target as HTMLInputElement).value })}
+            <div class="gradient-row">
+              <label>High value
+                <input type="number" step="any"
+                  .value=${String(vg.high_value)}
+                  @change=${(e: Event) => {
+                    const v = parseFloat((e.target as HTMLInputElement).value);
+                    if (Number.isFinite(v)) patch({ high_value: v });
+                  }}
                 />
-                <span>${vg.high_color}</span>
-              </div>
-            </label>
+              </label>
+              <label>High colour
+                <div class="color-row">
+                  <input type="color"
+                    .value=${vg.high_color}
+                    @input=${(e: Event) => patch({ high_color: (e.target as HTMLInputElement).value })}
+                  />
+                  <span>${vg.high_color}</span>
+                </div>
+              </label>
+            </div>
 
-            <label>Mode
+            <label>Apply gradient to
               <select
-                .value=${vg.mode ?? 'flow'}
+                .value=${vg.mode ?? 'both'}
                 @change=${(e: Event) => {
                   patch({ mode: (e.target as HTMLSelectElement).value as ValueGradientConfig['mode'] });
                 }}
               >
-                <option value="flow" ?selected=${(vg.mode ?? 'flow') === 'flow'}>flow (particles only)</option>
-                <option value="line" ?selected=${vg.mode === 'line'}>line (base line only)</option>
-                <option value="both" ?selected=${vg.mode === 'both'}>both</option>
+                <option value="flow" ?selected=${vg.mode === 'flow'}>Particles only</option>
+                <option value="line" ?selected=${vg.mode === 'line'}>Line only</option>
+                <option value="both" ?selected=${(vg.mode ?? 'both') === 'both'}>Particles and line</option>
               </select>
             </label>
 
             ${previewBar}
+
+            <button class="ghost" @click=${() => {
+              if (!this.config) return;
+              const prev = this.config;
+              const next = clearValueGradient(prev, flow.id);
+              this.pushPatch(prev, next, `disable gradient for ${flow.id}`);
+            }}>Remove gradient</button>
           ` : nothing}
         </div>
       </details>
@@ -3636,6 +3646,14 @@ export class FlowmeCardEditor extends LitElement {
       font-size: 10px;
       opacity: 0.7;
       margin-bottom: 6px;
+    }
+    .gradient-row {
+      display: flex;
+      gap: 8px;
+    }
+    .gradient-row label {
+      flex: 1;
+      min-width: 0;
     }
     .color-row {
       display: flex;

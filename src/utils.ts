@@ -130,19 +130,35 @@ export function polylineToSvgPathStyled(
   }
 
   if (style === 'curve') {
-    // Smooth cubic Bézier using midpoint tangents (Catmull-Rom style)
+    // Catmull-Rom spline converted to cubic Bézier segments.
+    // Each segment P[i]→P[i+1] uses the surrounding points to compute
+    // tangents so the curve flows smoothly through every waypoint.
+    //
+    // CP1 = P[i]   + (P[i+1] - P[i-1]) / 6
+    // CP2 = P[i+1] - (P[i+2] - P[i])   / 6
+    //
+    // For the first point, P[-1] is extrapolated as P[0] - (P[1] - P[0])
+    // For the last point,  P[n]  is extrapolated as P[n-1] + (P[n-1] - P[n-2])
+    const n = px.length;
+    // Build augmented array with ghost start/end points for natural tangents
+    const pts = [
+      { x: 2 * px[0]!.x - px[1]!.x, y: 2 * px[0]!.y - px[1]!.y }, // ghost start
+      ...px,
+      { x: 2 * px[n - 1]!.x - px[n - 2]!.x, y: 2 * px[n - 1]!.y - px[n - 2]!.y }, // ghost end
+    ];
     const parts = [`M ${px[0]!.x.toFixed(2)} ${px[0]!.y.toFixed(2)}`];
-    for (let i = 1; i < px.length; i++) {
-      const p0 = px[i - 1]!;
-      const p1 = px[i]!;
-      // Control points: 1/3 along the segment from each endpoint
-      const dx = (p1.x - p0.x) / 3;
-      const dy = (p1.y - p0.y) / 3;
-      const cp1x = (p0.x + dx).toFixed(2);
-      const cp1y = (p0.y + dy).toFixed(2);
-      const cp2x = (p1.x - dx).toFixed(2);
-      const cp2y = (p1.y - dy).toFixed(2);
-      parts.push(`C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`);
+    // pts[0] = ghost, pts[1] = px[0], pts[2] = px[1] … pts[n] = px[n-1], pts[n+1] = ghost
+    for (let i = 1; i < n; i++) {
+      const p0 = pts[i - 1]!;   // P[i-1]
+      const p1 = pts[i]!;       // P[i]
+      const p2 = pts[i + 1]!;   // P[i+1]
+      const p3 = pts[i + 2]!;   // P[i+2]
+      // Control points
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      parts.push(`C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)} ${cp2x.toFixed(2)} ${cp2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`);
     }
     return parts.join(' ');
   }
