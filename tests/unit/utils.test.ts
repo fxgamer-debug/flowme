@@ -8,6 +8,7 @@ import {
   pathLengthPercent,
   pointAtProgress,
   polylineToSvgPath,
+  polylineToSvgPathStyled,
   parseSensorValue,
   scaleSensorValue,
   debounce,
@@ -205,6 +206,52 @@ describe('debounce', () => {
     deb.cancel();
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(calls).toEqual([]);
+  });
+});
+
+describe('polylineToSvgPathStyled', () => {
+  const size = { width: 100, height: 100 };
+  const pts = [
+    { x: 0, y: 0 },
+    { x: 50, y: 50 },
+    { x: 100, y: 0 },
+  ];
+
+  it('diagonal — generates direct L commands, no intermediate points', () => {
+    const d = polylineToSvgPathStyled(pts, size, 'diagonal');
+    // Must start with M and have exactly 2 L commands (one per segment)
+    expect(d).toMatch(/^M /);
+    const lCount = (d.match(/ L /g) ?? []).length;
+    expect(lCount).toBe(2);
+    // Must NOT contain any H, V, Q or C path commands
+    expect(d).not.toMatch(/\b[HVQChvqc]\b/);
+  });
+
+  it('corner — generates right-angle bends (two L per segment)', () => {
+    const d = polylineToSvgPathStyled(pts, size, 'corner');
+    // corner adds an intermediate point per segment → 4 L total for 2 segments
+    const lCount = (d.match(/ L /g) ?? []).length;
+    expect(lCount).toBe(4);
+  });
+
+  it('curve — generates cubic Bézier C commands', () => {
+    const d = polylineToSvgPathStyled(pts, size, 'curve');
+    expect(d).toMatch(/^M /);
+    expect(d).toContain(' C ');
+    // Must not fall through to corner behaviour (no intermediate L-only segments)
+    expect(d).not.toMatch(/ L \d+\.\d+ \d+\.\d+ L /);
+  });
+
+  it('smooth — generates quadratic arc Q commands at corners', () => {
+    const d = polylineToSvgPathStyled(pts, size, 'smooth');
+    expect(d).toMatch(/^M /);
+    expect(d).toContain(' Q ');
+  });
+
+  it('diagonal with single point returns M only', () => {
+    const d = polylineToSvgPathStyled([{ x: 50, y: 50 }], size, 'diagonal');
+    expect(d).toMatch(/^M /);
+    expect(d).not.toContain(' L ');
   });
 });
 

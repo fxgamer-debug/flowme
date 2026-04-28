@@ -193,6 +193,8 @@ export class SvgRenderer implements FlowRenderer {
         }
         // wave_lateral: update perpendicular offsets every frame
         this.updateLateralWaves(now);
+        // wave_spacing / pulse: recompute begin= offsets from elapsed time
+        this.updateTimeBasedSpacing(now);
       }
       this.rafHandle = requestAnimationFrame(loop);
     };
@@ -755,7 +757,6 @@ export class SvgRenderer implements FlowRenderer {
 
       const waveFreq = flow.animation?.wave_frequency ?? 2.0;
       const waveAmp = flow.animation?.wave_amplitude ?? 20;
-      const durMs = this.currentDurMs.get(flow.id) ?? 2000;
       const count = dom.particles.length;
 
       // Try to use SVG path geometry for tangent computation
@@ -767,15 +768,23 @@ export class SvgRenderer implements FlowRenderer {
         totalLen = 0;
       }
 
+      // Use wall-clock time for a continuously advancing phase — never resets.
+      // Each particle is offset by 2π/count around the wave cycle so they
+      // form a smooth snake pattern across the full path.
+      const phasePerParticle = (Math.PI * 2) / count;
+      // 0.002 makes one full wave cycle per (500 / wave_frequency) ms
+      const globalPhase = (nowMs * waveFreq * 0.002) % (Math.PI * 2);
+
       for (let i = 0; i < count; i++) {
         const p = dom.particles[i];
         if (!p) continue;
 
-        // Particle progress along the path [0,1] at current time
-        const progress = ((nowMs / durMs + i / count) % 1 + 1) % 1;
+        // Each particle sits at a fixed path position determined by animateMotion;
+        // we sample the tangent at the particle's logical position along the path.
+        const progress = (i / count);
 
-        // Lateral offset magnitude using sine wave
-        const phase = progress * Math.PI * 2 * waveFreq;
+        // Continuous lateral offset — phase never resets
+        const phase = globalPhase + i * phasePerParticle;
         const offsetPx = Math.sin(phase) * waveAmp;
 
         let tx = 0;
@@ -810,6 +819,89 @@ export class SvgRenderer implements FlowRenderer {
         }
         const base = p.shape.getAttribute('data-base-transform') ?? '';
         p.shape.setAttribute('transform', `${base} translate(${tx.toFixed(2)},${ty.toFixed(2)})`);
+      }
+    }
+  }
+
+  /**
+   * wave_spacing: recompute animateMotion begin= values every rAF frame so
+   * ALL particles are distributed across the full path simultaneously with
+   * varying density — not a moving group.
+   *
+   * pulse: drive abrupt compression + gradual expansion from wall-clock time.
+   */
+  private updateTimeBasedSpacing(nowMs: number): void {
+    if (!this.config) return;
+    for (const flow of this.config.flows) {
+      const spacing = flow.animation?.particle_spacing ?? 'even';
+      if (spacing !== 'wave_spacing' && spacing !== 'pulse') continue;
+      const dom = this.flowNodes.get(flow.id);
+      if (!dom || dom.particles.length === 0) continue;
+
+      const count = dom.particles.length;
+      const durMs = this.currentDurMs.get(flow.id) ?? 2000;
+      const durS = durMs / 1000;
+      const anim = flow.animation ?? {};
+      const begins: number[] = [];
+
+      if (spacing === 'wave_spacing') {
+        // Spatial density function: all N particles visible across full path at once.
+        // Particle i's normalised position oscillates around its even-spaced slot
+        // using a travelling sine wave so density visibly varies.
+        const waveFreq = anim.wave_frequency ?? 2.0;
+        const waveAmp = anim.wave_amplitude ?? 0.85;
+        const speed = 1 / durS; // path fractions per second
+        const time = (nowMs / 1000) * speed; // advances with animation speed
+
+        const rawPositions: number[] = [];
+        for (let i = 0; i < count; i++) {
+          const base = (i / count + time) % 1;
+          const sine = Math.sin(base * Math.PI * 2 * waveFreq) * waveAmp * (1 / count);
+          rawPositions.push(((base + sine) % 1 + 1) % 1);
+        }
+        // Sort ascending so particles never "cross" (which would look wrong)
+        rawPositions.sort((a, b) => a - b);
+        for (const pos of rawPositions) {
+          // Convert normalised position → negative begin= offset in seconds
+          begins.push(-(pos * durS));
+        }
+      } else {
+        // pulse: heartbeat / pump stroke
+        const pulseFreq = anim.pulse_frequency ?? 1.5;
+        const pulseRatio = anim.pulse_ratio ?? 0.25;
+        const cyclePos = (nowMs * pulseFreq * 0.001) % 1;
+        const evenInterval = durS / count;
+        let spacing: number;
+
+        if (cyclePos < pulseRatio) {
+          // Bunched phase — abrupt compression toward the leader
+          const bunchFactor = 1 - (cyclePos / pulseRatio);
+          spacing = evenInterval * (1 - bunchFactor * 0.9);
+        } else {
+          // Spread phase — gradual expansion back to normal
+          const spreadFactor = (cyclePos - pulseRatio) / (1 - pulseRatio);
+          spacing = evenInterval * spreadFactor;
+        }
+
+        let pos = 0;
+        for (let i = 0; i < count; i++) {
+          begins.push(-(pos % durS));
+          pos += spacing;
+        }
+      }
+
+      // Apply updated begin= offsets to the animateMotion elements
+      for (let i = 0; i < count; i++) {
+        const motionEl = dom.particles[i]?.motion;
+        if (!motionEl) continue;
+        const b = begins[i] ?? 0;
+        motionEl.setAttribute('begin', `${b.toFixed(4)}s`);
+        // Poke the animation to restart with the new begin time
+        try {
+          (motionEl as SVGAnimateMotionElement & { beginElement?: () => void }).beginElement?.();
+        } catch {
+          // not all browsers support beginElement
+        }
       }
     }
   }

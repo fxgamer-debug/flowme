@@ -1084,7 +1084,6 @@ export class FlowmeCardEditor extends LitElement {
   private renderValueGradientSection(flow: FlowConfig): TemplateResult {
     if (!this.config) return html``;
     const vg = flow.value_gradient;
-    const enabled = !!vg;
 
     // Default gradient config for when user enables it
     const defaultVg: ValueGradientConfig = {
@@ -1123,101 +1122,103 @@ export class FlowmeCardEditor extends LitElement {
       }
     }
 
+    // Use a plain border-boxed section (not <details>) so sub-fields
+    // are always visible when the checkbox is checked — <details> has
+    // browser-managed open/closed state that LitElement cannot reliably
+    // override with ?open= across re-renders.
     return html`
-      <details class="anim-details" ?open=${enabled}>
-        <summary>Value gradient</summary>
-        <div class="anim-body">
+      <div class="gradient-section">
+        <div class="gradient-section-header">Value gradient</div>
 
-          <label class="anim-toggle">
-            <input type="checkbox"
-              .checked=${enabled}
-              @change=${(e: Event) => {
-                if (!this.config) return;
-                const checked = (e.target as HTMLInputElement).checked;
-                const prev = this.config;
-                const next = checked
-                  ? setValueGradient(prev, flow.id, defaultVg)
-                  : clearValueGradient(prev, flow.id);
-                this.pushPatch(prev, next, `${checked ? 'enable' : 'disable'} gradient for ${flow.id}`);
-              }}
+        <label class="anim-toggle">
+          <input type="checkbox"
+            .checked=${!!vg}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const checked = (e.target as HTMLInputElement).checked;
+              const prev = this.config;
+              const next = checked
+                ? setValueGradient(prev, flow.id, defaultVg)
+                : clearValueGradient(prev, flow.id);
+              this.pushPatch(prev, next, `${checked ? 'enable' : 'disable'} gradient for ${flow.id}`);
+            }}
+          />
+          Enable value gradient
+        </label>
+
+        ${vg ? html`
+          <label>Gradient entity
+            <input type="text" placeholder="sensor.my_temperature"
+              .value=${vg.entity}
+              @change=${(e: Event) => patch({ entity: (e.target as HTMLInputElement).value.trim() })}
             />
-            Enable value gradient
           </label>
 
-          ${vg ? html`
-            <label>Gradient entity
-              <input type="text" placeholder="sensor.my_temperature"
-                .value=${vg.entity}
-                @change=${(e: Event) => patch({ entity: (e.target as HTMLInputElement).value.trim() })}
+          <div class="gradient-row">
+            <label>Low value
+              <input type="number" step="any"
+                .value=${String(vg.low_value)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v)) patch({ low_value: v });
+                }}
               />
             </label>
-
-            <div class="gradient-row">
-              <label>Low value
-                <input type="number" step="any"
-                  .value=${String(vg.low_value)}
-                  @change=${(e: Event) => {
-                    const v = parseFloat((e.target as HTMLInputElement).value);
-                    if (Number.isFinite(v)) patch({ low_value: v });
-                  }}
+            <label>Low colour
+              <div class="color-row">
+                <input type="color"
+                  .value=${vg.low_color}
+                  @input=${(e: Event) => patch({ low_color: (e.target as HTMLInputElement).value })}
                 />
-              </label>
-              <label>Low colour
-                <div class="color-row">
-                  <input type="color"
-                    .value=${vg.low_color}
-                    @input=${(e: Event) => patch({ low_color: (e.target as HTMLInputElement).value })}
-                  />
-                  <span>${vg.low_color}</span>
-                </div>
-              </label>
-            </div>
-
-            <div class="gradient-row">
-              <label>High value
-                <input type="number" step="any"
-                  .value=${String(vg.high_value)}
-                  @change=${(e: Event) => {
-                    const v = parseFloat((e.target as HTMLInputElement).value);
-                    if (Number.isFinite(v)) patch({ high_value: v });
-                  }}
-                />
-              </label>
-              <label>High colour
-                <div class="color-row">
-                  <input type="color"
-                    .value=${vg.high_color}
-                    @input=${(e: Event) => patch({ high_color: (e.target as HTMLInputElement).value })}
-                  />
-                  <span>${vg.high_color}</span>
-                </div>
-              </label>
-            </div>
-
-            <label>Apply gradient to
-              <select
-                .value=${vg.mode ?? 'both'}
-                @change=${(e: Event) => {
-                  patch({ mode: (e.target as HTMLSelectElement).value as ValueGradientConfig['mode'] });
-                }}
-              >
-                <option value="flow" ?selected=${vg.mode === 'flow'}>Particles only</option>
-                <option value="line" ?selected=${vg.mode === 'line'}>Line only</option>
-                <option value="both" ?selected=${(vg.mode ?? 'both') === 'both'}>Particles and line</option>
-              </select>
+                <span>${vg.low_color}</span>
+              </div>
             </label>
+          </div>
 
-            ${previewBar}
+          <div class="gradient-row">
+            <label>High value
+              <input type="number" step="any"
+                .value=${String(vg.high_value)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v)) patch({ high_value: v });
+                }}
+              />
+            </label>
+            <label>High colour
+              <div class="color-row">
+                <input type="color"
+                  .value=${vg.high_color}
+                  @input=${(e: Event) => patch({ high_color: (e.target as HTMLInputElement).value })}
+                />
+                <span>${vg.high_color}</span>
+              </div>
+            </label>
+          </div>
 
-            <button class="ghost" @click=${() => {
-              if (!this.config) return;
-              const prev = this.config;
-              const next = clearValueGradient(prev, flow.id);
-              this.pushPatch(prev, next, `disable gradient for ${flow.id}`);
-            }}>Remove gradient</button>
-          ` : nothing}
-        </div>
-      </details>
+          <label>Apply gradient to
+            <select
+              .value=${vg.mode ?? 'both'}
+              @change=${(e: Event) => {
+                patch({ mode: (e.target as HTMLSelectElement).value as ValueGradientConfig['mode'] });
+              }}
+            >
+              <option value="flow" ?selected=${vg.mode === 'flow'}>Particles only</option>
+              <option value="line" ?selected=${vg.mode === 'line'}>Line only</option>
+              <option value="both" ?selected=${(vg.mode ?? 'both') === 'both'}>Particles and line</option>
+            </select>
+          </label>
+
+          ${previewBar}
+
+          <button class="ghost" @click=${() => {
+            if (!this.config) return;
+            const prev = this.config;
+            const next = clearValueGradient(prev, flow.id);
+            this.pushPatch(prev, next, `disable gradient for ${flow.id}`);
+          }}>Remove gradient</button>
+        ` : nothing}
+      </div>
     `;
   }
 
@@ -3634,6 +3635,23 @@ export class FlowmeCardEditor extends LitElement {
       border-radius: 4px;
       background: rgba(0,0,0,0.4);
       border: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+    }
+    .gradient-section {
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .gradient-section-header {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.7;
+      margin-bottom: 2px;
     }
     .gradient-preview-bar {
       height: 20px;

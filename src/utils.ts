@@ -141,26 +141,25 @@ export function polylineToSvgPathStyled(
     // For the last point,  P[n]  is extrapolated as P[n-1] + (P[n-1] - P[n-2])
     const n = px.length;
     // Build augmented array with ghost start/end points for natural tangents
-    const pts = [
-      { x: 2 * px[0]!.x - px[1]!.x, y: 2 * px[0]!.y - px[1]!.y }, // ghost start
+    const curvePts = [
+      { x: 2 * px[0]!.x - px[1]!.x, y: 2 * px[0]!.y - px[1]!.y },
       ...px,
-      { x: 2 * px[n - 1]!.x - px[n - 2]!.x, y: 2 * px[n - 1]!.y - px[n - 2]!.y }, // ghost end
+      { x: 2 * px[n - 1]!.x - px[n - 2]!.x, y: 2 * px[n - 1]!.y - px[n - 2]!.y },
     ];
-    const parts = [`M ${px[0]!.x.toFixed(2)} ${px[0]!.y.toFixed(2)}`];
-    // pts[0] = ghost, pts[1] = px[0], pts[2] = px[1] … pts[n] = px[n-1], pts[n+1] = ghost
+    const curveParts = [`M ${px[0]!.x.toFixed(2)} ${px[0]!.y.toFixed(2)}`];
+    // curvePts[0] = ghost, curvePts[1] = px[0], curvePts[2] = px[1] …
     for (let i = 1; i < n; i++) {
-      const p0 = pts[i - 1]!;   // P[i-1]
-      const p1 = pts[i]!;       // P[i]
-      const p2 = pts[i + 1]!;   // P[i+1]
-      const p3 = pts[i + 2]!;   // P[i+2]
-      // Control points
+      const p0 = curvePts[i - 1]!;
+      const p1 = curvePts[i]!;
+      const p2 = curvePts[i + 1]!;
+      const p3 = curvePts[i + 2]!;
       const cp1x = p1.x + (p2.x - p0.x) / 6;
       const cp1y = p1.y + (p2.y - p0.y) / 6;
       const cp2x = p2.x - (p3.x - p1.x) / 6;
       const cp2y = p2.y - (p3.y - p1.y) / 6;
-      parts.push(`C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)} ${cp2x.toFixed(2)} ${cp2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`);
+      curveParts.push(`C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)} ${cp2x.toFixed(2)} ${cp2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`);
     }
-    return parts.join(' ');
+    return curveParts.join(' ');
   }
 
   // style === 'smooth': quadratic arcs at each waypoint for rounded corners

@@ -2,6 +2,49 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.14.2] — 2026-04-28
+
+### Fixed
+
+- **BUG-1 — Value gradient editor sub-fields not visible**: Replaced the `<details>`/`<summary>`
+  collapsible element for the gradient section with a plain `div`. The browser manages
+  `<details>` open/closed state independently of LitElement's render cycle, so
+  `?open=${enabled}` could not reliably force the section open after a re-render triggered
+  by checking the checkbox. The gradient sub-fields (entity picker, low/high value and colour
+  inputs, mode dropdown, live preview strip, "Remove gradient" button) now appear immediately
+  when "Enable value gradient" is checked.
+
+- **BUG-2 — `wave_lateral` snaps to start position at end of each cycle**: Rewrote the
+  lateral-wave phase calculation to use a continuously incrementing value driven by
+  `performance.now()` (wall-clock elapsed time), never resetting. Each particle is offset
+  by `2π / particle_count` around the wave cycle so all particles together form a smooth
+  snake pattern. Previously the phase was derived from the animation-cycle progress, which
+  reset to zero at cycle boundaries causing a visible snap.
+
+- **BUG-3 — `wave_spacing` visually indistinguishable from `clustered`**: Rewrote the
+  `wave_spacing` mode to distribute all N particles across the full path length
+  simultaneously using a spatial density function evaluated each rAF frame. Particle `i`
+  is placed at normalised path position `(i/N + time*speed) + sin((i/N+…) * 2π * freq) *
+  amp * (1/N)`, sorted ascending to prevent crossing. The result is a visible travelling
+  wave of density — dense clusters and sparse gaps visible across the whole path at once.
+  Previously `wave_spacing` used static `animateMotion begin=` offsets identical to
+  `clustered`.
+
+- **BUG-4 — `pulse` visually identical to `wave_spacing`**: Rewrote the `pulse` mode to
+  produce a heartbeat/pump-stroke effect driven by the rAF loop. Particle spacing compresses
+  abruptly toward zero during the bunched phase (`cyclePos < pulse_ratio`), then expands
+  gradually back to even spacing over the remainder of the cycle. The `begin=` offsets of
+  all `<animateMotion>` elements are updated every frame. The visual result is now clearly
+  different from both `clustered` (constant group structure) and `wave_spacing` (smooth
+  sinusoidal variation).
+
+- **BUG-5 — `line_style: diagonal` still rendered as `corner`**: Confirmed the `diagonal`
+  path builder in `polylineToSvgPathStyled` was already generating direct `M … L … L …`
+  SVG commands. Added unit tests for all four line styles (`diagonal`, `corner`, `curve`,
+  `smooth`) to lock in the correct behaviour. The `curve` implementation (Catmull-Rom to
+  cubic Bézier) was also hardened against potential variable-shadowing issues introduced
+  in v1.0.14.1.
+
 ## [1.0.14.1] — 2026-04-28
 
 ### Fixed
