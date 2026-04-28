@@ -147,6 +147,16 @@ export class FlowmeCardEditor extends LitElement {
   private dragTarget: DragTarget | null = null;
   private dragStartConfig: FlowmeConfig | null = null;
   private dragShiftHeld = false;
+  /** Pixel coords where the last pointerdown started (for drag-vs-click detection). */
+  private dragStartPx: { x: number; y: number } | null = null;
+  /** True once the pointer has moved > 4px from dragStartPx. */
+  private dragMoved = false;
+  /**
+   * Set to true by onStagePointerUp when rubber-band completes with ≥1 node
+   * selected. Prevents the subsequent 'click' event on the stage from
+   * immediately clearing that selection.
+   */
+  private rubberBandJustSelected = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -1850,6 +1860,13 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
+    // Rubber-band just completed on this same pointer-up sequence — skip the
+    // deselect so the freshly-selected nodes keep their rings.
+    if (this.rubberBandJustSelected) {
+      this.rubberBandJustSelected = false;
+      return;
+    }
+
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
     this.selectedFlowId = null;
@@ -1927,10 +1944,9 @@ export class FlowmeCardEditor extends LitElement {
       this.selectedNodeId = selected.size === 1 ? Array.from(selected)[0]! : null;
       this.selectedFlowId = null;
       this.selectedOverlayId = null;
-      if (this.config?.debug) {
-        console.log('[FlowMe Editor] rubber-band selection:', Array.from(selected));
-        console.log('[FlowMe Editor] suggest path condition:', selected.size, '=== 2?', selected.size === 2);
-      }
+      // Prevent the 'click' event that fires after this pointerup from clearing
+      // the selection we just set.
+      this.rubberBandJustSelected = true;
       if (selected.size === 2) {
         this.statusMessage = `${selected.size} nodes selected — click "Suggest path" to auto-route.`;
       } else {
@@ -1968,6 +1984,9 @@ export class FlowmeCardEditor extends LitElement {
     const nodeId = target.dataset['nodeId'];
     if (!nodeId) return;
 
+    // Selection (shift+click and normal click) is handled in onHandlePointerUp
+    // to get reliable shiftKey on all platforms. onNodeClick is only used for
+    // the add-flow pending workflow which requires a true 'click' event.
     if (this.pending?.kind === 'add-flow') {
       if (this.pending.step === 'pick-from') {
         this.pending = { kind: 'add-flow', step: 'pick-to', fromId: nodeId };
@@ -1988,44 +2007,7 @@ export class FlowmeCardEditor extends LitElement {
         return;
       }
       this.statusMessage = 'Destination must differ from source.';
-      return;
     }
-
-    // Shift+click: toggle node in/out of the unified selection set
-    if (event.shiftKey) {
-      const next = new Set(this.selectedNodeIds);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
-      }
-      this.selectedNodeIds = next; // new Set reference → LitElement re-renders
-      this.selectedNodeId = next.size === 1 ? Array.from(next)[0]! : null;
-      this.selectedFlowId = null;
-      this.selectedOverlayId = null;
-      if (this.config?.debug) {
-        console.log('[FlowMe Editor] shift-click selection:', Array.from(next));
-        console.log('[FlowMe Editor] suggest path condition:', next.size, '=== 2?', next.size === 2);
-      }
-      if (next.size === 2) {
-        this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route, or use the toolbar actions.';
-      } else if (next.size > 0) {
-        this.statusMessage = `${next.size} node(s) selected. Shift+click to add/remove. Escape to clear.`;
-      } else {
-        this.statusMessage = '';
-      }
-      return;
-    }
-
-    // Normal click: single-select (also clears any multi-selection)
-    this.selectedNodeIds = new Set([nodeId]); // new Set reference → LitElement re-renders
-    this.selectedNodeId = nodeId;
-    this.selectedFlowId = null;
-    this.selectedOverlayId = null;
-    if (this.config?.debug) {
-      console.log('[FlowMe Editor] single-click selection:', nodeId);
-    }
-    this.statusMessage = '';
   };
 
   private onOverlayClick = (event: MouseEvent): void => {
@@ -2129,11 +2111,9 @@ export class FlowmeCardEditor extends LitElement {
         };
       } else {
         target = { kind: 'node', id: nodeId };
-        // Clicking a non-selected node while multi-select active resets to single
-        if (!this.selectedNodeIds.has(nodeId)) {
-          this.selectedNodeIds = new Set([nodeId]);
-          this.selectedNodeId = nodeId;
-        }
+        // NOTE: do NOT change selection here — selection is handled in
+        // onHandlePointerUp (when no drag occurred) so that shiftKey is
+        // readable reliably. See BUG-2 fix.
       }
     } else if (overlayId && !el.classList.contains('overlay-resize'))
       target = { kind: 'overlay', id: overlayId };
@@ -2142,11 +2122,14 @@ export class FlowmeCardEditor extends LitElement {
     }
     if (!target) return;
 
-    event.preventDefault();
+    // Do NOT call event.preventDefault() here — that would suppress the
+    // subsequent 'click' event and break shiftKey detection on macOS.
     el.setPointerCapture(event.pointerId);
     this.dragPointerId = event.pointerId;
     this.dragTarget = target;
     this.dragStartConfig = this.config;
+    this.dragStartPx = { x: event.clientX, y: event.clientY };
+    this.dragMoved = false;
     this.dragShiftHeld = event.shiftKey;
   };
 
@@ -2154,6 +2137,14 @@ export class FlowmeCardEditor extends LitElement {
     if (this.dragPointerId !== event.pointerId || !this.dragTarget || !this.config) return;
     const target = this.dragTarget;
     this.dragShiftHeld = event.shiftKey;
+
+    // Mark as a real drag once the pointer moves > 4px in either axis
+    if (!this.dragMoved && this.dragStartPx) {
+      const dx = event.clientX - this.dragStartPx.x;
+      const dy = event.clientY - this.dragStartPx.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) this.dragMoved = true;
+    }
+    if (!this.dragMoved) return; // don't start live-preview until it's a real drag
 
     if (target.kind === 'overlay-resize') {
       const stage = this.stageRef.value;
@@ -2211,11 +2202,59 @@ export class FlowmeCardEditor extends LitElement {
     const startConfig = this.dragStartConfig;
     const endConfig = this.config;
     const target = this.dragTarget;
+    const wasDrag = this.dragMoved;
     this.dragPointerId = null;
     this.dragTarget = null;
     this.dragStartConfig = null;
+    this.dragStartPx = null;
+    this.dragMoved = false;
 
-    if (!startConfig || !endConfig || !target) return;
+    if (!target) return;
+
+    // --- Click (no significant movement): handle selection here. ---
+    // We do this in pointerup rather than click so we can reliably read
+    // shiftKey. The browser synthesises 'click' after pointerup but on
+    // macOS event.shiftKey is unreliable in some shadow-DOM scenarios.
+    if (!wasDrag && target.kind === 'node') {
+      const nodeId = target.id;
+
+      if (this.pending?.kind === 'add-flow') {
+        // add-flow picking is handled by the @click handler; let it through.
+        return;
+      }
+
+      if (event.shiftKey) {
+        // Shift+click: toggle this node in/out of the selection set
+        const next = new Set(this.selectedNodeIds);
+        if (next.has(nodeId)) {
+          next.delete(nodeId);
+        } else {
+          next.add(nodeId);
+        }
+        this.selectedNodeIds = next;
+        this.selectedNodeId = next.size === 1 ? Array.from(next)[0]! : null;
+        this.selectedFlowId = null;
+        this.selectedOverlayId = null;
+        if (next.size === 2) {
+          this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route, or use the toolbar actions.';
+        } else if (next.size > 0) {
+          this.statusMessage = `${next.size} node(s) selected. Shift+click to add/remove. Escape to clear.`;
+        } else {
+          this.statusMessage = '';
+        }
+      } else {
+        // Normal click: single-select (clears any multi-selection)
+        this.selectedNodeIds = new Set([nodeId]);
+        this.selectedNodeId = nodeId;
+        this.selectedFlowId = null;
+        this.selectedOverlayId = null;
+        this.statusMessage = '';
+      }
+      return;
+    }
+
+    // --- Drag: push undo patch only if something actually moved. ---
+    if (!wasDrag || !startConfig || !endConfig) return;
     if (startConfig === endConfig) return;
 
     let description: string;

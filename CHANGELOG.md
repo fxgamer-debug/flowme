@@ -2,6 +2,36 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.13.3] — 2026-04-28
+
+### Fixed
+
+- **BUG-1 — Rubber-band regression**: After rubber-band selection completed,
+  the stage `click` event (synthesised immediately after `pointerup`) was firing
+  `onStageClick` which cleared `selectedNodeIds = new Set()`, wiping the freshly
+  selected nodes before they could render. Fixed by setting a
+  `rubberBandJustSelected` flag in `onStagePointerUp` and checking it in
+  `onStageClick` to skip the deselect on that one subsequent click.
+
+- **BUG-2 — Shift+click never worked**: `onHandlePointerDown` called
+  `event.preventDefault()`, which suppresses the browser's synthetic `click`
+  event that fires after pointerdown+pointerup. The `@click` handler
+  (`onNodeClick`) therefore never fired, so `event.shiftKey` was never checked.
+  Fixed by:
+  - Removing `event.preventDefault()` from `onHandlePointerDown`.
+  - Adding `dragStartPx` / `dragMoved` fields. `onHandlePointerMove` sets
+    `dragMoved = true` once the pointer travels > 4 px from the down position.
+  - Moving all selection logic into `onHandlePointerUp`: if `!dragMoved` and
+    target is a node, treat it as a click — check `event.shiftKey` and
+    add/remove from `selectedNodeIds` (shift) or replace selection (plain).
+  - `onNodeClick` (`@click` handler) is now only responsible for the
+    `add-flow` pending workflow that requires a true `click` event.
+
+- **BUG-3 — Suggest Path still greyed out**: Consequence of BUG-2. Once
+  shift+click selection is written to `selectedNodeIds` correctly, the toolbar
+  binding `?disabled=${this.selectedNodeIds.size !== 2}` evaluates live on each
+  LitElement re-render and the button activates correctly.
+
 ## [1.0.13.2] — 2026-04-28
 
 ### Fixed
