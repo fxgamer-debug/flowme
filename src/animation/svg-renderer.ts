@@ -892,7 +892,7 @@ export class SvgRenderer implements FlowRenderer {
 
       // Apply updated begin= offsets to the animateMotion elements
       for (let i = 0; i < count; i++) {
-        const motionEl = dom.particles[i]?.motion;
+        const motionEl = dom.particles[i]?.animateMotion;
         if (!motionEl) continue;
         const b = begins[i] ?? 0;
         motionEl.setAttribute('begin', `${b.toFixed(4)}s`);

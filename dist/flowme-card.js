@@ -1835,7 +1835,7 @@ class Zt {
             d.push(-(y % a)), y += f;
         }
         for (let c = 0; c < o; c++) {
-          const u = n.particles[c]?.motion;
+          const u = n.particles[c]?.animateMotion;
           if (!u) continue;
           const p = d[c] ?? 0;
           u.setAttribute("begin", `${p.toFixed(4)}s`);
