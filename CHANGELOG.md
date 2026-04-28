@@ -2,6 +2,37 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.13.2] — 2026-04-28
+
+### Fixed
+
+- **BUG-1 — Shift+click multi-select not working**: Shift+clicking a second node
+  was silently broken because `suggestNodeIds` (a separate state array) was the
+  source of truth for the Suggest Path button, while `selectedNodeIds` (the `Set`)
+  was updated correctly but never read by the toolbar or `runSuggestPath`. The two
+  states drifted out of sync on every interaction.
+  - Removed `suggestNodeIds` state entirely.
+  - `selectedNodeIds: Set<string>` is now the **single source of truth** for all
+    selection state. The toolbar `suggestPathDisabled` binding now reads
+    `selectedNodeIds.size !== 2` directly; `runSuggestPath` reads
+    `Array.from(selectedNodeIds)`.
+  - Shift+click now creates a **new `Set` reference** on every change so LitElement
+    reactivity triggers a full re-render immediately.
+- **BUG-2 — Rubber-band rings not appearing**: Rubber-band `onStagePointerUp` was
+  already setting `selectedNodeIds` correctly, but because the toolbar was reading
+  the stale `suggestNodeIds`, the Suggest Path button appeared greyed out even when
+  2 nodes were caught. With `suggestNodeIds` removed this is fixed.
+- **BUG-3 — Suggest Path always greyed out**: Root cause was the stale-closure /
+  split-brain bug described in BUG-1. Fixed by unifying on `selectedNodeIds`.
+- **BUG-4 — Selection ring styling**: Added `.handle.in-selection` CSS class applied
+  to every selected node (single or multi). Ring is a `box-shadow` white outline
+  `4px` outside the node dot with a `2px` white band and a semi-transparent
+  accent glow. Rings are removed immediately when deselected because the class is
+  derived from `selectedNodeIds.has(node.id)` on every render.
+- **Debug logging**: Added `config.debug`-gated `console.log` statements to
+  `onNodeClick`, Shift+click branch, and rubber-band `onStagePointerUp` tracing
+  selection state and suggest-path readiness.
+
 ## [1.0.13] — 2026-04-28
 
 ### Added

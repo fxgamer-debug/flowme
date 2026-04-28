@@ -115,14 +115,18 @@ export class FlowmeCardEditor extends LitElement {
   @state() private config?: FlowmeConfig;
   @state() private pending: PendingAction = null;
   @state() private previewMode = false;
-  /** Primary single-select node (opens inspector). Cleared when multi-select is active. */
+  /** Primary single-select node (opens inspector when selectedNodeIds.size === 1). */
   @state() private selectedNodeId: string | null = null;
-  /** Multi-select set — when size > 0 the multi-select toolbar is shown. */
+  /**
+   * Unified multi-select set — ALL selection state lives here.
+   * size === 0 → nothing selected
+   * size === 1 → single-select; selectedNodeId === the one entry
+   * size === 2 → Suggest Path becomes active
+   * size >= 2 → multi-select toolbar shown
+   */
   @state() private selectedNodeIds: Set<string> = new Set();
   @state() private selectedFlowId: string | null = null;
   @state() private selectedOverlayId: string | null = null;
-  /** Nodes selected for suggest-path (max 2). Shift-click to add/remove. */
-  @state() private suggestNodeIds: string[] = [];
   /** Rubber-band selection box (% coordinates, null when not dragging) */
   @state() private rubberBand: { x1: number; y1: number; x2: number; y2: number } | null = null;
   @state() private customConfigDraft = '';
@@ -188,7 +192,7 @@ export class FlowmeCardEditor extends LitElement {
           .previewMode=${this.previewMode}
           .undoLabel=${this.undoLabel}
           .redoLabel=${this.redoLabel}
-          .suggestPathDisabled=${this.suggestNodeIds.length !== 2 || this.suggestBusy}
+          .suggestPathDisabled=${this.selectedNodeIds.size !== 2 || this.suggestBusy}
           @toolbar-action=${this.onToolbarAction}
         ></flowme-editor-toolbar>
         ${this.statusMessage ? html`<div class="status">${this.statusMessage}</div>` : nothing}
@@ -334,13 +338,15 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   private renderHandle(node: NodeConfig): TemplateResult {
-    const selected = node.id === this.selectedNodeId;
-    const multiSelected = this.selectedNodeIds.has(node.id);
-    const inSuggestSet = this.suggestNodeIds.includes(node.id);
+    // selectedNodeIds is the single source of truth for all selection states
+    const isInSelection = this.selectedNodeIds.has(node.id);
+    const isSingleSelected = isInSelection && this.selectedNodeIds.size === 1;
+    const isMultiSelected = isInSelection && this.selectedNodeIds.size > 1;
+    const selectionIndex = isInSelection ? Array.from(this.selectedNodeIds).indexOf(node.id) : -1;
     const isHidden = node.visible === false;
     return html`
       <div
-        class=${`handle ${selected ? 'selected' : ''} ${multiSelected ? 'multi-selected' : ''} ${inSuggestSet ? 'suggest-selected' : ''} ${isHidden ? 'handle-hidden' : ''}`}
+        class=${`handle ${isSingleSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${isInSelection ? 'in-selection' : ''} ${isHidden ? 'handle-hidden' : ''}`}
         data-node-id=${node.id}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
         @pointerdown=${this.onHandlePointerDown}
@@ -352,7 +358,9 @@ export class FlowmeCardEditor extends LitElement {
       >
         <span class="handle-dot"></span>
         ${node.label ? html`<span class="handle-label">${node.label}</span>` : nothing}
-        ${inSuggestSet ? html`<span class="suggest-badge">${this.suggestNodeIds.indexOf(node.id) + 1}</span>` : nothing}
+        ${isInSelection && this.selectedNodeIds.size >= 2
+          ? html`<span class="suggest-badge">${selectionIndex + 1}</span>`
+          : nothing}
         <button
           class="eye-toggle"
           title=${isHidden ? 'Show node' : 'Hide node'}
@@ -1361,7 +1369,7 @@ export class FlowmeCardEditor extends LitElement {
         <button class="ms-btn" @click=${() => this.bulkAlignH(ids, anchorId)}>Align H</button>
         <button class="ms-btn" @click=${() => this.bulkAlignV(ids, anchorId)}>Align V</button>
         <button class="ms-btn danger" @click=${() => this.bulkDelete(ids)}>Delete</button>
-        <button class="ms-btn ghost" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; this.suggestNodeIds = []; }}>✕ Deselect</button>
+        <button class="ms-btn ghost" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; this.statusMessage = ''; }}>✕ Deselect</button>
       </div>
     `;
   }
@@ -1402,7 +1410,6 @@ export class FlowmeCardEditor extends LitElement {
     this.pushPatch(prev, next, `delete ${ids.size} nodes`);
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
-    this.suggestNodeIds = [];
   }
 
   private renderFlowsListPanel(): TemplateResult | typeof nothing {
@@ -1683,11 +1690,11 @@ export class FlowmeCardEditor extends LitElement {
   // -- suggest path --
 
   private async runSuggestPath(): Promise<void> {
-    if (!this.config || this.suggestNodeIds.length !== 2) {
-      this.statusMessage = 'Shift+click exactly two nodes, then click "Suggest path".';
+    if (!this.config || this.selectedNodeIds.size !== 2) {
+      this.statusMessage = 'Select exactly 2 nodes (Shift+click or rubber-band), then click "Suggest path".';
       return;
     }
-    const [fromId, toId] = this.suggestNodeIds as [string, string];
+    const [fromId, toId] = Array.from(this.selectedNodeIds) as [string, string];
     const fromNode = this.config.nodes.find((n) => n.id === fromId);
     const toNode = this.config.nodes.find((n) => n.id === toId);
     if (!fromNode || !toNode) {
@@ -1751,16 +1758,15 @@ export class FlowmeCardEditor extends LitElement {
       ),
     };
     this.suggestPreview = null;
-    this.suggestNodeIds = [];
-    this.selectedFlowId = flow.id;
+    this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
+    this.selectedFlowId = flow.id;
     this.statusMessage = `Created flow ${flow.id} with ${waypoints.length} waypoint(s).`;
     this.pushPatch(prev, next, `suggest-path ${flow.id}`);
   }
 
   private cancelSuggestion(): void {
     this.suggestPreview = null;
-    this.suggestNodeIds = [];
     this.statusMessage = 'Suggestion dismissed.';
   }
 
@@ -1844,13 +1850,13 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
-    this.selectedNodeId = null;
     this.selectedNodeIds = new Set();
+    this.selectedNodeId = null;
     this.selectedFlowId = null;
     this.selectedOverlayId = null;
-    this.suggestNodeIds = [];
     this.customConfigDraft = '';
     this.customConfigError = '';
+    this.statusMessage = '';
   };
 
   private onStageContextMenu = (event: MouseEvent): void => {
@@ -1917,12 +1923,19 @@ export class FlowmeCardEditor extends LitElement {
       }
     }
     if (selected.size > 0) {
-      this.selectedNodeIds = selected;
+      this.selectedNodeIds = selected; // new Set reference → triggers re-render
       this.selectedNodeId = selected.size === 1 ? Array.from(selected)[0]! : null;
       this.selectedFlowId = null;
       this.selectedOverlayId = null;
-      this.suggestNodeIds = Array.from(selected).slice(0, 2);
-      this.statusMessage = `${selected.size} node(s) selected via rubber-band.`;
+      if (this.config?.debug) {
+        console.log('[FlowMe Editor] rubber-band selection:', Array.from(selected));
+        console.log('[FlowMe Editor] suggest path condition:', selected.size, '=== 2?', selected.size === 2);
+      }
+      if (selected.size === 2) {
+        this.statusMessage = `${selected.size} nodes selected — click "Suggest path" to auto-route.`;
+      } else {
+        this.statusMessage = `${selected.size} node(s) selected via rubber-band.`;
+      }
     }
   };
 
@@ -1978,38 +1991,41 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
-    // Shift+click: toggle multi-select (also serves as suggest-path selection set)
+    // Shift+click: toggle node in/out of the unified selection set
     if (event.shiftKey) {
       const next = new Set(this.selectedNodeIds);
       if (next.has(nodeId)) {
         next.delete(nodeId);
       } else {
-        // Always add current single-selected node into the set too
-        if (this.selectedNodeId && !next.has(this.selectedNodeId)) {
-          next.add(this.selectedNodeId);
-        }
         next.add(nodeId);
       }
-      this.selectedNodeIds = next;
-      // Mirror into suggestNodeIds (max 2, for backward compat)
-      const arr = Array.from(next).slice(0, 2);
-      this.suggestNodeIds = arr;
-      if (next.size === 2) {
-        this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route, or use bulk actions above.';
-      } else if (next.size > 0) {
-        this.statusMessage = `${next.size} node(s) selected. Shift+click to add more.`;
-      }
-      this.selectedNodeId = next.size === 1 ? nodeId : null;
+      this.selectedNodeIds = next; // new Set reference → LitElement re-renders
+      this.selectedNodeId = next.size === 1 ? Array.from(next)[0]! : null;
       this.selectedFlowId = null;
       this.selectedOverlayId = null;
+      if (this.config?.debug) {
+        console.log('[FlowMe Editor] shift-click selection:', Array.from(next));
+        console.log('[FlowMe Editor] suggest path condition:', next.size, '=== 2?', next.size === 2);
+      }
+      if (next.size === 2) {
+        this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route, or use the toolbar actions.';
+      } else if (next.size > 0) {
+        this.statusMessage = `${next.size} node(s) selected. Shift+click to add/remove. Escape to clear.`;
+      } else {
+        this.statusMessage = '';
+      }
       return;
     }
-    // Normal click: single-select for inspector, clear multi-select
+
+    // Normal click: single-select (also clears any multi-selection)
+    this.selectedNodeIds = new Set([nodeId]); // new Set reference → LitElement re-renders
     this.selectedNodeId = nodeId;
-    this.selectedNodeIds = new Set([nodeId]);
     this.selectedFlowId = null;
     this.selectedOverlayId = null;
-    this.suggestNodeIds = [];
+    if (this.config?.debug) {
+      console.log('[FlowMe Editor] single-click selection:', nodeId);
+    }
+    this.statusMessage = '';
   };
 
   private onOverlayClick = (event: MouseEvent): void => {
@@ -2340,12 +2356,12 @@ export class FlowmeCardEditor extends LitElement {
   private onKeyDown = (event: KeyboardEvent): void => {
     // Escape: deselect all
     if (event.key === 'Escape') {
-      this.selectedNodeId = null;
       this.selectedNodeIds = new Set();
+      this.selectedNodeId = null;
       this.selectedFlowId = null;
       this.selectedOverlayId = null;
-      this.suggestNodeIds = [];
       this.rubberBand = null;
+      this.statusMessage = '';
       return;
     }
     const mod = event.metaKey || event.ctrlKey;
@@ -2481,14 +2497,17 @@ export class FlowmeCardEditor extends LitElement {
       touch-action: none;
       user-select: none;
     }
+    /* Single-select: primary-color ring */
     .handle.selected .handle-dot {
       box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 0 6px var(--primary-color, #03a9f4);
     }
-    .handle.multi-selected .handle-dot {
-      box-shadow: 0 0 0 2px rgba(0,0,0,0.4), 0 0 0 5px #fff, 0 0 0 7px rgba(3,169,244,0.7);
+    /* Any node in the selection set (single or multi): white ring 4px outside, 2px wide */
+    .handle.in-selection .handle-dot {
+      box-shadow: 0 0 0 4px transparent, 0 0 0 6px #ffffff, 0 0 0 8px rgba(3,169,244,0.6);
     }
-    .handle.suggest-selected .handle-dot {
-      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5), 0 0 0 6px #f59e0b;
+    /* Multi-select additionally brightens the ring */
+    .handle.multi-selected .handle-dot {
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.4), 0 0 0 5px #ffffff, 0 0 0 7px #03a9f4;
     }
     /* Rubber-band selection box */
     .rubber-band {
