@@ -5316,18 +5316,17 @@ C.KNOWN_WEATHER_STATES = [
 ];
 C.styles = ie`
     :host {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      overflow: hidden;
+      display: block;
       font-family: var(--paper-font-body1_-_font-family, inherit);
     }
     /* ── Four-zone layout ──────────────────────────────────────────────── */
     .wrap {
       display: flex;
       flex-direction: column;
-      flex: 1 1 0;
-      min-height: 0;
+      /* min-height ensures usability when HA doesn't give :host an explicit
+         height; height: 100% fills the host if HA does size it. */
+      min-height: 600px;
+      height: 100%;
       padding: 0;
       gap: 0;
       overflow: hidden;
@@ -6597,7 +6596,7 @@ var Xn = Object.defineProperty, Zn = Object.getOwnPropertyDescriptor, Z = (e, t,
     (r = e[o]) && (n = (s ? r(t, i, n) : r(n)) || n);
   return s && n && Xn(t, i, n), n;
 };
-const Qn = "1.0.15.1", Ze = 5e3;
+const Qn = "1.0.15.2", Ze = 5e3;
 console.info(
   `%c flowme %c v${Qn} `,
   "color: white; background: #4ADE80; font-weight: 700;",

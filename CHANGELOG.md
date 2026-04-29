@@ -2,6 +2,21 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.15.2] — 2026-04-29
+
+### Fixed
+
+- **REGRESSION — Editor blank in HA (`:host` display regression)**: The v1.0.15.1 BUG-2 fix
+  changed `:host` from `display: block` to `display: flex` so that `height: 100%` on `.wrap`
+  would resolve correctly. In HA's editor dialog (`hui-dialog-edit-card`) the editor element
+  is placed inside `.element-editor` which does not establish a block formatting context that
+  provides height to a flex `:host`, so the component rendered with zero height and appeared
+  completely blank. Fixed by reverting `:host` to `display: block` (what HA expects) and
+  moving the flex column layout responsibility entirely onto `.wrap`. `.wrap` now uses
+  `min-height: 600px` to guarantee a usable height when HA does not size the host explicitly,
+  and `height: 100%` to fill it when HA does. All four zones remain correctly laid out within
+  `.wrap`.
+
 ## [1.0.15.1] — 2026-04-29
 
 ### Investigation
