@@ -2,6 +2,44 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.15] — 2026-04-29
+
+### Changed
+
+- **Editor layout redesign**: Replaced the flat single-column layout with four stacked
+  horizontal zones that fill the full editor panel height:
+
+  - **Zone 1 — Canvas**: The interactive stage with background, flow lines, node handles,
+    waypoint handles, and rubber-band selection. Height adapts to the card's configured
+    `aspect_ratio`. Suggest path preview bar appears immediately below the canvas.
+
+  - **Zone 2 — Toolbar**: Fixed-height bar (~48px) with three groups:
+    - Left: `↶ Undo` / `↷ Redo` with keyboard shortcut tooltips, disabled when stack empty.
+    - Centre: `+ Node` / `+ Flow` / `+ Overlay` / `Suggest path` add buttons. Replaced by
+      the multi-select action toolbar when two or more nodes are selected.
+    - Right: status/error message, `💾 Save` (commits to HA config), `✕ Cancel` (restores
+      the config as it was when the editor first opened, using a new `savedConfig` snapshot
+      captured on each external `setConfig` call — creates an undoable patch).
+
+  - **Zone 3 — Context panel**: Scrollable area whose content depends on selection:
+    - Nothing selected → Background, Animation, Opacity, Domain colours, Visibility,
+      Defaults collapsible panels (existing helpers, unchanged).
+    - Node selected → existing node inspector (all fields).
+    - Flow selected → existing flow inspector with animation, waypoints, speed curve,
+      gradient sub-sections.
+    - Overlay selected → existing overlay inspector.
+
+  - **Zone 4 — Element list**: Fixed-height chip row (~120px) with three tabs
+    (`Nodes` / `Flows` / `Overlays`). Each tab shows horizontally scrolling chips with a
+    coloured left border matching the element colour. Clicking a chip selects the element
+    and switches the context panel. An `+ Add` chip at the end triggers the same add flow
+    as the toolbar buttons.
+
+- All editor logic (drag interactions, undo/redo, keyboard shortcuts, Suggest Path, all
+  input field handlers) is **unchanged**. Only `render()`, the CSS block, and three new
+  template-only helper methods (`renderContextPanel`, `renderStateA`, `renderElementList`)
+  were added or modified.
+
 ## [1.0.14.6] — 2026-04-29
 
 ### Fixed
