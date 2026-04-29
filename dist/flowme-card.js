@@ -3,18 +3,18 @@
  * Copyright 2019 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const _t = globalThis, se = _t.ShadowRoot && (_t.ShadyCSS === void 0 || _t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, ne = Symbol(), he = /* @__PURE__ */ new WeakMap();
+const _t = globalThis, ne = _t.ShadowRoot && (_t.ShadyCSS === void 0 || _t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, oe = Symbol(), fe = /* @__PURE__ */ new WeakMap();
 let ei = class {
   constructor(t, i, s) {
-    if (this._$cssResult$ = !0, s !== ne) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
+    if (this._$cssResult$ = !0, s !== oe) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
     this.cssText = t, this.t = i;
   }
   get styleSheet() {
     let t = this.o;
     const i = this.t;
-    if (se && t === void 0) {
+    if (ne && t === void 0) {
       const s = i !== void 0 && i.length === 1;
-      s && (t = he.get(i)), t === void 0 && ((this.o = t = new CSSStyleSheet()).replaceSync(this.cssText), s && he.set(i, t));
+      s && (t = fe.get(i)), t === void 0 && ((this.o = t = new CSSStyleSheet()).replaceSync(this.cssText), s && fe.set(i, t));
     }
     return t;
   }
@@ -22,20 +22,20 @@ let ei = class {
     return this.cssText;
   }
 };
-const bi = (e) => new ei(typeof e == "string" ? e : e + "", void 0, ne), Et = (e, ...t) => {
+const bi = (e) => new ei(typeof e == "string" ? e : e + "", void 0, oe), Et = (e, ...t) => {
   const i = e.length === 1 ? e[0] : t.reduce((s, n, o) => s + ((r) => {
     if (r._$cssResult$ === !0) return r.cssText;
     if (typeof r == "number") return r;
     throw Error("Value passed to 'css' function must be a 'css' function result: " + r + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
   })(n) + e[o + 1], e[0]);
-  return new ei(i, e, ne);
+  return new ei(i, e, oe);
 }, yi = (e, t) => {
-  if (se) e.adoptedStyleSheets = t.map((i) => i instanceof CSSStyleSheet ? i : i.styleSheet);
+  if (ne) e.adoptedStyleSheets = t.map((i) => i instanceof CSSStyleSheet ? i : i.styleSheet);
   else for (const i of t) {
     const s = document.createElement("style"), n = _t.litNonce;
     n !== void 0 && s.setAttribute("nonce", n), s.textContent = i.cssText, e.appendChild(s);
   }
-}, fe = se ? (e) => e : (e) => e instanceof CSSStyleSheet ? ((t) => {
+}, ge = ne ? (e) => e : (e) => e instanceof CSSStyleSheet ? ((t) => {
   let i = "";
   for (const s of t.cssRules) i += s.cssText;
   return bi(i);
@@ -45,7 +45,7 @@ const bi = (e) => new ei(typeof e == "string" ? e : e + "", void 0, ne), Et = (e
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const { is: vi, defineProperty: wi, getOwnPropertyDescriptor: xi, getOwnPropertyNames: $i, getOwnPropertySymbols: _i, getPrototypeOf: ki } = Object, W = globalThis, ge = W.trustedTypes, Si = ge ? ge.emptyScript : "", Ai = W.reactiveElementPolyfillSupport, ht = (e, t) => e, Mt = { toAttribute(e, t) {
+const { is: vi, defineProperty: wi, getOwnPropertyDescriptor: xi, getOwnPropertyNames: $i, getOwnPropertySymbols: _i, getPrototypeOf: ki } = Object, W = globalThis, me = W.trustedTypes, Si = me ? me.emptyScript : "", Ai = W.reactiveElementPolyfillSupport, ht = (e, t) => e, Mt = { toAttribute(e, t) {
   switch (t) {
     case Boolean:
       e = e ? Si : null;
@@ -73,7 +73,7 @@ const { is: vi, defineProperty: wi, getOwnPropertyDescriptor: xi, getOwnProperty
       }
   }
   return i;
-} }, oe = (e, t) => !vi(e, t), me = { attribute: !0, type: String, converter: Mt, reflect: !1, useDefault: !1, hasChanged: oe };
+} }, re = (e, t) => !vi(e, t), be = { attribute: !0, type: String, converter: Mt, reflect: !1, useDefault: !1, hasChanged: re };
 Symbol.metadata ?? (Symbol.metadata = Symbol("metadata")), W.litPropertyMetadata ?? (W.litPropertyMetadata = /* @__PURE__ */ new WeakMap());
 let ot = class extends HTMLElement {
   static addInitializer(t) {
@@ -82,7 +82,7 @@ let ot = class extends HTMLElement {
   static get observedAttributes() {
     return this.finalize(), this._$Eh && [...this._$Eh.keys()];
   }
-  static createProperty(t, i = me) {
+  static createProperty(t, i = be) {
     if (i.state && (i.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(t) && ((i = Object.create(i)).wrapped = !0), this.elementProperties.set(t, i), !i.noAccessor) {
       const s = Symbol(), n = this.getPropertyDescriptor(t, s, i);
       n !== void 0 && wi(this.prototype, t, n);
@@ -100,7 +100,7 @@ let ot = class extends HTMLElement {
     }, configurable: !0, enumerable: !0 };
   }
   static getPropertyOptions(t) {
-    return this.elementProperties.get(t) ?? me;
+    return this.elementProperties.get(t) ?? be;
   }
   static _$Ei() {
     if (this.hasOwnProperty(ht("elementProperties"))) return;
@@ -129,8 +129,8 @@ let ot = class extends HTMLElement {
     const i = [];
     if (Array.isArray(t)) {
       const s = new Set(t.flat(1 / 0).reverse());
-      for (const n of s) i.unshift(fe(n));
-    } else t !== void 0 && i.push(fe(t));
+      for (const n of s) i.unshift(ge(n));
+    } else t !== void 0 && i.push(ge(t));
     return i;
   }
   static _$Eu(t, i) {
@@ -188,7 +188,7 @@ let ot = class extends HTMLElement {
   requestUpdate(t, i, s, n = !1, o) {
     if (t !== void 0) {
       const r = this.constructor;
-      if (n === !1 && (o = this[t]), s ?? (s = r.getPropertyOptions(t)), !((s.hasChanged ?? oe)(o, i) || s.useDefault && s.reflect && o === this._$Ej?.get(t) && !this.hasAttribute(r._$Eu(t, s)))) return;
+      if (n === !1 && (o = this[t]), s ?? (s = r.getPropertyOptions(t)), !((s.hasChanged ?? re)(o, i) || s.useDefault && s.reflect && o === this._$Ej?.get(t) && !this.hasAttribute(r._$Eu(t, s)))) return;
       this.C(t, i, s);
     }
     this.isUpdatePending === !1 && (this._$ES = this._$EP());
@@ -262,12 +262,12 @@ ot.elementStyles = [], ot.shadowRootOptions = { mode: "open" }, ot[ht("elementPr
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const ft = globalThis, be = (e) => e, Ct = ft.trustedTypes, ye = Ct ? Ct.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, ii = "$lit$", j = `lit$${Math.random().toFixed(9).slice(2)}$`, si = "?" + j, Mi = `<${si}>`, J = document, bt = () => J.createComment(""), yt = (e) => e === null || typeof e != "object" && typeof e != "function", re = Array.isArray, Ci = (e) => re(e) || typeof e?.[Symbol.iterator] == "function", Lt = `[ 	
-\f\r]`, dt = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, ve = /-->/g, we = />/g, q = RegExp(`>|${Lt}(?:([^\\s"'>=/]+)(${Lt}*=${Lt}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), xe = /'/g, $e = /"/g, ni = /^(?:script|style|textarea|title)$/i, Pi = (e) => (t, ...i) => ({ _$litType$: e, strings: t, values: i }), b = Pi(1), rt = Symbol.for("lit-noChange"), w = Symbol.for("lit-nothing"), _e = /* @__PURE__ */ new WeakMap(), Y = J.createTreeWalker(J, 129);
+const ft = globalThis, ye = (e) => e, Ct = ft.trustedTypes, ve = Ct ? Ct.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, ii = "$lit$", j = `lit$${Math.random().toFixed(9).slice(2)}$`, si = "?" + j, Mi = `<${si}>`, J = document, bt = () => J.createComment(""), yt = (e) => e === null || typeof e != "object" && typeof e != "function", ae = Array.isArray, Ci = (e) => ae(e) || typeof e?.[Symbol.iterator] == "function", Lt = `[ 	
+\f\r]`, dt = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, we = /-->/g, xe = />/g, q = RegExp(`>|${Lt}(?:([^\\s"'>=/]+)(${Lt}*=${Lt}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`, "g"), $e = /'/g, _e = /"/g, ni = /^(?:script|style|textarea|title)$/i, Pi = (e) => (t, ...i) => ({ _$litType$: e, strings: t, values: i }), b = Pi(1), rt = Symbol.for("lit-noChange"), w = Symbol.for("lit-nothing"), ke = /* @__PURE__ */ new WeakMap(), Y = J.createTreeWalker(J, 129);
 function oi(e, t) {
-  if (!re(e) || !e.hasOwnProperty("raw")) throw Error("invalid template strings array");
-  return ye !== void 0 ? ye.createHTML(t) : t;
+  if (!ae(e) || !e.hasOwnProperty("raw")) throw Error("invalid template strings array");
+  return ve !== void 0 ? ve.createHTML(t) : t;
 }
 const Fi = (e, t) => {
   const i = e.length - 1, s = [];
@@ -275,7 +275,7 @@ const Fi = (e, t) => {
   for (let a = 0; a < i; a++) {
     const l = e[a];
     let d, c, p = -1, u = 0;
-    for (; u < l.length && (r.lastIndex = u, c = r.exec(l), c !== null); ) u = r.lastIndex, r === dt ? c[1] === "!--" ? r = ve : c[1] !== void 0 ? r = we : c[2] !== void 0 ? (ni.test(c[2]) && (n = RegExp("</" + c[2], "g")), r = q) : c[3] !== void 0 && (r = q) : r === q ? c[0] === ">" ? (r = n ?? dt, p = -1) : c[1] === void 0 ? p = -2 : (p = r.lastIndex - c[2].length, d = c[1], r = c[3] === void 0 ? q : c[3] === '"' ? $e : xe) : r === $e || r === xe ? r = q : r === ve || r === we ? r = dt : (r = q, n = void 0);
+    for (; u < l.length && (r.lastIndex = u, c = r.exec(l), c !== null); ) u = r.lastIndex, r === dt ? c[1] === "!--" ? r = we : c[1] !== void 0 ? r = xe : c[2] !== void 0 ? (ni.test(c[2]) && (n = RegExp("</" + c[2], "g")), r = q) : c[3] !== void 0 && (r = q) : r === q ? c[0] === ">" ? (r = n ?? dt, p = -1) : c[1] === void 0 ? p = -2 : (p = r.lastIndex - c[2].length, d = c[1], r = c[3] === void 0 ? q : c[3] === '"' ? _e : $e) : r === _e || r === $e ? r = q : r === we || r === xe ? r = dt : (r = q, n = void 0);
     const h = r === q && e[a + 1].startsWith("/>") ? " " : "";
     o += r === dt ? l + Mi : p >= 0 ? (s.push(d), l.slice(0, p) + ii + l.slice(p) + j + h) : l + j + (p === -2 ? a : h);
   }
@@ -391,11 +391,11 @@ class wt {
     }
   }
   _$AC(t) {
-    let i = _e.get(t.strings);
-    return i === void 0 && _e.set(t.strings, i = new vt(t)), i;
+    let i = ke.get(t.strings);
+    return i === void 0 && ke.set(t.strings, i = new vt(t)), i;
   }
   k(t) {
-    re(this._$AH) || (this._$AH = [], this._$AR());
+    ae(this._$AH) || (this._$AH = [], this._$AR());
     const i = this._$AH;
     let s, n = 0;
     for (const o of t) n === i.length ? i.push(s = new wt(this.O(bt()), this.O(bt()), this, this.options)) : s = i[n], s._$AI(o), n++;
@@ -403,8 +403,8 @@ class wt {
   }
   _$AR(t = this._$AA.nextSibling, i) {
     for (this._$AP?.(!1, !0, i); t !== this._$AB; ) {
-      const s = be(t).nextSibling;
-      be(t).remove(), t = s;
+      const s = ye(t).nextSibling;
+      ye(t).remove(), t = s;
     }
   }
   setConnected(t) {
@@ -535,7 +535,7 @@ const zt = (e) => (t, i) => {
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const Li = { attribute: !0, type: String, converter: Mt, reflect: !1, hasChanged: oe }, Ui = (e = Li, t, i) => {
+const Li = { attribute: !0, type: String, converter: Mt, reflect: !1, hasChanged: re }, Ui = (e = Li, t, i) => {
   const { kind: s, metadata: n } = i;
   let o = globalThis.litPropertyMetadata.get(n);
   if (o === void 0 && globalThis.litPropertyMetadata.set(n, o = /* @__PURE__ */ new Map()), s === "setter" && ((e = Object.create(e)).wrapped = !0), o.set(i.name, e), s === "accessor") {
@@ -737,28 +737,28 @@ function Xi(e, t = "card_config") {
     `Unsafe URL scheme '${s.scheme}' in ${s.path}. flowme rejects javascript:, vbscript:, data: and file: URLs inside custom overlay configs.`
   );
 }
-class ae extends Error {
+class le extends Error {
   constructor() {
     super(...arguments), this.name = "FlowmeConfigError";
   }
 }
-const ke = ["/local/", "/api/", "/hacsfiles/", "https://", "http://", "data:"];
+const Se = ["/local/", "/api/", "/hacsfiles/", "https://", "http://", "data:"];
 function v(e, t) {
-  throw new ae(`${e}: ${t}`);
+  throw new le(`${e}: ${t}`);
 }
-function le(e, t) {
+function ce(e, t) {
   (!e || typeof e != "object") && v(t, "must be an object with x and y");
   const i = e, s = i.x, n = i.y;
   (typeof s != "number" || !Number.isFinite(s)) && v(`${t}.x`, "must be a finite number"), (typeof n != "number" || !Number.isFinite(n)) && v(`${t}.y`, "must be a finite number");
   const o = s, r = n;
   return (o < 0 || o > 100) && v(`${t}.x`, `must be in range 0-100, got ${o}`), (r < 0 || r > 100) && v(`${t}.y`, `must be in range 0-100, got ${r}`), { x: o, y: r };
 }
-function Se(e, t) {
+function Ae(e, t) {
   (typeof e != "string" || !e.length) && v(t, "must be a non-empty string");
   const i = e;
-  return ke.some((n) => i.startsWith(n)) || v(
+  return Se.some((n) => i.startsWith(n)) || v(
     t,
-    `must start with one of ${ke.join(", ")} (got "${i.slice(0, 40)}")`
+    `must start with one of ${Se.join(", ")} (got "${i.slice(0, 40)}")`
   ), i;
 }
 function Zi(e, t, i) {
@@ -768,8 +768,8 @@ function Zi(e, t, i) {
   (typeof o != "string" || !o.length) && v(`${s}.id`, "must be a non-empty string");
   const r = o;
   i.has(r) && v(`${s}.id`, `duplicate node id "${r}"`), i.add(r);
-  const a = le(n.position, `${s}.position`), l = { id: r, position: a };
-  return typeof n.entity == "string" && (l.entity = n.entity), typeof n.label == "string" && (l.label = n.label), typeof n.color == "string" && (l.color = n.color), typeof n.size == "number" && (l.size = n.size), typeof n.show_label == "boolean" && (l.show_label = n.show_label), typeof n.show_value == "boolean" && (l.show_value = n.show_value), n.opacity !== void 0 && (l.opacity = ce(n.opacity, `${s}.opacity`)), n.visible !== void 0 && (typeof n.visible != "boolean" && v(`${s}.visible`, "must be a boolean"), l.visible = n.visible), l;
+  const a = ce(n.position, `${s}.position`), l = { id: r, position: a };
+  return typeof n.entity == "string" && (l.entity = n.entity), typeof n.label == "string" && (l.label = n.label), typeof n.color == "string" && (l.color = n.color), typeof n.size == "number" && (l.size = n.size), typeof n.show_label == "boolean" && (l.show_label = n.show_label), typeof n.show_value == "boolean" && (l.show_value = n.show_value), n.opacity !== void 0 && (l.opacity = de(n.opacity, `${s}.opacity`)), n.visible !== void 0 && (typeof n.visible != "boolean" && v(`${s}.visible`, "must be a boolean"), l.visible = n.visible), l;
 }
 function Qi(e, t, i, s) {
   const n = `flows[${t}]`;
@@ -787,7 +787,7 @@ function Qi(e, t, i, s) {
   const p = o.waypoints;
   let u = [];
   p !== void 0 && (Array.isArray(p) || v(`${n}.waypoints`, "must be an array (may be empty or omitted)"), u = p.map(
-    (f, y) => le(f, `${n}.waypoints[${y}]`)
+    (f, y) => ce(f, `${n}.waypoints[${y}]`)
   ));
   const h = {
     id: a,
@@ -800,7 +800,7 @@ function Qi(e, t, i, s) {
     const f = o.speed_multiplier;
     (f < 0.1 || f > 5) && v(`${n}.speed_multiplier`, "must be between 0.1 and 5.0"), h.speed_multiplier = f;
   }
-  return o.opacity !== void 0 && (h.opacity = ce(o.opacity, `${n}.opacity`)), o.visible !== void 0 && (typeof o.visible != "boolean" && v(`${n}.visible`, "must be a boolean"), h.visible = o.visible), o.line_style !== void 0 && (Kt.includes(o.line_style) || v(`${n}.line_style`, `must be one of ${Kt.join(", ")}`), h.line_style = o.line_style), o.speed_curve_override !== void 0 && (h.speed_curve_override = ts(
+  return o.opacity !== void 0 && (h.opacity = de(o.opacity, `${n}.opacity`)), o.visible !== void 0 && (typeof o.visible != "boolean" && v(`${n}.visible`, "must be a boolean"), h.visible = o.visible), o.line_style !== void 0 && (Kt.includes(o.line_style) || v(`${n}.line_style`, `must be one of ${Kt.join(", ")}`), h.line_style = o.line_style), o.speed_curve_override !== void 0 && (h.speed_curve_override = ts(
     o.speed_curve_override,
     `${n}.speed_curve_override`
   )), o.animation !== void 0 && (h.animation = ss(o.animation, `${n}.animation`)), o.value_gradient !== void 0 && (h.value_gradient = ns(o.value_gradient, `${n}.value_gradient`)), h;
@@ -856,14 +856,14 @@ function es(e) {
   }
   return t.burst_sustain_ms !== void 0 && (i.burst_sustain_ms = st(t.burst_sustain_ms, "defaults.burst_sustain_ms")), t.burst_max_particles !== void 0 && (i.burst_max_particles = st(t.burst_max_particles, "defaults.burst_max_particles")), t.dot_radius !== void 0 && (i.dot_radius = st(t.dot_radius, "defaults.dot_radius")), t.line_width !== void 0 && (i.line_width = st(t.line_width, "defaults.line_width")), i;
 }
-function ce(e, t) {
+function de(e, t) {
   return (typeof e != "number" || !Number.isFinite(e) || e < 0 || e > 1) && v(t, "must be a number between 0 and 1"), e;
 }
 function is(e) {
   (!e || typeof e != "object" || Array.isArray(e)) && v("opacity", "must be an object");
   const t = e, i = {};
   for (const s of ["background", "darken", "nodes", "flows", "dots", "glow", "labels", "values", "overlays"])
-    t[s] !== void 0 && (i[s] = ce(t[s], `opacity.${s}`));
+    t[s] !== void 0 && (i[s] = de(t[s], `opacity.${s}`));
   return i;
 }
 function ss(e, t) {
@@ -912,7 +912,7 @@ function ss(e, t) {
   const y = n("wave_amplitude");
   return y !== void 0 && (s.wave_amplitude = y), s;
 }
-function Ae(e, t) {
+function Me(e, t) {
   return (typeof e != "string" || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(e)) && v(t, 'must be a CSS hex colour string, e.g. "#FF4500" or "#f00"'), e;
 }
 function ns(e, t) {
@@ -923,8 +923,8 @@ function ns(e, t) {
     entity: i.entity,
     low_value: i.low_value,
     high_value: i.high_value,
-    low_color: Ae(i.low_color, `${t}.low_color`),
-    high_color: Ae(i.high_color, `${t}.high_color`)
+    low_color: Me(i.low_color, `${t}.low_color`),
+    high_color: Me(i.high_color, `${t}.high_color`)
   };
   return i.mode !== void 0 && (["flow", "line", "both"].includes(i.mode) || v(`${t}.mode`, "must be one of: flow, line, both"), s.mode = i.mode), s;
 }
@@ -952,17 +952,17 @@ function as(e) {
   return i;
 }
 function kt(e) {
-  if (!e || typeof e != "object") throw new ae("config must be an object");
+  if (!e || typeof e != "object") throw new le("config must be an object");
   const t = e;
   t.type !== "custom:flowme-card" && v("type", `must equal "custom:flowme-card" (got "${String(t.type)}")`), Ft.includes(t.domain) || v("domain", `must be one of ${Ft.join(", ")}`);
   const i = t.background;
   i !== void 0 && (i === null || typeof i != "object") && v("background", "must be an object when provided");
-  const s = i ?? {}, o = { default: s.default === void 0 || s.default === "" ? "" : Se(s.default, "background.default") };
+  const s = i ?? {}, o = { default: s.default === void 0 || s.default === "" ? "" : Ae(s.default, "background.default") };
   if (s.weather_entity !== void 0 && (typeof s.weather_entity != "string" && v("background.weather_entity", "must be a string entity id"), o.weather_entity = s.weather_entity), s.weather_states !== void 0) {
     (!s.weather_states || typeof s.weather_states != "object") && v("background.weather_states", "must be an object mapping state strings to image URLs");
     const h = Object.entries(s.weather_states), f = {};
     for (const [y, g] of h)
-      f[y] = Se(g, `background.weather_states.${y}`);
+      f[y] = Ae(g, `background.weather_states.${y}`);
     o.weather_states = f;
   }
   s.sun_entity !== void 0 && (typeof s.sun_entity != "string" && v("background.sun_entity", "must be a string entity id (e.g. sun.sun)"), o.sun_entity = s.sun_entity), s.transition_duration !== void 0 && (typeof s.transition_duration != "number" && v("background.transition_duration", "must be a number (milliseconds)"), o.transition_duration = s.transition_duration);
@@ -1000,7 +1000,7 @@ function ls(e, t, i) {
   );
   const l = n.id;
   (typeof l != "string" || !l.length) && v(`${s}.id`, "must be a non-empty string"), i.has(l) && v(`${s}.id`, `duplicate overlay id "${l}"`), i.add(l);
-  const d = le(n.position, `${s}.position`);
+  const d = ce(n.position, `${s}.position`);
   if (a) {
     const f = `type: ${o} was removed in v1.0.9. Replace with type: custom and a card: block. See documentation.`;
     console.warn(`[flowme] ${s}: ${f}`);
@@ -1048,10 +1048,10 @@ function ls(e, t, i) {
   }
   return h;
 }
-function de(e, t, i) {
+function pe(e, t, i) {
   return e < t ? t : e > i ? i : e;
 }
-function Me(e, t, i) {
+function Ce(e, t, i) {
   return e + (t - e) * i;
 }
 function Nt(e, t) {
@@ -1070,7 +1070,7 @@ function di(e) {
 function cs(e, t) {
   if (e.length === 0) return { x: 0, y: 0 };
   if (e.length === 1) return { ...e[0] };
-  const i = di(e), s = de(t, 0, 1) * i;
+  const i = di(e), s = pe(t, 0, 1) * i;
   let n = 0;
   for (let o = 1; o < e.length; o++) {
     const r = e[o - 1], a = e[o], l = a.x - r.x, d = a.y - r.y, c = Math.sqrt(l * l + d * d);
@@ -1082,7 +1082,7 @@ function cs(e, t) {
   }
   return { ...e[e.length - 1] };
 }
-function Ce(e, t, i) {
+function Qt(e, t, i) {
   if (e.length === 0) return "";
   if (e.length === 1) {
     const a = Nt(e[0], t);
@@ -1142,7 +1142,7 @@ function B(e, t) {
   const l = Math.max(a, i), d = Math.log10(l / s), c = 1 / (1 + Math.exp(-r * d));
   return n - c * (n - o);
 }
-function pe(e, t) {
+function ue(e, t) {
   const i = e.speed_curve_override ?? {}, s = i.threshold ?? e.threshold ?? t.threshold, n = i.p50 ?? t.p50, o = i.peak ?? t.peak, r = i.max_duration ?? X, a = i.min_duration ?? Z, l = i.steepness ?? Q;
   return { threshold: s, p50: n, peak: o, max_duration: r, min_duration: a, steepness: l };
 }
@@ -1230,7 +1230,7 @@ function ui(e, t) {
   const i = t.high_value - t.low_value, s = i === 0 ? 0 : Math.max(0, Math.min(1, (e - t.low_value) / i)), [n, o, r] = Fe(t.low_color), [a, l, d] = Fe(t.high_color), [c, p, u] = Ne(n, o, r), [h, f, y] = Ne(a, l, d);
   let g = h - c;
   g > 180 && (g -= 360), g < -180 && (g += 360);
-  const m = (c + g * s + 360) % 360, x = Me(p, f, s), _ = Me(u, y, s);
+  const m = (c + g * s + 360) % 360, x = Ce(p, f, s), _ = Ce(u, y, s);
   return us(m, x, _);
 }
 const hs = {
@@ -1316,7 +1316,7 @@ const hs = {
   },
   particle_count_curve(e) {
     const t = Math.abs(e);
-    return Math.round(de(1 + Math.log10(t + 1) * 4, 1, 20));
+    return Math.round(pe(1 + Math.log10(t + 1) * 4, 1, 20));
   },
   describe(e) {
     const t = Math.abs(e);
@@ -1344,7 +1344,7 @@ const hs = {
   },
   wave_amplitude_curve(e) {
     const t = Math.abs(e);
-    return de(2 + t / 100, 2, 10);
+    return pe(2 + t / 100, 2, 10);
   },
   describe(e) {
     return `${Math.round(e)} CFM`;
@@ -1449,7 +1449,7 @@ function _s() {
   }
 }
 const Ht = _s(), ks = 2e3, jt = 3, Ss = 5, Wt = 2, As = 14, Ms = 0.9, Cs = 5e3, ut = 20, Ps = 0.2, Vt = 0.3;
-class Qt {
+class te {
   constructor() {
     this.container = null, this.svg = null, this.config = null, this.resizeObserver = null, this.flowNodes = /* @__PURE__ */ new Map(), this.flowsById = /* @__PURE__ */ new Map(), this.latestValues = /* @__PURE__ */ new Map(), this.applyUpdate = pi(() => this.flushUpdates(), 200), this.burstEnteredAt = /* @__PURE__ */ new Map(), this.burstActive = /* @__PURE__ */ new Set(), this.currentDurMs = /* @__PURE__ */ new Map(), this.targetDurMs = /* @__PURE__ */ new Map(), this.speedTransitionStart = /* @__PURE__ */ new Map(), this.lastDirection = /* @__PURE__ */ new Map(), this.dirChanging = /* @__PURE__ */ new Map(), this.rafHandle = null, this.lastFrameTime = 0, this.adaptiveCount = /* @__PURE__ */ new Map(), this.lastAdaptiveChange = /* @__PURE__ */ new Map(), this.particleOffsets = /* @__PURE__ */ new Map(), this.gradientColors = /* @__PURE__ */ new Map(), this.randomOffsets = /* @__PURE__ */ new Map(), this.randomOffsetsLastUpdate = /* @__PURE__ */ new Map(), this.lateralPhase = /* @__PURE__ */ new Map(), this.frameTimeSamples = [], this.lastFrameForAdaptive = 0;
   }
@@ -1505,7 +1505,7 @@ class Qt {
       const o = s.get(n.from_node), r = s.get(n.to_node);
       if (!o || !r) continue;
       const a = [o.position, ...n.waypoints, r.position], l = `flowme-path-${n.id}`, d = document.createElementNS(A, "path");
-      d.setAttribute("id", l), d.setAttribute("d", Ce(a, t, n.line_style ?? "corner")), d.setAttribute("fill", "none"), i.appendChild(d);
+      d.setAttribute("id", l), d.setAttribute("d", Qt(a, t, n.line_style ?? "corner")), d.setAttribute("fill", "none"), i.appendChild(d);
       const c = document.createElementNS(A, "g");
       c.setAttribute("data-flow-id", n.id), n.opacity !== void 0 && c.setAttribute("opacity", String(n.opacity)), n.visible === !1 && (c.style.display = "none");
       const p = this.config?.defaults?.line_width ?? Wt, u = document.createElementNS(A, "use");
@@ -1532,7 +1532,7 @@ class Qt {
       const o = i.get(s.from_node), r = i.get(s.to_node);
       if (!o || !r) continue;
       const a = [o.position, ...s.waypoints, r.position];
-      n.path.setAttribute("d", Ce(a, t, s.line_style ?? "corner")), n.style === "pulse" && this.applyFlow(s.id, this.latestValues.get(s.id) ?? 0);
+      n.path.setAttribute("d", Qt(a, t, s.line_style ?? "corner")), n.style === "pulse" && this.applyFlow(s.id, this.latestValues.get(s.id) ?? 0);
     }
   }
   flushUpdates() {
@@ -1544,7 +1544,7 @@ class Qt {
     if (!s || !n) return;
     const o = s.animation ?? {}, r = o.animation_style ?? "dots";
     n.style !== r && (this.teardownStyle(n), n.style = r);
-    const a = this.profileFor(s), l = pe(s, a), d = Ht ? 0 : l.threshold, c = Math.abs(i), u = o.shimmer === !0 && c < d && c > 0;
+    const a = this.profileFor(s), l = ue(s, a), d = Ht ? 0 : l.threshold, c = Math.abs(i), u = o.shimmer === !0 && c < d && c > 0;
     if (!(Ht || c >= d || u)) {
       this.setGroupOpacity(n, 0);
       return;
@@ -1563,9 +1563,9 @@ class Qt {
       Dt !== void 0 && Dt !== _ && !mi && this.dirChanging.set(t, { startMs: performance.now(), oldDir: Dt, newDir: _ });
       const xt = this.dirChanging.get(t);
       if (xt) {
-        const ue = performance.now() - xt.startMs;
-        if (ue < 300) {
-          const Rt = ue / 300;
+        const he = performance.now() - xt.startMs;
+        if (he < 300) {
+          const Rt = he / 300;
           Rt < 0.5 ? (k = (u ? Vt : 1) * (1 - Rt * 2), S = xt.oldDir) : (k = (u ? Vt : 1) * ((Rt - 0.5) * 2), S = xt.newDir);
         } else
           this.dirChanging.delete(t), S = _;
@@ -2310,12 +2310,12 @@ function drawWave(ctx, points, color, lineWidth, amplitude, progress, direction)
 }
 
 registerPaint('flowme-painter', FlowmePainter);
-`, Ie = "flowme-keyframes", te = "flowme-cycle", Ns = 5, Es = 2;
+`, Ie = "flowme-keyframes", ee = "flowme-cycle", Ns = 5, Es = 2;
 let K = null, ze = !1;
 function Is() {
   if (document.getElementById(Ie)) return;
   const e = document.createElement("style");
-  e.id = Ie, e.textContent = `@keyframes ${te} { from { --flowme-progress: 0; } to { --flowme-progress: 1; } }`, document.head.appendChild(e);
+  e.id = Ie, e.textContent = `@keyframes ${ee} { from { --flowme-progress: 0; } to { --flowme-progress: 1; } }`, document.head.appendChild(e);
 }
 function zs() {
   if (ze) return;
@@ -2357,7 +2357,7 @@ class Ts {
     s.style.position = "absolute", s.style.inset = "0", s.style.pointerEvents = "none", t.appendChild(s), this.wrapper = s;
     for (const n of i.flows) {
       const o = document.createElement("div");
-      o.dataset.flowId = n.id, o.style.position = "absolute", o.style.inset = "0", o.style.pointerEvents = "none", o.style.background = "paint(flowme-painter)", o.style.animation = `${te} 2s linear infinite`, o.style.opacity = "0", s.appendChild(o), this.flowDivs.set(n.id, { el: o });
+      o.dataset.flowId = n.id, o.style.position = "absolute", o.style.inset = "0", o.style.pointerEvents = "none", o.style.background = "paint(flowme-painter)", o.style.animation = `${ee} 2s linear infinite`, o.style.opacity = "0", s.appendChild(o), this.flowDivs.set(n.id, { el: o });
     }
     this.rebuildPaths(), this.resizeObserver = new ResizeObserver(() => this.rebuildPaths()), this.resizeObserver.observe(t);
   }
@@ -2392,7 +2392,7 @@ class Ts {
   applyFlow(t, i) {
     const s = this.flowsById.get(t), n = this.flowDivs.get(t);
     if (!s || !n) return;
-    const o = this.profileFor(s), r = pe(s, o), a = Math.abs(i);
+    const o = this.profileFor(s), r = ue(s, o), a = Math.abs(i);
     if (!(a >= r.threshold)) {
       n.el.style.opacity = "0";
       return;
@@ -2402,7 +2402,7 @@ class Ts {
       1,
       Math.round(o.particle_count_curve ? o.particle_count_curve(i) : 3)
     ), y = o.wave_amplitude_curve ? o.wave_amplitude_curve(i) : 4, g = n.el.style;
-    g.setProperty("--flowme-shape", o.shape), g.setProperty("--flowme-color", h), g.setProperty("--flowme-glow", o.glow ? "1" : "0"), g.setProperty("--flowme-count", String(f)), g.setProperty("--flowme-radius", String(Ns)), g.setProperty("--flowme-line", String(Es)), g.setProperty("--flowme-amp", String(y)), g.setProperty("--flowme-direction", String(p)), g.animation = `${te} ${(c / 1e3).toFixed(3)}s linear infinite`;
+    g.setProperty("--flowme-shape", o.shape), g.setProperty("--flowme-color", h), g.setProperty("--flowme-glow", o.glow ? "1" : "0"), g.setProperty("--flowme-count", String(f)), g.setProperty("--flowme-radius", String(Ns)), g.setProperty("--flowme-line", String(Es)), g.setProperty("--flowme-amp", String(y)), g.setProperty("--flowme-direction", String(p)), g.animation = `${ee} ${(c / 1e3).toFixed(3)}s linear infinite`;
   }
   profileFor(t) {
     return G(t.domain ?? this.config?.domain);
@@ -2419,7 +2419,7 @@ function Ds() {
     i,
     "| paintWorklet in CSS?",
     typeof CSS < "u" && "paintWorklet" in CSS
-  ), t === "houdini" ? i ? new Ts() : (P("?flowme_renderer=houdini requested but unsupported — falling back to SVG"), new Qt()) : new Qt();
+  ), t === "houdini" ? i ? new Ts() : (P("?flowme_renderer=houdini requested but unsupported — falling back to SVG"), new te()) : new te();
 }
 function Rs() {
   try {
@@ -3059,7 +3059,7 @@ tt([
 L = tt([
   zt("flowme-editor-toolbar")
 ], L);
-const gi = 8, Ye = 1, ee = 255;
+const gi = 8, Ye = 1, ie = 255;
 function Fn(e, t = gi) {
   const i = Math.max(1, Math.floor(t)), s = Math.max(1, Math.ceil(e.width / i)), n = Math.max(1, Math.ceil(e.height / i)), o = new Uint16Array(s * n);
   for (let r = 0; r < n; r++) {
@@ -3074,7 +3074,7 @@ function Fn(e, t = gi) {
           m > u && (u = m);
         }
       }
-      const h = ee - u;
+      const h = ie - u;
       o[r * s + d] = h < Ye ? Ye : h;
     }
   }
@@ -3084,7 +3084,7 @@ function Nn(e, t, i) {
   return i * e.cols + t;
 }
 function En(e, t, i) {
-  return t < 0 || i < 0 || t >= e.cols || i >= e.rows ? ee : e.data[Nn(e, t, i)] ?? ee;
+  return t < 0 || i < 0 || t >= e.cols || i >= e.rows ? ie : e.data[Nn(e, t, i)] ?? ie;
 }
 const In = 50;
 class zn {
@@ -3430,17 +3430,17 @@ let M = class extends V {
       r.size > 0 && (this.selectedNodeIds = r, this.selectedNodeId = r.size === 1 ? Array.from(r)[0] : null, this.selectedFlowId = null, this.selectedOverlayId = null, this.rubberBandJustSelected = !0, r.size === 2 ? this.statusMessage = `${r.size} nodes selected — click "Suggest path" to auto-route.` : this.statusMessage = `${r.size} node(s) selected via rubber-band.`);
     }, this.onSegmentClick = (e) => {
       if (e.stopPropagation(), !this.config) return;
-      const t = e.currentTarget, i = t.dataset.flowId, s = Number(t.dataset.segmentIndex);
-      if (!(!i || !Number.isFinite(s))) {
-        if (e.shiftKey) {
-          const n = this.pointerToPercent(e);
-          if (!n) return;
-          const o = this.config, r = De(o, i, s, n);
-          this.pushPatch(o, r, `add waypoint to ${i}`);
-          return;
-        }
-        this.selectedFlowId = i, this.selectedNodeId = null, this.selectedOverlayId = null;
+      const t = e.currentTarget, i = t.dataset.flowId;
+      if (!i) return;
+      const s = t.dataset.segmentIndex, n = s !== void 0 ? Number(s) : NaN;
+      if (e.shiftKey && Number.isFinite(n)) {
+        const o = this.pointerToPercent(e);
+        if (!o) return;
+        const r = this.config, a = De(r, i, n, o);
+        this.pushPatch(r, a, `add waypoint to ${i}`);
+        return;
       }
+      this.selectedFlowId = i, this.selectedNodeId = null, this.selectedOverlayId = null;
     }, this.onNodeClick = (e) => {
       if (e.stopPropagation(), !this.config) return;
       const i = e.currentTarget.dataset.nodeId;
@@ -3601,7 +3601,7 @@ let M = class extends V {
   }
   setConfig(e) {
     try {
-      this.config = kt(e), this._ownCommit || this.undoStack.clear(), this.errorMessage = "";
+      this.config = kt(e), this._ownCommit ? this._ownCommit = !1 : this.undoStack.clear(), this.errorMessage = "";
     } catch (t) {
       this.errorMessage = t instanceof Error ? t.message : String(t);
     }
@@ -3668,37 +3668,39 @@ let M = class extends V {
   // -- rendering helpers --
   renderFlowConnector(e) {
     if (!this.config) return w;
-    const t = new Map(this.config.nodes.map((a) => [a.id, a])), i = t.get(e.from_node), s = t.get(e.to_node);
+    const t = new Map(this.config.nodes.map((c) => [c.id, c])), i = t.get(e.from_node), s = t.get(e.to_node);
     if (!i || !s) return w;
-    const n = [i.position, ...e.waypoints, s.position], o = e.id === this.selectedFlowId, r = [];
-    for (let a = 0; a < n.length - 1; a++) {
-      const l = n[a], d = n[a + 1];
-      !l || !d || r.push(b`
-        <!-- Invisible wide hit-area (20px) so the line is easy to click -->
+    const n = [i.position, ...e.waypoints, s.position], o = e.id === this.selectedFlowId, a = Qt(n, { width: 100, height: 100 }, e.line_style ?? "corner");
+    if (!a) return w;
+    const l = e.color ?? "rgba(255,255,255,0.8)", d = [];
+    for (let c = 0; c < n.length - 1; c++) {
+      const p = n[c], u = n[c + 1];
+      !p || !u || d.push(b`
         <line
           class="segment-hit"
-          x1=${l.x}
-          y1=${l.y}
-          x2=${d.x}
-          y2=${d.y}
+          x1=${p.x}
+          y1=${p.y}
+          x2=${u.x}
+          y2=${u.y}
           data-flow-id=${e.id}
-          data-segment-index=${a}
-          @click=${this.onSegmentClick}
-        />
-        <!-- Visible line with selected highlight -->
-        <line
-          class=${`segment ${o ? "selected" : ""}`}
-          x1=${l.x}
-          y1=${l.y}
-          x2=${d.x}
-          y2=${d.y}
-          data-flow-id=${e.id}
-          data-segment-index=${a}
+          data-segment-index=${c}
           @click=${this.onSegmentClick}
         />
       `);
     }
-    return b`<g>${r}</g>`;
+    return b`
+      <g>
+        ${d}
+        <!-- Visible path — correct line style matching the animated card -->
+        <path
+          class=${`flow-path ${o ? "selected" : ""}`}
+          d=${a}
+          data-flow-id=${e.id}
+          style=${`stroke: ${l};`}
+          @click=${this.onSegmentClick}
+        />
+      </g>
+    `;
   }
   renderWaypointHandles(e) {
     return e.waypoints.map(
@@ -3973,7 +3975,7 @@ let M = class extends V {
   }
   renderSpeedCurveSection(e) {
     if (!this.config) return b``;
-    const t = G(e.domain ?? this.config.domain), i = pe(e, t), s = e.speed_curve_override ?? {}, n = (a, l, d) => b`
+    const t = G(e.domain ?? this.config.domain), i = ue(e, t), s = e.speed_curve_override ?? {}, n = (a, l, d) => b`
       <div class="speed-curve-row">
         <label class="speed-curve-label">${l}${d ? b` <small>(${d})</small>` : w}</label>
         <input
@@ -5298,7 +5300,7 @@ let M = class extends V {
       bubbles: !0,
       composed: !0
     });
-    this.dispatchEvent(t), this._ownCommit = !1;
+    this.dispatchEvent(t);
   }
   refreshUndoState() {
     this.canUndo = this.undoStack.canUndo(), this.canRedo = this.undoStack.canRedo(), this.undoLabel = this.undoStack.topUndoDescription() ?? "", this.redoLabel = this.undoStack.topRedoDescription() ?? "";
@@ -5372,26 +5374,23 @@ M.styles = Et`
       height: 100%;
       overflow: visible;
     }
-    .connectors .segment {
-      stroke: rgba(255, 255, 255, 0.5);
+    .connectors .flow-path {
       stroke-width: 2;
-      stroke-dasharray: 4 4;
       vector-effect: non-scaling-stroke;
       pointer-events: visibleStroke;
       fill: none;
-      cursor: crosshair;
-      opacity: 0.5;
-      transition: opacity 0.15s;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity 0.15s, stroke-width 0.1s;
     }
-    .connectors .segment:hover {
+    .connectors .flow-path:hover {
       opacity: 1;
-      stroke: white;
+      stroke-width: 3;
     }
-    .connectors .segment.selected {
-      stroke: var(--primary-color, #03a9f4);
-      stroke-width: 2.5;
+    .connectors .flow-path.selected {
       opacity: 1;
-      filter: drop-shadow(0 0 3px var(--primary-color, #03a9f4));
+      stroke-width: 3;
+      filter: drop-shadow(0 0 4px currentColor);
     }
     .handle {
       position: absolute;
@@ -6431,7 +6430,7 @@ var to = Object.defineProperty, eo = Object.getOwnPropertyDescriptor, et = (e, t
     (r = e[o]) && (n = (s ? r(t, i, n) : r(n)) || n);
   return s && n && to(t, i, n), n;
 };
-const io = "1.0.14.4", ti = 5e3;
+const io = "1.0.14.5", ti = 5e3;
 console.info(
   `%c flowme %c v${io} `,
   "color: white; background: #4ADE80; font-weight: 700;",
@@ -6493,7 +6492,7 @@ let U = class extends V {
       const i = t.background.default;
       this.bgLayerA = i, this.bgLayerB = "", this.activeLayer = "A", this.lastAppliedBgUrl = i;
     } catch (t) {
-      const i = t instanceof ae ? t.message : String(t);
+      const i = t instanceof le ? t.message : String(t);
       this.config = void 0, this.errorMessage = i, this.teardownRenderer();
     }
   }
@@ -6515,7 +6514,7 @@ let U = class extends V {
       this.renderer.init(t, i).then(() => {
         this.hass && this.pushAllValuesToRenderer();
       }).catch((s) => {
-        P("renderer init failed — falling back to SVG renderer", s), this.teardownRenderer(), this.renderer = new Qt(), this.rendererReadyFor = i, this.renderer.init(t, i).then(() => {
+        P("renderer init failed — falling back to SVG renderer", s), this.teardownRenderer(), this.renderer = new te(), this.rendererReadyFor = i, this.renderer.init(t, i).then(() => {
           this.hass && this.pushAllValuesToRenderer();
         }).catch((n) => {
           console.error("[flowme] SVG renderer init also failed", n);
@@ -6946,9 +6945,9 @@ et([
 U = et([
   zt("flowme-card")
 ], U);
-const ie = window;
-ie.customCards = ie.customCards ?? [];
-ie.customCards.push({
+const se = window;
+se.customCards = se.customCards ?? [];
+se.customCards.push({
   type: "flowme-card",
   name: "flowme",
   description: "Animated flow visualisation over a custom background image",

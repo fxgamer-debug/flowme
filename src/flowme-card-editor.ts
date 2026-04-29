@@ -20,7 +20,7 @@ import type {
 } from './types.js';
 import { LINE_STYLES, ANIMATION_STYLES, PARTICLE_SHAPES, PARTICLE_SPACINGS, FLOW_DIRECTIONS } from './types.js';
 import { validateConfig } from './validate-config.js';
-import { interpolateGradientColor, parseAspectRatio, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
+import { interpolateGradientColor, parseAspectRatio, polylineToSvgPathStyled, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
 import { getProfile, resolveFlowColor } from './flow-profiles/index.js';
 import { UndoStack } from './editor/undo-stack.js';
 import {
@@ -185,10 +185,12 @@ export class FlowmeCardEditor extends LitElement {
     try {
       this.config = validateConfig(config);
       // Only clear undo when HA pushes a genuinely external config change.
-      // When we dispatch config-changed ourselves (_ownCommit), HA echoes
-      // setConfig back to us — clearing the stack then would wipe every undo
-      // entry the moment the user makes any edit.
-      if (!this._ownCommit) {
+      // When we dispatch config-changed ourselves, _ownCommit is true.
+      // Reset the flag here (not in commitToHa) so it stays true whether
+      // HA calls setConfig synchronously or asynchronously (microtask / rAF).
+      if (this._ownCommit) {
+        this._ownCommit = false;
+      } else {
         this.undoStack.clear();
       }
       this.errorMessage = '';
@@ -278,13 +280,23 @@ export class FlowmeCardEditor extends LitElement {
     if (!from || !to) return nothing;
     const points: NodePosition[] = [from.position, ...flow.waypoints, to.position];
     const isSelected = flow.id === this.selectedFlowId;
-    const segments = [] as TemplateResult[];
+
+    // Build the same SVG path the renderer uses so the editor line matches
+    // the animated card line exactly. The connectors SVG has viewBox 0 0 100 100
+    // so we use size { width: 100, height: 100 } to keep percent coords as-is.
+    const CONNECTOR_SIZE = { width: 100, height: 100 };
+    const d = polylineToSvgPathStyled(points, CONNECTOR_SIZE, flow.line_style ?? 'corner');
+    if (!d) return nothing;
+
+    const flowColor = flow.color ?? 'rgba(255,255,255,0.8)';
+
+    // Invisible wide hit-area segments (keep per-segment for shift-click waypoint insertion)
+    const hitSegments = [] as TemplateResult[];
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i];
       const b = points[i + 1];
       if (!a || !b) continue;
-      segments.push(html`
-        <!-- Invisible wide hit-area (20px) so the line is easy to click -->
+      hitSegments.push(html`
         <line
           class="segment-hit"
           x1=${a.x}
@@ -295,20 +307,22 @@ export class FlowmeCardEditor extends LitElement {
           data-segment-index=${i}
           @click=${this.onSegmentClick}
         />
-        <!-- Visible line with selected highlight -->
-        <line
-          class=${`segment ${isSelected ? 'selected' : ''}`}
-          x1=${a.x}
-          y1=${a.y}
-          x2=${b.x}
-          y2=${b.y}
-          data-flow-id=${flow.id}
-          data-segment-index=${i}
-          @click=${this.onSegmentClick}
-        />
       `);
     }
-    return html`<g>${segments}</g>`;
+
+    return html`
+      <g>
+        ${hitSegments}
+        <!-- Visible path — correct line style matching the animated card -->
+        <path
+          class=${`flow-path ${isSelected ? 'selected' : ''}`}
+          d=${d}
+          data-flow-id=${flow.id}
+          style=${`stroke: ${flowColor};`}
+          @click=${this.onSegmentClick}
+        />
+      </g>
+    `;
   }
 
   private renderWaypointHandles(flow: FlowConfig): TemplateResult[] {
@@ -2327,13 +2341,15 @@ export class FlowmeCardEditor extends LitElement {
   private onSegmentClick = (event: MouseEvent): void => {
     event.stopPropagation();
     if (!this.config) return;
-    const target = event.currentTarget as SVGLineElement;
+    const target = event.currentTarget as SVGElement;
     const flowId = target.dataset['flowId'];
-    const segmentIndex = Number(target.dataset['segmentIndex']);
-    if (!flowId || !Number.isFinite(segmentIndex)) return;
+    if (!flowId) return;
 
-    // shift-click on a segment = insert waypoint at click point, else just select flow
-    if (event.shiftKey) {
+    const segmentIndexRaw = target.dataset['segmentIndex'];
+    const segmentIndex = segmentIndexRaw !== undefined ? Number(segmentIndexRaw) : NaN;
+
+    // shift-click on a hit-area segment = insert waypoint at click point
+    if (event.shiftKey && Number.isFinite(segmentIndex)) {
       const pos = this.pointerToPercent(event);
       if (!pos) return;
       const prev = this.config;
@@ -2341,6 +2357,7 @@ export class FlowmeCardEditor extends LitElement {
       this.pushPatch(prev, next, `add waypoint to ${flowId}`);
       return;
     }
+    // Plain click (on either visible path or hit segment): select the flow
     this.selectedFlowId = flowId;
     this.selectedNodeId = null;
     this.selectedOverlayId = null;
@@ -2817,6 +2834,10 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   private commitToHa(config: FlowmeConfig): void {
+    // Set _ownCommit BEFORE dispatch. If HA calls setConfig synchronously
+    // inside the event handler the flag is already true. If HA calls it
+    // asynchronously (microtask / setTimeout) the flag remains true until
+    // setConfig consumes and clears it — never reset it here.
     this._ownCommit = true;
     const event = new CustomEvent('config-changed', {
       detail: { config },
@@ -2824,7 +2845,7 @@ export class FlowmeCardEditor extends LitElement {
       composed: true,
     });
     this.dispatchEvent(event);
-    this._ownCommit = false;
+    // Do NOT reset _ownCommit here — setConfig() resets it after it reads it.
   }
 
   private refreshUndoState(): void {
@@ -2885,26 +2906,23 @@ export class FlowmeCardEditor extends LitElement {
       height: 100%;
       overflow: visible;
     }
-    .connectors .segment {
-      stroke: rgba(255, 255, 255, 0.5);
+    .connectors .flow-path {
       stroke-width: 2;
-      stroke-dasharray: 4 4;
       vector-effect: non-scaling-stroke;
       pointer-events: visibleStroke;
       fill: none;
-      cursor: crosshair;
-      opacity: 0.5;
-      transition: opacity 0.15s;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity 0.15s, stroke-width 0.1s;
     }
-    .connectors .segment:hover {
+    .connectors .flow-path:hover {
       opacity: 1;
-      stroke: white;
+      stroke-width: 3;
     }
-    .connectors .segment.selected {
-      stroke: var(--primary-color, #03a9f4);
-      stroke-width: 2.5;
+    .connectors .flow-path.selected {
       opacity: 1;
-      filter: drop-shadow(0 0 3px var(--primary-color, #03a9f4));
+      stroke-width: 3;
+      filter: drop-shadow(0 0 4px currentColor);
     }
     .handle {
       position: absolute;

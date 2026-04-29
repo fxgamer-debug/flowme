@@ -2,6 +2,28 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.14.5] — 2026-04-29
+
+### Fixed
+
+- **BUG-1 — Flow lines not visible in editor canvas**: The editor was rendering flow
+  connectors as individual `<line>` elements per waypoint segment. These were hard to see
+  and did not match the actual animated path shape. Replaced with proper SVG `<path>`
+  elements using `polylineToSvgPathStyled` (the same function used by the renderer), so the
+  editor line now exactly matches the card animation for all four line styles (corner,
+  diagonal, curve, smooth). Invisible wide `<line>` hit-areas are retained for shift-click
+  waypoint insertion. Visible paths use the flow's configured colour at 0.55 opacity, rising
+  to full opacity on hover with a drop-shadow glow when selected.
+
+- **BUG-2 — Undo/redo stack wiped after every operation**: The `_ownCommit` flag was reset
+  to `false` synchronously inside `commitToHa()`, immediately after `dispatchEvent()`. In
+  Home Assistant's editor framework, `setConfig()` is called back **asynchronously** (after
+  `dispatchEvent` returns), so the flag was already `false` when `setConfig` ran, causing the
+  undo stack to be cleared on every edit. Fixed by moving `_ownCommit = false` into
+  `setConfig()` itself, where it is consumed and cleared. The flag remains `true` from the
+  moment `commitToHa` sets it until `setConfig` actually processes the echoed config — whether
+  that call arrives synchronously or asynchronously.
+
 ## [1.0.14.4] — 2026-04-29
 
 ### Changed
