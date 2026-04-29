@@ -215,7 +215,8 @@ export class FlowmeCardEditor extends LitElement {
     }
 
     const aspect = parseAspectRatio(this.config.aspect_ratio) ?? 16 / 10;
-    const paddingTop = `${(1 / aspect) * 100}%`;
+    const paddingPct = `${((1 / aspect) * 100).toFixed(4)}%`;
+    this.style.setProperty('--canvas-aspect-padding', paddingPct);
     const bgUrl = this.config.background.default;
     const multiSelect = this.selectedNodeIds.size >= 2;
 
@@ -232,7 +233,7 @@ export class FlowmeCardEditor extends LitElement {
                   ? 'mode-add-overlay'
                   : ''
             }`}
-            style=${`padding-top: ${paddingTop};`}
+            style="padding-top: var(--canvas-aspect-padding, 62.5%);"
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
             @pointerdown=${this.onStagePointerDown}
@@ -835,7 +836,7 @@ export class FlowmeCardEditor extends LitElement {
     const previewColor = flow.color ?? '#4ADE80';
 
     return html`
-      <details class="anim-details">
+      <details class="anim-details" open>
         <summary>Animation</summary>
         <div class="anim-body">
 
@@ -1426,7 +1427,7 @@ export class FlowmeCardEditor extends LitElement {
     const animCfg: AnimationConfig = this.config.animation ?? {};
 
     return html`
-      <details class="panel anim-global-panel">
+      <details class="panel anim-global-panel" open>
         <summary>Animation (global)</summary>
         <div class="panel-body">
           <label>
@@ -1633,7 +1634,7 @@ export class FlowmeCardEditor extends LitElement {
     };
 
     return html`
-      <details class="panel opacity-panel">
+      <details class="panel opacity-panel" open>
         <summary>Opacity</summary>
         <div class="panel-body">
           <p class="hint-sub">
@@ -1790,7 +1791,7 @@ export class FlowmeCardEditor extends LitElement {
     };
 
     return html`
-      <details class="panel defaults-panel">
+      <details class="panel defaults-panel" open>
         <summary>Defaults</summary>
         <div class="panel-body">
           <p class="hint-sub">
@@ -2989,21 +2990,26 @@ export class FlowmeCardEditor extends LitElement {
 
   static override styles = css`
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
       font-family: var(--paper-font-body1_-_font-family, inherit);
     }
     /* ── Four-zone layout ──────────────────────────────────────────────── */
     .wrap {
       display: flex;
       flex-direction: column;
-      height: 100%;
+      flex: 1 1 0;
       min-height: 0;
       padding: 0;
       gap: 0;
+      overflow: hidden;
     }
     /* ZONE 1 — Canvas */
     .z-canvas {
       flex: 0 0 auto;
+      width: 100%;
     }
     /* ZONE 2 — Toolbar */
     .z-toolbar {

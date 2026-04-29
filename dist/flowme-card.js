@@ -3468,7 +3468,9 @@ let C = class extends q {
           ${this.errorMessage ? m`<pre class="error">${this.errorMessage}</pre>` : w}
         </div>
       `;
-    const t = `${1 / (_t(this.config.aspect_ratio) ?? 16 / 10) * 100}%`, i = this.config.background.default, s = this.selectedNodeIds.size >= 2;
+    const t = `${(1 / (_t(this.config.aspect_ratio) ?? 16 / 10) * 100).toFixed(4)}%`;
+    this.style.setProperty("--canvas-aspect-padding", t);
+    const i = this.config.background.default, s = this.selectedNodeIds.size >= 2;
     return m`
       <div class="wrap">
 
@@ -3476,7 +3478,7 @@ let C = class extends q {
         <div class="z-canvas">
           <div
             class=${`stage ${this.pending?.kind === "add-node" ? "mode-add-node" : this.pending?.kind === "add-overlay" ? "mode-add-overlay" : ""}`}
-            style=${`padding-top: ${t};`}
+            style="padding-top: var(--canvas-aspect-padding, 62.5%);"
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
             @pointerdown=${this.onStagePointerDown}
@@ -3962,7 +3964,7 @@ let C = class extends q {
       this.pushPatch(p, u, `update animation for ${e.id}`);
     }, o = !(/* @__PURE__ */ new Set(["dash", "pulse", "fluid", "none"])).has(i), r = i === "pulse", l = i === "trail", a = i === "dash", d = e.color ?? "#4ADE80";
     return m`
-      <details class="anim-details">
+      <details class="anim-details" open>
         <summary>Animation</summary>
         <div class="anim-body">
 
@@ -4491,7 +4493,7 @@ let C = class extends q {
     if (!this.config) return w;
     const e = this.config.animation ?? {};
     return m`
-      <details class="panel anim-global-panel">
+      <details class="panel anim-global-panel" open>
         <summary>Animation (global)</summary>
         <div class="panel-body">
           <label>
@@ -4650,7 +4652,7 @@ let C = class extends q {
       `;
     };
     return m`
-      <details class="panel opacity-panel">
+      <details class="panel opacity-panel" open>
         <summary>Opacity</summary>
         <div class="panel-body">
           <p class="hint-sub">
@@ -4779,7 +4781,7 @@ let C = class extends q {
       `;
     };
     return m`
-      <details class="panel defaults-panel">
+      <details class="panel defaults-panel" open>
         <summary>Defaults</summary>
         <div class="panel-body">
           <p class="hint-sub">
@@ -5314,21 +5316,26 @@ C.KNOWN_WEATHER_STATES = [
 ];
 C.styles = ie`
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
       font-family: var(--paper-font-body1_-_font-family, inherit);
     }
     /* ── Four-zone layout ──────────────────────────────────────────────── */
     .wrap {
       display: flex;
       flex-direction: column;
-      height: 100%;
+      flex: 1 1 0;
       min-height: 0;
       padding: 0;
       gap: 0;
+      overflow: hidden;
     }
     /* ZONE 1 — Canvas */
     .z-canvas {
       flex: 0 0 auto;
+      width: 100%;
     }
     /* ZONE 2 — Toolbar */
     .z-toolbar {
@@ -6590,7 +6597,7 @@ var Xn = Object.defineProperty, Zn = Object.getOwnPropertyDescriptor, Z = (e, t,
     (r = e[o]) && (n = (s ? r(t, i, n) : r(n)) || n);
   return s && n && Xn(t, i, n), n;
 };
-const Qn = "1.0.15", Ze = 5e3;
+const Qn = "1.0.15.1", Ze = 5e3;
 console.info(
   `%c flowme %c v${Qn} `,
   "color: white; background: #4ADE80; font-weight: 700;",

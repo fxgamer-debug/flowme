@@ -2,6 +2,62 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.15.1] — 2026-04-29
+
+### Investigation
+
+- **INVESTIGATE-1 — HA editor preview pane**: Investigated all available options to hide or
+  remove the redundant preview pane that HA renders beside the editor component.
+
+  - **Option A** (`static get noPreview()` / `static renderPreview()`): Neither property nor
+    method exists in HA's current `hui-element-editor` / `hui-typed-element-editor` /
+    `hui-card-element-editor` chain (verified against HA `dev` branch source). HA has no
+    documented API for suppressing the preview pane from the editor component side.
+
+  - **Option B** (return values from `getConfigElement()` or properties on the editor
+    element): `getConfigElement()` returns the editor element instance; no property or return
+    value on that element causes HA to hide the preview side. The split layout is determined
+    entirely by `hui-dialog-edit-card` CSS (`@media (min-width: 1000px)` shows both panes
+    side-by-side) with no hook for the editor element to influence it.
+
+  - **Option C** (CSS targeting HA shadow DOM): The preview pane (`.element-preview`) and
+    editor pane (`.element-editor`) are siblings inside `hui-dialog-edit-card`'s shadow DOM.
+    Our editor component is a child of `.element-editor` and cannot style sibling elements
+    via CSS — shadow DOM encapsulation prevents cross-boundary sibling selectors entirely.
+    Injecting a `<style>` element into the document head could work but is fragile, breaks on
+    HA updates, and is explicitly excluded by the investigation requirements.
+
+  **Result**: No clean solution exists. The preview pane is left as-is. The canvas inside the
+  editor remains the authoritative live preview; users can ignore the redundant HA preview.
+
+### Fixed
+
+- **BUG-1 — Canvas not responsive to window size or `aspect_ratio`**: The canvas stage used
+  a hardcoded inline `padding-top` value computed once at render time. Replaced with a CSS
+  custom property `--canvas-aspect-padding` set via `this.style.setProperty()` in `render()`
+  so it updates reactively whenever `aspect_ratio` changes. The stage CSS uses
+  `padding-top: var(--canvas-aspect-padding, 62.5%)` which scales with the percentage-width
+  container and reflows automatically when the editor panel is resized. Default fallback is
+  62.5% (16:10 ratio).
+
+- **BUG-2 — Zone 3 context panel collapsed to zero height**: The `:host` element used
+  `display: block` with no height, so the `.wrap` child's `height: 100%` resolved to zero.
+  Fixed by setting `:host { display: flex; flex-direction: column; height: 100%; overflow:
+  hidden }` and `.wrap { flex: 1 1 0; min-height: 0; overflow: hidden }`. Zone 3's existing
+  `flex: 1 1 0; min-height: 0; overflow-y: auto` then correctly fills and scrolls the
+  remaining vertical space.
+
+- **BUG-3 — State A panels (Animation, Opacity, Defaults) collapsed by default**: The
+  `<details>` elements for the global Animation, Opacity, and Defaults panels had no `open`
+  attribute, so they rendered collapsed and users had to manually expand each one. Fixed by
+  adding the `open` attribute to these three panels and to the flow Animation panel (State B)
+  so the most important settings are immediately visible.
+
+- **BUG-4 — State B flow inspector Animation section collapsed**: The flow animation
+  `<details class="anim-details">` panel also had no default `open` attribute. Fixed together
+  with BUG-3. State B/C/D rendering was confirmed working once BUG-2 flex layout was
+  resolved.
+
 ## [1.0.15] — 2026-04-29
 
 ### Changed
