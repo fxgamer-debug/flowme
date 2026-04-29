@@ -2,6 +2,21 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.14.6] — 2026-04-29
+
+### Fixed
+
+- **BUG — Flow lines absent in editor canvas (SVG namespace)**: All previous attempts to
+  render flow lines in the editor canvas rendered `<g>`, `<path>`, and `<line>` elements as
+  `HTMLUnknownElement` (HTML namespace) instead of proper `SVGPathElement` / `SVGLineElement`
+  (SVG namespace). This happened because `renderFlowConnector` returned `html\`<g>...</g>\``
+  fragments. Lit's `html` tag creates template fragments by setting `innerHTML` on a plain
+  `<template>` element — without an `<svg>` ancestor in the static template string, the HTML
+  parser creates all SVG element names in the HTML namespace, where they have no visual
+  representation. Fixed by switching `renderFlowConnector` to use Lit's `svg\`...\`` tagged
+  template literal (imported as `svg` from `'lit'`), which parses the fragment inside an SVG
+  context so every element is created in the correct SVG namespace. No other code was changed.
+
 ## [1.0.14.5] — 2026-04-29
 
 ### Fixed

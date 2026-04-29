@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
+import { LitElement, html, svg, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 
@@ -296,7 +296,7 @@ export class FlowmeCardEditor extends LitElement {
       const a = points[i];
       const b = points[i + 1];
       if (!a || !b) continue;
-      hitSegments.push(html`
+      hitSegments.push(svg`
         <line
           class="segment-hit"
           x1=${a.x}
@@ -310,10 +310,9 @@ export class FlowmeCardEditor extends LitElement {
       `);
     }
 
-    return html`
+    return svg`
       <g>
         ${hitSegments}
-        <!-- Visible path — correct line style matching the animated card -->
         <path
           class=${`flow-path ${isSelected ? 'selected' : ''}`}
           d=${d}
