@@ -72,8 +72,6 @@ import {
   patchValueGradient,
   clearValueGradient,
 } from './editor/commands.js';
-import './editor/toolbar.js';
-import type { ToolbarAction } from './editor/toolbar.js';
 import { suggestPath } from './pathfinding/index.js';
 import type { Point } from './pathfinding/types.js';
 
@@ -2030,61 +2028,6 @@ export class FlowmeCardEditor extends LitElement {
     this.selectedNodeId = null;
   }
 
-  private renderFlowsListPanel(): TemplateResult | typeof nothing {
-    if (!this.config) return nothing;
-    const flows = this.config.flows;
-
-    return html`
-      <details class="panel flows-list-panel" ?open=${true}>
-        <summary>Flows (${flows.length})</summary>
-        <div class="panel-body flows-list-body">
-          ${flows.length === 0
-            ? html`<p class="hint-sub">No flows yet. Add nodes first, then add a flow between them.</p>`
-            : flows.map((flow) => {
-                const profile = getProfile(flow.domain ?? this.config!.domain);
-                const color = resolveFlowColor(flow, profile, flow.domain ?? this.config!.domain, 1, this.config!.domain_colors);
-                const isSelected = flow.id === this.selectedFlowId;
-                const isHidden = flow.visible === false;
-                return html`
-                  <div
-                    class=${`flow-list-row ${isSelected ? 'selected' : ''} ${isHidden ? 'flow-hidden' : ''}`}
-                    @click=${() => {
-                      this.selectedFlowId = isSelected ? null : flow.id;
-                      this.selectedNodeId = null;
-                      this.selectedOverlayId = null;
-                    }}
-                  >
-                    <span class="flow-dot" style=${`background:${color};`}></span>
-                    <span class="flow-list-label">${flow.id}</span>
-                    <span class="flow-list-sub">${flow.from_node}→${flow.to_node}</span>
-                    <span class="flow-list-style">${flow.animation?.animation_style ?? 'dots'}</span>
-                    <button
-                      class="eye-toggle flow-eye"
-                      title=${isHidden ? 'Show flow' : 'Hide flow'}
-                      @click=${(e: Event) => {
-                        e.stopPropagation();
-                        if (!this.config) return;
-                        const prev = this.config;
-                        const next = setFlowVisible(prev, flow.id, isHidden);
-                        this.pushPatch(prev, next, `${isHidden ? 'show' : 'hide'} flow ${flow.id}`);
-                      }}
-                    >${isHidden ? '◉' : '◎'}</button>
-                  </div>
-                `;
-              })}
-          <button
-            class="add-state"
-            style="margin-top:6px;"
-            @click=${() => {
-              if (!this.config) return;
-              this.pending = { kind: 'add-flow', step: 'pick-from' };
-            }}
-          >+ Add flow</button>
-        </div>
-      </details>
-    `;
-  }
-
   private renderWeatherPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const bg = this.config.background;
@@ -2268,42 +2211,6 @@ export class FlowmeCardEditor extends LitElement {
   };
 
   // -- toolbar --
-
-  private onToolbarAction = (event: CustomEvent<{ action: ToolbarAction }>): void => {
-    switch (event.detail.action) {
-      case 'add-node':
-        this.pending = { kind: 'add-node' };
-        this.statusMessage = 'Click anywhere on the background to drop a new node.';
-        break;
-      case 'add-flow':
-        this.pending = { kind: 'add-flow', step: 'pick-from' };
-        this.statusMessage = 'Click the source node.';
-        break;
-      case 'add-overlay':
-        this.pending = { kind: 'add-overlay', overlayType: 'custom' };
-        this.statusMessage = 'Click anywhere on the background to place a custom overlay.';
-        break;
-      case 'suggest-path':
-        void this.runSuggestPath();
-        break;
-      case 'undo':
-        this.undoStack.undo();
-        break;
-      case 'redo':
-        this.undoStack.redo();
-        break;
-      case 'toggle-preview':
-        this.previewMode = !this.previewMode;
-        this.statusMessage = this.previewMode
-          ? 'Preview: drag and snap suspended until you leave preview mode.'
-          : '';
-        break;
-      case 'save':
-        if (this.config) this.commitToHa(this.config);
-        this.statusMessage = 'Saved to card configuration.';
-        break;
-    }
-  };
 
   // -- suggest path --
 
