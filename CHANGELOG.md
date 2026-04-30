@@ -2,6 +2,19 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.15.4] — 2026-04-30
+
+### Fixed
+
+- **CI errors from v1.0.15.3**: Two TypeScript errors introduced by the toolbar redesign:
+  - `Property 'label' does not exist on type 'FlowConfig'`: `FlowConfig` has no `label`
+    field. The element dropdown option for flows was using `f.label ?? f.id`; fixed to
+    use `f.id` only.
+  - `'selectorElement' is declared but its value is never read`: The `@state() private
+    selectorElement` field was written in change handlers but never read (the template
+    uses the derived `derivedElement` local variable instead). Removed the field and all
+    assignments to it.
+
 ## [1.0.15.3] — 2026-04-30
 
 ### Changed

@@ -143,8 +143,6 @@ export class FlowmeCardEditor extends LitElement {
   @state() private suggestBusy = false;
   /** Right-column toolbar selector: which type is shown in the element dropdown. */
   @state() private selectorType: 'nodes' | 'flows' | 'overlays' | '' = '';
-  /** Right-column toolbar selector: currently shown element id (mirrors canvas selection). */
-  @state() private selectorElement = '';
   /** Config snapshot captured when the editor first opens (external setConfig).
    *  Used by the Cancel button to discard all in-session edits. */
   @state() private savedConfig?: FlowmeConfig;
@@ -347,7 +345,6 @@ export class FlowmeCardEditor extends LitElement {
               .value=${derivedType}
               @change=${(e: Event) => {
                 this.selectorType = (e.target as HTMLSelectElement).value as typeof this.selectorType;
-                this.selectorElement = '';
                 // Clear canvas selection when manually switching type
                 this.selectedNodeId = null;
                 this.selectedNodeIds = new Set();
@@ -367,7 +364,6 @@ export class FlowmeCardEditor extends LitElement {
               @change=${(e: Event) => {
                 const id = (e.target as HTMLSelectElement).value;
                 if (!id) return;
-                this.selectorElement = id;
                 if (derivedType === 'nodes') {
                   this.selectedNodeId = id;
                   this.selectedNodeIds = new Set([id]);
@@ -391,7 +387,7 @@ export class FlowmeCardEditor extends LitElement {
                 <option value=${n.id}>${n.label ?? n.id}</option>
               `) : nothing}
               ${derivedType === 'flows' ? this.config.flows.map((f) => html`
-                <option value=${f.id}>${f.label ?? f.id}</option>
+                <option value=${f.id}>${f.id}</option>
               `) : nothing}
               ${derivedType === 'overlays' ? (this.config.overlays ?? []).map((o, i) => html`
                 <option value=${o.id ?? String(i)}>Overlay ${i + 1}${o.id ? ` (${o.id})` : ''}</option>

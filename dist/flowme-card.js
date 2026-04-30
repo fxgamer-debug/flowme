@@ -3202,7 +3202,7 @@ var Yn = Object.defineProperty, Jn = Object.getOwnPropertyDescriptor, F = (e, t,
 };
 let C = class extends G {
   constructor() {
-    super(...arguments), this.pending = null, this.previewMode = !1, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null, this.rubberBand = null, this.customConfigDraft = "", this.customConfigError = "", this.statusMessage = "", this.errorMessage = "", this.canUndo = !1, this.canRedo = !1, this.undoLabel = "", this.redoLabel = "", this.suggestPreview = null, this.suggestBusy = !1, this.selectorType = "", this.selectorElement = "", this.stageRef = ri(), this.undoStack = new Ws((e) => this.applyConfig(
+    super(...arguments), this.pending = null, this.previewMode = !1, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null, this.rubberBand = null, this.customConfigDraft = "", this.customConfigError = "", this.statusMessage = "", this.errorMessage = "", this.canUndo = !1, this.canRedo = !1, this.undoLabel = "", this.redoLabel = "", this.suggestPreview = null, this.suggestBusy = !1, this.selectorType = "", this.stageRef = ri(), this.undoStack = new Ws((e) => this.applyConfig(
       e,
       /*commitToHa*/
       !1
@@ -3573,7 +3573,7 @@ let C = class extends G {
               class="tb-select"
               .value=${i}
               @change=${(n) => {
-      this.selectorType = n.target.value, this.selectorElement = "", this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null;
+      this.selectorType = n.target.value, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null;
     }}
             >
               <option value="">Select type…</option>
@@ -3587,7 +3587,7 @@ let C = class extends G {
               .value=${s}
               @change=${(n) => {
       const o = n.target.value;
-      o && (this.selectorElement = o, i === "nodes" ? (this.selectedNodeId = o, this.selectedNodeIds = /* @__PURE__ */ new Set([o]), this.selectedFlowId = null, this.selectedOverlayId = null) : i === "flows" ? (this.selectedFlowId = o, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedOverlayId = null) : i === "overlays" && (this.selectedOverlayId = o, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null));
+      o && (i === "nodes" ? (this.selectedNodeId = o, this.selectedNodeIds = /* @__PURE__ */ new Set([o]), this.selectedFlowId = null, this.selectedOverlayId = null) : i === "flows" ? (this.selectedFlowId = o, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedOverlayId = null) : i === "overlays" && (this.selectedOverlayId = o, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null));
     }}
             >
               <option value="">${i ? "Select element…" : "—"}</option>
@@ -3595,7 +3595,7 @@ let C = class extends G {
                 <option value=${n.id}>${n.label ?? n.id}</option>
               `) : w}
               ${i === "flows" ? this.config.flows.map((n) => b`
-                <option value=${n.id}>${n.label ?? n.id}</option>
+                <option value=${n.id}>${n.id}</option>
               `) : w}
               ${i === "overlays" ? (this.config.overlays ?? []).map((n, o) => b`
                 <option value=${n.id ?? String(o)}>Overlay ${o + 1}${n.id ? ` (${n.id})` : ""}</option>
@@ -6520,9 +6520,6 @@ F([
 ], C.prototype, "selectorType", 2);
 F([
   M()
-], C.prototype, "selectorElement", 2);
-F([
-  M()
 ], C.prototype, "savedConfig", 2);
 C = F([
   oe("flowme-card-editor")
@@ -6532,7 +6529,7 @@ var Xn = Object.defineProperty, Zn = Object.getOwnPropertyDescriptor, Z = (e, t,
     (r = e[o]) && (n = (s ? r(t, i, n) : r(n)) || n);
   return s && n && Xn(t, i, n), n;
 };
-const Qn = "1.0.15.3", Ze = 5e3;
+const Qn = "1.0.15.4", Ze = 5e3;
 console.info(
   `%c flowme %c v${Qn} `,
   "color: white; background: #4ADE80; font-weight: 700;",
