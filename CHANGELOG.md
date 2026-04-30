@@ -2,6 +2,37 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18.1] — 2026-04-30
+
+### Fixed
+
+- **BUG-1 — Background image clipped at fit level**: The background image div was inside
+  `.canvas-content` which receives the zoom/pan CSS transform. At fit scale < 1 the content
+  shrinks to the top-left, leaving blank stage area where the background should show. Moved
+  the background div outside `.canvas-content` (but still inside `.stage`) so it always fills
+  the full stage via `position: absolute; inset: 0` regardless of zoom or pan. Nodes, flow
+  connectors, overlays, and waypoint handles remain inside `.canvas-content` so they still
+  scale/pan correctly.
+
+- **BUG-2 — Removed rubber band selection**: Rubber band caused multiple interaction bugs
+  (pointer-up/click race condition, space+drag conflict). Removed completely:
+  `rubberBand` state, `rubberBandJustSelected` flag, `stageRubberBandPointerId`, the
+  `rubber-band` DragTarget variant, `onStagePointerDown/Move/Up` handlers, `renderRubberBand()`
+  method, the stage `@pointerdown/@pointermove/@pointerup` bindings, and `.rubber-band` CSS.
+  Multi-select via Shift+click remains fully functional.
+
+- **BUG-3 — Suggest Path not creating flow**: Converted `acceptSuggestion` and
+  `cancelSuggestion` to arrow functions for correct `this` binding in template handlers.
+  Added a check for existing flows between the two nodes — if one exists its waypoints are
+  updated rather than creating a duplicate. Ensures all state mutations (`suggestPreview`,
+  `selectedNodeIds`, `selectedNodeId`, `selectedOverlayId`) are cleared before `pushPatch`
+  so they land in the same Lit render batch as the config update.
+
+- **BUG-4 — Waypoint handles appear orange**: Updated `.waypoint` CSS to explicitly use
+  `background: #ffffff` (opaque white), `width/height: 12px`, and `cursor: move`. The
+  orange `.suggest-marker` style (preview-only, shown before Accept) is intentionally
+  distinct and unchanged.
+
 ## [1.18] — 2026-04-30
 
 ### Fixed

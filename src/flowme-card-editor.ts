@@ -78,7 +78,6 @@ import type { Point } from './pathfinding/types.js';
 type DragTarget =
   | { kind: 'node'; id: string }
   | { kind: 'node-bulk'; ids: string[]; startPositions: Map<string, NodePosition>; startPx: { x: number; y: number } }
-  | { kind: 'rubber-band'; startPx: { x: number; y: number }; startPct: NodePosition }
   | { kind: 'waypoint'; flowId: string; index: number }
   | { kind: 'overlay'; id: string }
   | { kind: 'overlay-resize'; id: string; startSize: { width: number; height: number }; startPx: { x: number; y: number } };
@@ -129,8 +128,6 @@ export class FlowmeCardEditor extends LitElement {
   @state() private selectedNodeIds: Set<string> = new Set();
   @state() private selectedFlowId: string | null = null;
   @state() private selectedOverlayId: string | null = null;
-  /** Rubber-band selection box (% coordinates, null when not dragging) */
-  @state() private rubberBand: { x1: number; y1: number; x2: number; y2: number } | null = null;
   @state() private customConfigDraft = '';
   @state() private customConfigError = '';
   @state() private errorMessage = '';
@@ -173,12 +170,6 @@ export class FlowmeCardEditor extends LitElement {
   private dragStartPx: { x: number; y: number } | null = null;
   /** True once the pointer has moved > 4px from dragStartPx. */
   private dragMoved = false;
-  /**
-   * Set to true by onStagePointerUp when rubber-band completes with ≥1 node
-   * selected. Prevents the subsequent 'click' event on the stage from
-   * immediately clearing that selection.
-   */
-  private rubberBandJustSelected = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -303,21 +294,18 @@ export class FlowmeCardEditor extends LitElement {
             }`}
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
-            @pointerdown=${this.onStagePointerDown}
-            @pointermove=${this.onStagePointerMove}
-            @pointerup=${this.onStagePointerUp}
-            @pointercancel=${this.onStagePointerUp}
             ${ref(this.stageRef)}
           >
+            <!-- background fills the stage at all zoom levels (not transformed) -->
+            <div
+              class="background"
+              style=${bgUrl ? `background-image: url('${bgUrl}');` : ''}
+            ></div>
             <!-- canvas-content: zoom/pan transform applied here -->
             <div
               class="canvas-content"
               style=${`transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
             >
-              <div
-                class="background"
-                style=${bgUrl ? `background-image: url('${bgUrl}');` : ''}
-              ></div>
               <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
                 ${this.config.flows.map((f) => this.renderFlowConnector(f))}
               </svg>
@@ -325,7 +313,6 @@ export class FlowmeCardEditor extends LitElement {
               ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
               ${this.config.nodes.map((n) => this.renderHandle(n))}
               ${this.renderSuggestPreview()}
-              ${this.renderRubberBand()}
             </div>
           </div>
           ${this.renderSuggestBar()}
@@ -2084,21 +2071,6 @@ export class FlowmeCardEditor extends LitElement {
 
   // ──────────────────────────────────────────────────────────────────────────
 
-  private renderRubberBand(): TemplateResult | typeof nothing {
-    const rb = this.rubberBand;
-    if (!rb) return nothing;
-    const left = Math.min(rb.x1, rb.x2);
-    const top = Math.min(rb.y1, rb.y2);
-    const width = Math.abs(rb.x2 - rb.x1);
-    const height = Math.abs(rb.y2 - rb.y1);
-    return html`
-      <div
-        class="rubber-band"
-        style=${`left:${left}%;top:${top}%;width:${width}%;height:${height}%;`}
-      ></div>
-    `;
-  }
-
   private renderMultiSelectToolbar(): TemplateResult | typeof nothing {
     const count = this.selectedNodeIds.size;
     if (count < 2) return nothing;
@@ -2390,7 +2362,7 @@ export class FlowmeCardEditor extends LitElement {
     }
   }
 
-  private acceptSuggestion(): void {
+  private acceptSuggestion = (): void => {
     if (!this.config || !this.suggestPreview) return;
     const { fromNodeId, toNodeId, waypoints } = this.suggestPreview;
     const entity =
@@ -2399,28 +2371,51 @@ export class FlowmeCardEditor extends LitElement {
         'sensor.placeholder_entity',
       ) ?? 'sensor.placeholder_entity';
     const prev = this.config;
-    const { config: withFlow, flow } = addFlow(prev, fromNodeId, toNodeId, entity);
-    const next: FlowmeConfig = {
-      ...withFlow,
-      flows: withFlow.flows.map((f) =>
-        f.id === flow.id
-          ? { ...f, waypoints: waypoints.map((w) => ({ x: w.x, y: w.y })) }
-          : f,
-      ),
-    };
+    // Check if a flow already exists between these two nodes.
+    const existing = prev.flows.find(
+      (f) => f.from_node === fromNodeId && f.to_node === toNodeId,
+    );
+    let next: FlowmeConfig;
+    let flowId: string;
+    if (existing) {
+      // Update waypoints of the existing flow.
+      flowId = existing.id;
+      next = {
+        ...prev,
+        flows: prev.flows.map((f) =>
+          f.id === existing.id
+            ? { ...f, waypoints: waypoints.map((w) => ({ x: w.x, y: w.y })) }
+            : f,
+        ),
+      };
+    } else {
+      // Create a new flow with the suggested waypoints.
+      const { config: withFlow, flow } = addFlow(prev, fromNodeId, toNodeId, entity);
+      flowId = flow.id;
+      next = {
+        ...withFlow,
+        flows: withFlow.flows.map((f) =>
+          f.id === flow.id
+            ? { ...f, waypoints: waypoints.map((w) => ({ x: w.x, y: w.y })) }
+            : f,
+        ),
+      };
+    }
+    // Clear preview and selection BEFORE pushPatch so Lit sees all state updates
+    // in the same render batch.
     this.suggestPreview = null;
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
     this.selectedOverlayId = null;
-    this.pushPatch(prev, next, `suggest-path ${flow.id}`);
-    // Select the new flow AFTER config is updated so renderWaypointHandles sees
-    // the correct waypoints in this.config.
-    this.selectedFlowId = flow.id;
-  }
+    this.pushPatch(prev, next, `suggest-path ${flowId}`);
+    // Select the new/updated flow after config is updated so renderWaypointHandles
+    // sees the correct waypoints in this.config.
+    this.selectedFlowId = flowId;
+  };
 
-  private cancelSuggestion(): void {
+  private cancelSuggestion = (): void => {
     this.suggestPreview = null;
-  }
+  };
 
   private renderSuggestPreview(): TemplateResult | typeof nothing {
     if (!this.suggestPreview || !this.config) return nothing;
@@ -2499,13 +2494,6 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
-    // Rubber-band just completed on this same pointer-up sequence — skip the
-    // deselect so the freshly-selected nodes keep their rings.
-    if (this.rubberBandJustSelected) {
-      this.rubberBandJustSelected = false;
-      return;
-    }
-
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
     this.selectedFlowId = null;
@@ -2521,71 +2509,6 @@ export class FlowmeCardEditor extends LitElement {
     }
   };
 
-  private stageRubberBandPointerId: number | null = null;
-
-  private onStagePointerDown = (event: PointerEvent): void => {
-    // Only start rubber-band on the stage background itself (not child handles)
-    const target = event.target as HTMLElement;
-    const isBackground = target.classList.contains('stage') || target.classList.contains('background') || target.classList.contains('connectors');
-    if (!isBackground || this.previewMode || this.pending) return;
-    // Left button only; space+drag is handled by canvas pan — do not start rubber band
-    if (event.button !== 0 || this.spaceHeld) return;
-    const pct = this.pointerToPercent(event);
-    if (!pct) return;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    this.stageRubberBandPointerId = event.pointerId;
-    this.dragTarget = {
-      kind: 'rubber-band',
-      startPx: { x: event.clientX, y: event.clientY },
-      startPct: pct,
-    };
-    this.rubberBand = { x1: pct.x, y1: pct.y, x2: pct.x, y2: pct.y };
-  };
-
-  private onStagePointerMove = (event: PointerEvent): void => {
-    if (this.stageRubberBandPointerId !== event.pointerId || this.dragTarget?.kind !== 'rubber-band') return;
-    const pct = this.pointerToPercent(event);
-    if (!pct) return;
-    const start = this.dragTarget.startPct;
-    this.rubberBand = { x1: start.x, y1: start.y, x2: pct.x, y2: pct.y };
-  };
-
-  private onStagePointerUp = (event: PointerEvent): void => {
-    if (this.stageRubberBandPointerId !== event.pointerId || this.dragTarget?.kind !== 'rubber-band') {
-      this.stageRubberBandPointerId = null;
-      return;
-    }
-    this.stageRubberBandPointerId = null;
-    const rb = this.rubberBand;
-    this.rubberBand = null;
-    this.dragTarget = null;
-    if (!rb || !this.config) return;
-
-    const minX = Math.min(rb.x1, rb.x2);
-    const maxX = Math.max(rb.x1, rb.x2);
-    const minY = Math.min(rb.y1, rb.y2);
-    const maxY = Math.max(rb.y1, rb.y2);
-
-    // Only apply if the box was actually dragged (>2% in either axis)
-    if (maxX - minX < 2 && maxY - minY < 2) return;
-
-    const selected = new Set<string>();
-    for (const node of this.config.nodes) {
-      const { x, y } = node.position;
-      if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-        selected.add(node.id);
-      }
-    }
-    if (selected.size > 0) {
-      this.selectedNodeIds = selected; // new Set reference → triggers re-render
-      this.selectedNodeId = selected.size === 1 ? Array.from(selected)[0]! : null;
-      this.selectedFlowId = null;
-      this.selectedOverlayId = null;
-      // Prevent the 'click' event that fires after this pointerup from clearing
-      // the selection we just set.
-      this.rubberBandJustSelected = true;
-    }
-  };
 
   private onSegmentClick = (event: MouseEvent): void => {
     event.stopPropagation();
@@ -3032,7 +2955,6 @@ export class FlowmeCardEditor extends LitElement {
       this.selectedNodeId = null;
       this.selectedFlowId = null;
       this.selectedOverlayId = null;
-      this.rubberBand = null;
       return;
     }
     const mod = event.metaKey || event.ctrlKey;
@@ -3501,14 +3423,6 @@ export class FlowmeCardEditor extends LitElement {
     .handle.multi-selected .handle-dot {
       box-shadow: 0 0 0 3px rgba(0,0,0,0.4), 0 0 0 5px #ffffff, 0 0 0 7px #03a9f4;
     }
-    /* Rubber-band selection box */
-    .rubber-band {
-      position: absolute;
-      border: 1.5px solid var(--primary-color, #03a9f4);
-      background: rgba(3, 169, 244, 0.08);
-      border-radius: 2px;
-      pointer-events: none;
-    }
     /* Multi-select toolbar */
     .multiselect-toolbar {
       display: flex;
@@ -3577,21 +3491,21 @@ export class FlowmeCardEditor extends LitElement {
     .waypoint {
       position: absolute;
       transform: translate(-50%, -50%);
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-radius: 2px;
-      background: rgba(255, 255, 255, 0.95);
+      background: #ffffff;
       border: 2px solid var(--primary-color, #03a9f4);
-      cursor: grab;
+      cursor: move;
       touch-action: none;
       box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
     }
     .waypoint:hover {
       background: #fff;
-      transform: translate(-50%, -50%) scale(1.3);
+      transform: translate(-50%, -50%) scale(1.25);
     }
     .waypoint:active {
-      cursor: grabbing;
+      cursor: move;
     }
     .overlay-handle {
       position: absolute;

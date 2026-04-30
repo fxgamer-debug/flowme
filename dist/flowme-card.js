@@ -1433,12 +1433,12 @@ let gi = !1;
 function $n(e) {
   gi = e;
 }
-function F(...e) {
+function M(...e) {
   gi && console.warn(xn, ...e);
 }
 const _n = "[FlowMe Renderer]";
 function at(...e) {
-  F(_n, ...e);
+  M(_n, ...e);
 }
 const A = "http://www.w3.org/2000/svg", U = "http://www.w3.org/1999/xlink";
 function kn() {
@@ -2410,7 +2410,7 @@ class Rn {
 }
 function Dn() {
   const e = Un(), t = e ?? "svg", i = Ln();
-  return F(
+  return M(
     "renderer selected:",
     t === "houdini" ? "HoudiniRenderer" : "SvgRenderer",
     "| override=",
@@ -2419,7 +2419,7 @@ function Dn() {
     i,
     "| paintWorklet in CSS?",
     typeof CSS < "u" && "paintWorklet" in CSS
-  ), t === "houdini" ? i ? new Rn() : (F("?flowme_renderer=houdini requested but unsupported — falling back to SVG"), new Qt()) : new Qt();
+  ), t === "houdini" ? i ? new Rn() : (M("?flowme_renderer=houdini requested but unsupported — falling back to SVG"), new Qt()) : new Qt();
 }
 function Ln() {
   try {
@@ -2442,7 +2442,7 @@ function Re(e) {
   return `left: ${e.position.x}%; top: ${e.position.y}%; width: ${t}%; height: ${i}%;`;
 }
 function Hn(e, t) {
-  F(
+  M(
     "renderOverlayHost →",
     "id=",
     e.id,
@@ -3195,18 +3195,18 @@ function Ys(e, t) {
 function ei(e, t, i) {
   return e < t ? t : e > i ? i : e;
 }
-var Xs = Object.defineProperty, Zs = Object.getOwnPropertyDescriptor, M = (e, t, i, n) => {
+var Xs = Object.defineProperty, Zs = Object.getOwnPropertyDescriptor, F = (e, t, i, n) => {
   for (var s = n > 1 ? void 0 : n ? Zs(t, i) : t, o = e.length - 1, r; o >= 0; o--)
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Xs(t, i, s), s;
 };
 let C = class extends G {
   constructor() {
-    super(...arguments), this.pending = null, this.previewMode = !1, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null, this.rubberBand = null, this.customConfigDraft = "", this.customConfigError = "", this.errorMessage = "", this.canUndo = !1, this.canRedo = !1, this.undoLabel = "", this.redoLabel = "", this.suggestPreview = null, this.suggestBusy = !1, this.selectorType = "", this.scale = 1, this.panX = 0, this.panY = 0, this.fitScale = 1, this.spaceHeld = !1, this.panPointerId = null, this.stageRef = Vt(), this.canvasRef = Vt(), this.undoStack = new qn((e) => this.applyConfig(
+    super(...arguments), this.pending = null, this.previewMode = !1, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null, this.customConfigDraft = "", this.customConfigError = "", this.errorMessage = "", this.canUndo = !1, this.canRedo = !1, this.undoLabel = "", this.redoLabel = "", this.suggestPreview = null, this.suggestBusy = !1, this.selectorType = "", this.scale = 1, this.panX = 0, this.panY = 0, this.fitScale = 1, this.spaceHeld = !1, this.panPointerId = null, this.stageRef = Vt(), this.canvasRef = Vt(), this.undoStack = new qn((e) => this.applyConfig(
       e,
       /*commitToHa*/
       !1
-    )), this.unsubscribe = null, this._ownCommit = !1, this.dragPointerId = null, this.dragTarget = null, this.dragStartConfig = null, this.dragShiftHeld = !1, this.dragStartPx = null, this.dragMoved = !1, this.rubberBandJustSelected = !1, this.onDefaultBgChange = (e) => {
+    )), this.unsubscribe = null, this._ownCommit = !1, this.dragPointerId = null, this.dragTarget = null, this.dragStartConfig = null, this.dragShiftHeld = !1, this.dragStartPx = null, this.dragMoved = !1, this.onDefaultBgChange = (e) => {
       if (!this.config) return;
       const t = e.target.value, i = this.config, n = ns(i, t);
       this.pushPatch(i, n, "edit default background");
@@ -3218,6 +3218,34 @@ let C = class extends G {
       if (!this.config) return;
       const e = new Set(Object.keys(this.config.background.weather_states ?? {})), t = C.KNOWN_WEATHER_STATES.find((s) => !e.has(s)) ?? "custom", i = this.config, n = Be(i, t, "");
       this.pushPatch(i, n, `add weather state ${t}`);
+    }, this.acceptSuggestion = () => {
+      if (!this.config || !this.suggestPreview) return;
+      const { fromNodeId: e, toNodeId: t, waypoints: i } = this.suggestPreview, n = window.prompt(
+        "Entity for this flow (e.g. sensor.grid_power):",
+        "sensor.placeholder_entity"
+      ) ?? "sensor.placeholder_entity", s = this.config, o = s.flows.find(
+        (l) => l.from_node === e && l.to_node === t
+      );
+      let r, a;
+      if (o)
+        a = o.id, r = {
+          ...s,
+          flows: s.flows.map(
+            (l) => l.id === o.id ? { ...l, waypoints: i.map((d) => ({ x: d.x, y: d.y })) } : l
+          )
+        };
+      else {
+        const { config: l, flow: d } = He(s, e, t, n);
+        a = d.id, r = {
+          ...l,
+          flows: l.flows.map(
+            (c) => c.id === d.id ? { ...c, waypoints: i.map((p) => ({ x: p.x, y: p.y })) } : c
+          )
+        };
+      }
+      this.suggestPreview = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedNodeId = null, this.selectedOverlayId = null, this.pushPatch(s, r, `suggest-path ${a}`), this.selectedFlowId = a;
+    }, this.cancelSuggestion = () => {
+      this.suggestPreview = null;
     }, this.onStageClick = (e) => {
       if (!(!this.config || e.target?.closest(".handle, .waypoint"))) {
         if (this.pending?.kind === "add-node") {
@@ -3243,45 +3271,10 @@ let C = class extends G {
           this.pending.step;
           return;
         }
-        if (this.rubberBandJustSelected) {
-          this.rubberBandJustSelected = !1;
-          return;
-        }
         this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedNodeId = null, this.selectedFlowId = null, this.selectedOverlayId = null, this.customConfigDraft = "", this.customConfigError = "";
       }
     }, this.onStageContextMenu = (e) => {
       this.pending && (e.preventDefault(), this.pending = null);
-    }, this.stageRubberBandPointerId = null, this.onStagePointerDown = (e) => {
-      const t = e.target;
-      if (!(t.classList.contains("stage") || t.classList.contains("background") || t.classList.contains("connectors")) || this.previewMode || this.pending || e.button !== 0 || this.spaceHeld) return;
-      const n = this.pointerToPercent(e);
-      n && (e.currentTarget.setPointerCapture(e.pointerId), this.stageRubberBandPointerId = e.pointerId, this.dragTarget = {
-        kind: "rubber-band",
-        startPx: { x: e.clientX, y: e.clientY },
-        startPct: n
-      }, this.rubberBand = { x1: n.x, y1: n.y, x2: n.x, y2: n.y });
-    }, this.onStagePointerMove = (e) => {
-      if (this.stageRubberBandPointerId !== e.pointerId || this.dragTarget?.kind !== "rubber-band") return;
-      const t = this.pointerToPercent(e);
-      if (!t) return;
-      const i = this.dragTarget.startPct;
-      this.rubberBand = { x1: i.x, y1: i.y, x2: t.x, y2: t.y };
-    }, this.onStagePointerUp = (e) => {
-      if (this.stageRubberBandPointerId !== e.pointerId || this.dragTarget?.kind !== "rubber-band") {
-        this.stageRubberBandPointerId = null;
-        return;
-      }
-      this.stageRubberBandPointerId = null;
-      const t = this.rubberBand;
-      if (this.rubberBand = null, this.dragTarget = null, !t || !this.config) return;
-      const i = Math.min(t.x1, t.x2), n = Math.max(t.x1, t.x2), s = Math.min(t.y1, t.y2), o = Math.max(t.y1, t.y2);
-      if (n - i < 2 && o - s < 2) return;
-      const r = /* @__PURE__ */ new Set();
-      for (const a of this.config.nodes) {
-        const { x: l, y: d } = a.position;
-        l >= i && l <= n && d >= s && d <= o && r.add(a.id);
-      }
-      r.size > 0 && (this.selectedNodeIds = r, this.selectedNodeId = r.size === 1 ? Array.from(r)[0] : null, this.selectedFlowId = null, this.selectedOverlayId = null, this.rubberBandJustSelected = !0);
     }, this.onSegmentClick = (e) => {
       if (e.stopPropagation(), !this.config) return;
       const t = e.currentTarget, i = t.dataset.flowId;
@@ -3438,7 +3431,7 @@ let C = class extends G {
       this.pushPatch(i, n, r);
     }, this.onKeyDown = (e) => {
       if (e.key === "Escape") {
-        this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedNodeId = null, this.selectedFlowId = null, this.selectedOverlayId = null, this.rubberBand = null;
+        this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedNodeId = null, this.selectedFlowId = null, this.selectedOverlayId = null;
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -3517,21 +3510,18 @@ let C = class extends G {
             class=${`stage ${this.spaceHeld ? "mode-pan" : this.pending?.kind === "add-node" ? "mode-add-node" : this.pending?.kind === "add-overlay" ? "mode-add-overlay" : ""}`}
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
-            @pointerdown=${this.onStagePointerDown}
-            @pointermove=${this.onStagePointerMove}
-            @pointerup=${this.onStagePointerUp}
-            @pointercancel=${this.onStagePointerUp}
             ${Gt(this.stageRef)}
           >
+            <!-- background fills the stage at all zoom levels (not transformed) -->
+            <div
+              class="background"
+              style=${e ? `background-image: url('${e}');` : ""}
+            ></div>
             <!-- canvas-content: zoom/pan transform applied here -->
             <div
               class="canvas-content"
               style=${`transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
             >
-              <div
-                class="background"
-                style=${e ? `background-image: url('${e}');` : ""}
-              ></div>
               <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
                 ${this.config.flows.map((s) => this.renderFlowConnector(s))}
               </svg>
@@ -3539,7 +3529,6 @@ let C = class extends G {
               ${(this.config.overlays ?? []).map((s) => this.renderOverlayHandle(s))}
               ${this.config.nodes.map((s) => this.renderHandle(s))}
               ${this.renderSuggestPreview()}
-              ${this.renderRubberBand()}
             </div>
           </div>
           ${this.renderSuggestBar()}
@@ -5012,17 +5001,6 @@ let C = class extends G {
     `;
   }
   // ──────────────────────────────────────────────────────────────────────────
-  renderRubberBand() {
-    const e = this.rubberBand;
-    if (!e) return w;
-    const t = Math.min(e.x1, e.x2), i = Math.min(e.y1, e.y2), n = Math.abs(e.x2 - e.x1), s = Math.abs(e.y2 - e.y1);
-    return b`
-      <div
-        class="rubber-band"
-        style=${`left:${t}%;top:${i}%;width:${n}%;height:${s}%;`}
-      ></div>
-    `;
-  }
   renderMultiSelectToolbar() {
     const e = this.selectedNodeIds.size;
     if (e < 2) return w;
@@ -5234,22 +5212,6 @@ let C = class extends G {
         this.suggestBusy = !1;
       }
     }
-  }
-  acceptSuggestion() {
-    if (!this.config || !this.suggestPreview) return;
-    const { fromNodeId: e, toNodeId: t, waypoints: i } = this.suggestPreview, n = window.prompt(
-      "Entity for this flow (e.g. sensor.grid_power):",
-      "sensor.placeholder_entity"
-    ) ?? "sensor.placeholder_entity", s = this.config, { config: o, flow: r } = He(s, e, t, n), a = {
-      ...o,
-      flows: o.flows.map(
-        (l) => l.id === r.id ? { ...l, waypoints: i.map((d) => ({ x: d.x, y: d.y })) } : l
-      )
-    };
-    this.suggestPreview = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedNodeId = null, this.selectedOverlayId = null, this.pushPatch(s, a, `suggest-path ${r.id}`), this.selectedFlowId = r.id;
-  }
-  cancelSuggestion() {
-    this.suggestPreview = null;
   }
   renderSuggestPreview() {
     if (!this.suggestPreview || !this.config) return w;
@@ -5716,14 +5678,6 @@ C.styles = oe`
     .handle.multi-selected .handle-dot {
       box-shadow: 0 0 0 3px rgba(0,0,0,0.4), 0 0 0 5px #ffffff, 0 0 0 7px #03a9f4;
     }
-    /* Rubber-band selection box */
-    .rubber-band {
-      position: absolute;
-      border: 1.5px solid var(--primary-color, #03a9f4);
-      background: rgba(3, 169, 244, 0.08);
-      border-radius: 2px;
-      pointer-events: none;
-    }
     /* Multi-select toolbar */
     .multiselect-toolbar {
       display: flex;
@@ -5792,21 +5746,21 @@ C.styles = oe`
     .waypoint {
       position: absolute;
       transform: translate(-50%, -50%);
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-radius: 2px;
-      background: rgba(255, 255, 255, 0.95);
+      background: #ffffff;
       border: 2px solid var(--primary-color, #03a9f4);
-      cursor: grab;
+      cursor: move;
       touch-action: none;
       box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
     }
     .waypoint:hover {
       background: #fff;
-      transform: translate(-50%, -50%) scale(1.3);
+      transform: translate(-50%, -50%) scale(1.25);
     }
     .waypoint:active {
-      cursor: grabbing;
+      cursor: move;
     }
     .overlay-handle {
       position: absolute;
@@ -6721,76 +6675,73 @@ C.styles = oe`
       cursor: pointer;
     }
   `;
-M([
+F([
   yt({ attribute: !1 })
 ], C.prototype, "hass", 2);
-M([
+F([
   P()
 ], C.prototype, "config", 2);
-M([
+F([
   P()
 ], C.prototype, "pending", 2);
-M([
+F([
   P()
 ], C.prototype, "previewMode", 2);
-M([
+F([
   P()
 ], C.prototype, "selectedNodeId", 2);
-M([
+F([
   P()
 ], C.prototype, "selectedNodeIds", 2);
-M([
+F([
   P()
 ], C.prototype, "selectedFlowId", 2);
-M([
+F([
   P()
 ], C.prototype, "selectedOverlayId", 2);
-M([
-  P()
-], C.prototype, "rubberBand", 2);
-M([
+F([
   P()
 ], C.prototype, "customConfigDraft", 2);
-M([
+F([
   P()
 ], C.prototype, "customConfigError", 2);
-M([
+F([
   P()
 ], C.prototype, "errorMessage", 2);
-M([
+F([
   P()
 ], C.prototype, "canUndo", 2);
-M([
+F([
   P()
 ], C.prototype, "canRedo", 2);
-M([
+F([
   P()
 ], C.prototype, "undoLabel", 2);
-M([
+F([
   P()
 ], C.prototype, "redoLabel", 2);
-M([
+F([
   P()
 ], C.prototype, "suggestPreview", 2);
-M([
+F([
   P()
 ], C.prototype, "suggestBusy", 2);
-M([
+F([
   P()
 ], C.prototype, "selectorType", 2);
-M([
+F([
   P()
 ], C.prototype, "savedConfig", 2);
-M([
+F([
   P()
 ], C.prototype, "scale", 2);
-M([
+F([
   P()
 ], C.prototype, "panX", 2);
-M([
+F([
   P()
 ], C.prototype, "panY", 2);
-C = M([
+C = F([
   le("flowme-card-editor")
 ], C);
 var Ks = Object.defineProperty, Js = Object.getOwnPropertyDescriptor, J = (e, t, i, n) => {
@@ -6798,7 +6749,7 @@ var Ks = Object.defineProperty, Js = Object.getOwnPropertyDescriptor, J = (e, t,
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Ks(t, i, s), s;
 };
-const Qs = "1.18", ii = 5e3;
+const Qs = "1.18.1", ii = 5e3;
 console.info(
   `%c flowme %c v${Qs} `,
   "color: white; background: #4ADE80; font-weight: 700;",
@@ -6838,25 +6789,25 @@ let D = class extends G {
       ].filter((a) => typeof a == "string" && a.length > 0), s = {};
       for (const a of n)
         s[a] = e.states[a]?.state;
-      F("hass setter called. config entity states:", s);
+      M("hass setter called. config entity states:", s);
       const o = i?.background.weather_entity;
       if (o) {
         const a = t?.states[o]?.state, l = e.states[o]?.state;
-        F("[weather] state:", l, "(was:", a, ")"), a !== l && this.syncWeatherBackground();
+        M("[weather] state:", l, "(was:", a, ")"), a !== l && this.syncWeatherBackground();
       }
       const r = i?.background.sun_entity;
       if (r) {
         const a = t?.states[r]?.state, l = e.states[r]?.state;
-        a !== l && (F("[sun] state changed:", a, "→", l), this.syncWeatherBackground());
+        a !== l && (M("[sun] state changed:", a, "→", l), this.syncWeatherBackground());
       }
     } else
-      F("hass setter called with undefined");
+      M("hass setter called with undefined");
     this.requestUpdate("hass", t);
   }
   setConfig(e) {
     try {
       const t = ct(e);
-      $n(t.debug ?? !1), F("setConfig called:", JSON.parse(JSON.stringify(e ?? null))), F("setConfig validated → flows=", t.flows.length, "nodes=", t.nodes.length, "overlays=", t.overlays?.length ?? 0), this.config = t, this.errorMessage = void 0, this.rendererReadyFor && this.rendererReadyFor !== t && this.teardownRenderer();
+      $n(t.debug ?? !1), M("setConfig called:", JSON.parse(JSON.stringify(e ?? null))), M("setConfig validated → flows=", t.flows.length, "nodes=", t.nodes.length, "overlays=", t.overlays?.length ?? 0), this.config = t, this.errorMessage = void 0, this.rendererReadyFor && this.rendererReadyFor !== t && this.teardownRenderer();
       const i = t.background.default;
       this.bgLayerA = i, this.bgLayerB = "", this.activeLayer = "A", this.lastAppliedBgUrl = i;
     } catch (t) {
@@ -6865,10 +6816,10 @@ let D = class extends G {
     }
   }
   connectedCallback() {
-    super.connectedCallback(), F("connectedCallback — shadowRoot present?", !!this.shadowRoot, "config present?", !!this.config, "hass present?", !!this._hass);
+    super.connectedCallback(), M("connectedCallback — shadowRoot present?", !!this.shadowRoot, "config present?", !!this.config, "hass present?", !!this._hass);
   }
   firstUpdated() {
-    F("firstUpdated — shadowRoot children count=", this.shadowRoot?.children.length ?? 0), F("firstUpdated — SVG element found?", !!this.shadowRoot?.querySelector("svg"));
+    M("firstUpdated — shadowRoot children count=", this.shadowRoot?.children.length ?? 0), M("firstUpdated — SVG element found?", !!this.shadowRoot?.querySelector("svg"));
   }
   disconnectedCallback() {
     this.teardownRenderer(), this.transitionTimer !== null && (window.clearTimeout(this.transitionTimer), this.transitionTimer = null), super.disconnectedCallback();
@@ -6882,7 +6833,7 @@ let D = class extends G {
       this.renderer.init(t, i).then(() => {
         this.hass && this.pushAllValuesToRenderer();
       }).catch((n) => {
-        F("renderer init failed — falling back to SVG renderer", n), this.teardownRenderer(), this.renderer = new Qt(), this.rendererReadyFor = i, this.renderer.init(t, i).then(() => {
+        M("renderer init failed — falling back to SVG renderer", n), this.teardownRenderer(), this.renderer = new Qt(), this.rendererReadyFor = i, this.renderer.init(t, i).then(() => {
           this.hass && this.pushAllValuesToRenderer();
         }).catch((s) => {
           console.error("[flowme] SVG renderer init also failed", s);
@@ -6899,10 +6850,10 @@ let D = class extends G {
    */
   pushAllValuesToRenderer() {
     if (!(!this.config || !this.renderer || !this.hass)) {
-      F("pushAllValuesToRenderer → flows:", this.config.flows.length, "renderer:", this.renderer.constructor.name);
+      M("pushAllValuesToRenderer → flows:", this.config.flows.length, "renderer:", this.renderer.constructor.name);
       for (const e of this.config.flows) {
         const t = this.hass.states[e.entity], i = Ne(t?.state), n = q(e.domain ?? this.config.domain), s = t?.attributes?.unit_of_measurement, o = pn(i, s, n.unit_scale);
-        if (F(
+        if (M(
           "updateFlow →",
           e.id,
           "entity=",
@@ -6922,11 +6873,11 @@ let D = class extends G {
         ), t) {
           if (t.state === "unavailable" || t.state === "unknown") {
             const r = `${e.id}:${e.entity}:unavailable`;
-            this.warnedMissing.has(r) || (this.warnedMissing.add(r), F(`flow "${e.id}" entity "${e.entity}" is currently ${t.state} — no flow will render until it reports a number`));
+            this.warnedMissing.has(r) || (this.warnedMissing.add(r), M(`flow "${e.id}" entity "${e.entity}" is currently ${t.state} — no flow will render until it reports a number`));
           }
         } else {
           const r = `${e.id}:${e.entity}`;
-          this.warnedMissing.has(r) || (this.warnedMissing.add(r), F(`flow "${e.id}" references entity "${e.entity}" but it is not present in hass.states — check spelling / domain permissions`));
+          this.warnedMissing.has(r) || (this.warnedMissing.add(r), M(`flow "${e.id}" references entity "${e.entity}" but it is not present in hass.states — check spelling / domain permissions`));
         }
         if (this.renderer.updateFlow(e.id, o.value), e.value_gradient && this.renderer.setGradientColor) {
           const r = e.value_gradient.entity, a = this.hass.states[r];
@@ -6934,7 +6885,7 @@ let D = class extends G {
             const l = parseFloat(a.state);
             if (Number.isFinite(l)) {
               const d = e.value_gradient, c = Math.max(d.low_value, Math.min(d.high_value, l)), p = hi(l, d);
-              F(
+              M(
                 "[gradient]",
                 e.id,
                 "entity value:",
@@ -6947,9 +6898,9 @@ let D = class extends G {
                 p
               ), this.renderer.setGradientColor(e.id, p);
             } else
-              F(`flow "${e.id}" gradient entity "${r}" state "${a.state}" is not a number`), this.renderer.setGradientColor(e.id, null);
+              M(`flow "${e.id}" gradient entity "${r}" state "${a.state}" is not a number`), this.renderer.setGradientColor(e.id, null);
           } else
-            F(`flow "${e.id}" gradient entity "${r}" unavailable/unknown — falling back to flow color`), this.renderer.setGradientColor(e.id, null);
+            M(`flow "${e.id}" gradient entity "${r}" unavailable/unknown — falling back to flow color`), this.renderer.setGradientColor(e.id, null);
         }
       }
     }
@@ -7041,7 +6992,7 @@ let D = class extends G {
           ></div>
           <div class="renderer-mount" ${Gt(this.rendererMount)}></div>
           ${e.nodes.map((r) => this.renderNodeHandle(r))}
-          ${(e.overlays ?? []).map((r) => (F("rendering overlay →", r.type, "position=", r.position, "size=", r.size), Hn(r, this.hass)))}
+          ${(e.overlays ?? []).map((r) => (M("rendering overlay →", r.type, "position=", r.position, "size=", r.size), Hn(r, this.hass)))}
         </div>
       </ha-card>
     `;
@@ -7057,7 +7008,7 @@ let D = class extends G {
       if (t) {
         const i = t.state, n = e.sun_entity ? this.hass.states[e.sun_entity]?.state : void 0, s = un(i, n, e.weather_states, e.default);
         let o = i;
-        return n === "below_horizon" && !i.endsWith("-night") && (o = `${i}-night`), F("[FlowMe] sun:", n, "weather:", i, "→ lookup key:", o, "→ image:", s !== e.default ? s : "default"), s;
+        return n === "below_horizon" && !i.endsWith("-night") && (o = `${i}-night`), M("[FlowMe] sun:", n, "weather:", i, "→ lookup key:", o, "→ image:", s !== e.default ? s : "default"), s;
       }
     }
     return e.default;
