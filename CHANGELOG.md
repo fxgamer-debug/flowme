@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.16.1] — 2026-04-30
+
+### Fixed
+
+- **CI errors from v1.16**: `statusMessage` was removed from the template but the `@state()`
+  field and all its write-sites remained, causing a TypeScript "declared but never read" error.
+  Removed the field declaration and all assignments. The two failure cases in `runSuggestPath`
+  (CORS background analysis failure and general route error) now correctly write to
+  `errorMessage` instead. Empty `if/else` blocks left by the bulk removal are also cleaned up.
+
 ## [1.16] — 2026-04-30
 
 ### Changed

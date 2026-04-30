@@ -133,7 +133,6 @@ export class FlowmeCardEditor extends LitElement {
   @state() private rubberBand: { x1: number; y1: number; x2: number; y2: number } | null = null;
   @state() private customConfigDraft = '';
   @state() private customConfigError = '';
-  @state() private statusMessage = '';
   @state() private errorMessage = '';
   @state() private canUndo = false;
   @state() private canRedo = false;
@@ -295,21 +294,18 @@ export class FlowmeCardEditor extends LitElement {
                     title="Add node — then click canvas to place"
                     @click=${() => {
                       this.pending = { kind: 'add-node' };
-                      this.statusMessage = 'Click canvas to place node.';
                     }}
                   >+ Node</button>
                   <button class="tb-btn"
                     title="Add flow between two nodes"
                     @click=${() => {
                       this.pending = { kind: 'add-flow', step: 'pick-from' };
-                      this.statusMessage = 'Click the source node.';
                     }}
                   >+ Flow</button>
                   <button class="tb-btn"
                     title="Add overlay card"
                     @click=${() => {
                       this.pending = { kind: 'add-overlay', overlayType: 'custom' };
-                      this.statusMessage = 'Click canvas to place overlay.';
                     }}
                   >+ Overlay</button>
                 `}
@@ -320,7 +316,6 @@ export class FlowmeCardEditor extends LitElement {
                 title="Apply current configuration to the card"
                 @click=${() => {
                   if (this.config) this.commitToHa(this.config);
-                  this.statusMessage = 'Saved.';
                 }}
               >💾 Save</button>
               <button
@@ -2036,7 +2031,7 @@ export class FlowmeCardEditor extends LitElement {
         <button class="ms-btn" @click=${() => this.bulkAlignH(ids, anchorId)}>Align H</button>
         <button class="ms-btn" @click=${() => this.bulkAlignV(ids, anchorId)}>Align V</button>
         <button class="ms-btn danger" @click=${() => this.bulkDelete(ids)}>Delete</button>
-        <button class="ms-btn ghost" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; this.statusMessage = ''; }}>✕ Deselect</button>
+        <button class="ms-btn ghost" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; }}>✕ Deselect</button>
       </div>
     `;
   }
@@ -2267,19 +2262,16 @@ export class FlowmeCardEditor extends LitElement {
 
   private async runSuggestPath(): Promise<void> {
     if (!this.config || this.selectedNodeIds.size !== 2) {
-      this.statusMessage = 'Select exactly 2 nodes (Shift+click or rubber-band), then click "Suggest path".';
       return;
     }
     const [fromId, toId] = Array.from(this.selectedNodeIds) as [string, string];
     const fromNode = this.config.nodes.find((n) => n.id === fromId);
     const toNode = this.config.nodes.find((n) => n.id === toId);
     if (!fromNode || !toNode) {
-      this.statusMessage = 'One or both selected nodes could not be found.';
       return;
     }
 
     this.suggestBusy = true;
-    this.statusMessage = 'Analysing background…';
     try {
       const result = await suggestPath({
         imageUrl: this.config.background.default,
@@ -2287,13 +2279,12 @@ export class FlowmeCardEditor extends LitElement {
         to: toNode.position,
       });
       if (!result.edgesUsable) {
-        this.statusMessage =
+        this.errorMessage =
           'Could not analyse the background image (likely a CORS issue). Serve it from the same origin as Home Assistant and try again.';
         this.suggestPreview = null;
         return;
       }
       if (result.waypoints.length === 0) {
-        this.statusMessage = 'No waypoints needed — a straight line follows the shortest path.';
         // Still create the preview so the user can accept (creates a straight-line flow)
       }
       this.suggestPreview = {
@@ -2303,11 +2294,8 @@ export class FlowmeCardEditor extends LitElement {
         edgesUsable: result.edgesUsable,
         elapsedMs: result.elapsedMs,
       };
-      this.statusMessage = `Preview: ${result.waypoints.length} waypoint(s) in ${Math.round(
-        result.elapsedMs,
-      )} ms. Accept to create flow.`;
     } catch (err) {
-      this.statusMessage =
+      this.errorMessage =
         'Auto-route failed: ' + (err instanceof Error ? err.message : String(err));
       this.suggestPreview = null;
     } finally {
@@ -2337,13 +2325,11 @@ export class FlowmeCardEditor extends LitElement {
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
     this.selectedFlowId = flow.id;
-    this.statusMessage = `Created flow ${flow.id} with ${waypoints.length} waypoint(s).`;
     this.pushPatch(prev, next, `suggest-path ${flow.id}`);
   }
 
   private cancelSuggestion(): void {
     this.suggestPreview = null;
-    this.statusMessage = 'Suggestion dismissed.';
   }
 
   private renderSuggestPreview(): TemplateResult | typeof nothing {
@@ -2394,7 +2380,6 @@ export class FlowmeCardEditor extends LitElement {
       const { config: next, node } = addNode(prev, pos, 'New node');
       this.pushPatch(prev, next, `add node ${node.id}`);
       this.pending = null;
-      this.statusMessage = `Added node ${node.id}.`;
       return;
     }
 
@@ -2414,14 +2399,12 @@ export class FlowmeCardEditor extends LitElement {
       this.selectedFlowId = null;
       this.pushPatch(prev, next, `add overlay ${overlay.id}`);
       this.pending = null;
-      this.statusMessage = `Added overlay ${overlay.id}. Drag to reposition, corner to resize.`;
       return;
     }
 
     if (this.pending?.kind === 'add-flow') {
       if (this.pending.step === 'pick-from') {
         // must click a node; stage clicks don't count
-        this.statusMessage = 'Click the source node handle.';
       }
       return;
     }
@@ -2439,14 +2422,12 @@ export class FlowmeCardEditor extends LitElement {
     this.selectedOverlayId = null;
     this.customConfigDraft = '';
     this.customConfigError = '';
-    this.statusMessage = '';
   };
 
   private onStageContextMenu = (event: MouseEvent): void => {
     if (this.pending) {
       event.preventDefault();
       this.pending = null;
-      this.statusMessage = 'Cancelled.';
     }
   };
 
@@ -2513,11 +2494,6 @@ export class FlowmeCardEditor extends LitElement {
       // Prevent the 'click' event that fires after this pointerup from clearing
       // the selection we just set.
       this.rubberBandJustSelected = true;
-      if (selected.size === 2) {
-        this.statusMessage = `${selected.size} nodes selected — click "Suggest path" to auto-route.`;
-      } else {
-        this.statusMessage = `${selected.size} node(s) selected via rubber-band.`;
-      }
     }
   };
 
@@ -2559,7 +2535,6 @@ export class FlowmeCardEditor extends LitElement {
     if (this.pending?.kind === 'add-flow') {
       if (this.pending.step === 'pick-from') {
         this.pending = { kind: 'add-flow', step: 'pick-to', fromId: nodeId };
-        this.statusMessage = 'Click the destination node.';
         return;
       }
       if (this.pending.step === 'pick-to' && this.pending.fromId !== nodeId) {
@@ -2572,10 +2547,8 @@ export class FlowmeCardEditor extends LitElement {
         const { config: next, flow } = addFlow(prev, this.pending.fromId, nodeId, entity);
         this.pushPatch(prev, next, `add flow ${flow.id}`);
         this.pending = null;
-        this.statusMessage = `Added flow ${flow.id}.`;
         return;
       }
-      this.statusMessage = 'Destination must differ from source.';
     }
   };
 
@@ -2804,20 +2777,12 @@ export class FlowmeCardEditor extends LitElement {
         this.selectedNodeId = next.size === 1 ? Array.from(next)[0]! : null;
         this.selectedFlowId = null;
         this.selectedOverlayId = null;
-        if (next.size === 2) {
-          this.statusMessage = 'Two nodes selected — click "Suggest path" to auto-route, or use the toolbar actions.';
-        } else if (next.size > 0) {
-          this.statusMessage = `${next.size} node(s) selected. Shift+click to add/remove. Escape to clear.`;
-        } else {
-          this.statusMessage = '';
-        }
       } else {
         // Normal click: single-select (clears any multi-selection)
         this.selectedNodeIds = new Set([nodeId]);
         this.selectedNodeId = nodeId;
         this.selectedFlowId = null;
         this.selectedOverlayId = null;
-        this.statusMessage = '';
       }
       return;
     }
@@ -2969,7 +2934,6 @@ export class FlowmeCardEditor extends LitElement {
       this.selectedFlowId = null;
       this.selectedOverlayId = null;
       this.rubberBand = null;
-      this.statusMessage = '';
       return;
     }
     const mod = event.metaKey || event.ctrlKey;
