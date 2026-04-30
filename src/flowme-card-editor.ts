@@ -146,7 +146,19 @@ export class FlowmeCardEditor extends LitElement {
    *  Used by the Cancel button to discard all in-session edits. */
   @state() private savedConfig?: FlowmeConfig;
 
+  // ── Zoom / pan state ──────────────────────────────────────────────────────
+  @state() private scale = 1;
+  @state() private panX = 0;
+  @state() private panY = 0;
+  /** Minimum scale: fit entire card in canvas zone. Computed in firstUpdated(). */
+  private fitScale = 1;
+  /** True while spacebar is held (enables drag-to-pan). */
+  private spaceHeld = false;
+  /** Pointer id captured for middle-mouse or space+drag pan. */
+  private panPointerId: number | null = null;
+
   private readonly stageRef: Ref<HTMLDivElement> = createRef();
+  private readonly canvasRef: Ref<HTMLDivElement> = createRef();
   private undoStack = new UndoStack((next) => this.applyConfig(next, /*commitToHa*/ false));
   private unsubscribe: (() => void) | null = null;
   /** True while we are in the middle of dispatching a config-changed event.
@@ -170,10 +182,10 @@ export class FlowmeCardEditor extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.unsubscribe = this.undoStack.subscribe(() => this.refreshUndoState());
-    // Register on window (for when focus is outside shadow DOM) and on the
-    // document with capture (to intercept before HA panels can swallow the event).
     window.addEventListener('keydown', this.onKeyDown);
     document.addEventListener('keydown', this.onKeyDown, true);
+    document.addEventListener('keydown', this.onSpaceDown, true);
+    document.addEventListener('keyup', this.onSpaceUp, true);
   }
 
   override disconnectedCallback(): void {
@@ -181,6 +193,18 @@ export class FlowmeCardEditor extends LitElement {
     this.unsubscribe?.();
     window.removeEventListener('keydown', this.onKeyDown);
     document.removeEventListener('keydown', this.onKeyDown, true);
+    document.removeEventListener('keydown', this.onSpaceDown, true);
+    document.removeEventListener('keyup', this.onSpaceUp, true);
+    // Reset zoom on editor close
+    this.scale = this.fitScale;
+    this.panX = 0;
+    this.panY = 0;
+    this.spaceHeld = false;
+    this.panPointerId = null;
+  }
+
+  override firstUpdated(): void {
+    this.recalcFit();
   }
 
   setConfig(config: unknown): void {
@@ -231,16 +255,22 @@ export class FlowmeCardEditor extends LitElement {
       <div class="wrap">
 
         <!-- ZONE 1 — Canvas -->
-        <div class="z-canvas">
+        <div
+          class="z-canvas"
+          ${ref(this.canvasRef)}
+          @wheel=${this.onCanvasWheel}
+          @pointerdown=${this.onCanvasPointerDown}
+          @pointermove=${this.onCanvasPointerMove}
+          @pointerup=${this.onCanvasPointerUp}
+          @pointercancel=${this.onCanvasPointerUp}
+        >
           <div
             class=${`stage ${
-              this.pending?.kind === 'add-node'
-                ? 'mode-add-node'
-                : this.pending?.kind === 'add-overlay'
-                  ? 'mode-add-overlay'
-                  : ''
+              this.spaceHeld ? 'mode-pan'
+              : this.pending?.kind === 'add-node' ? 'mode-add-node'
+              : this.pending?.kind === 'add-overlay' ? 'mode-add-overlay'
+              : ''
             }`}
-            style=""
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
             @pointerdown=${this.onStagePointerDown}
@@ -249,18 +279,24 @@ export class FlowmeCardEditor extends LitElement {
             @pointercancel=${this.onStagePointerUp}
             ${ref(this.stageRef)}
           >
+            <!-- canvas-content: zoom/pan transform applied here -->
             <div
-              class="background"
-              style=${bgUrl ? `background-image: url('${bgUrl}');` : ''}
-            ></div>
-            <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
-              ${this.config.flows.map((f) => this.renderFlowConnector(f))}
-            </svg>
-            ${this.config.flows.filter((f) => f.id === this.selectedFlowId).map((f) => this.renderWaypointHandles(f))}
-            ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
-            ${this.config.nodes.map((n) => this.renderHandle(n))}
-            ${this.renderSuggestPreview()}
-            ${this.renderRubberBand()}
+              class="canvas-content"
+              style=${`transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
+            >
+              <div
+                class="background"
+                style=${bgUrl ? `background-image: url('${bgUrl}');` : ''}
+              ></div>
+              <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
+                ${this.config.flows.map((f) => this.renderFlowConnector(f))}
+              </svg>
+              ${this.config.flows.filter((f) => f.id === this.selectedFlowId).map((f) => this.renderWaypointHandles(f))}
+              ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
+              ${this.config.nodes.map((n) => this.renderHandle(n))}
+              ${this.renderSuggestPreview()}
+              ${this.renderRubberBand()}
+            </div>
           </div>
           ${this.renderSuggestBar()}
         </div>
@@ -268,23 +304,44 @@ export class FlowmeCardEditor extends LitElement {
         <!-- ZONE 2 — Toolbar (3-column grid) -->
         <div class="z-toolbar">
 
-          <!-- Left (10%): Undo / Redo stacked -->
+          <!-- Left (15%): Row 1 = Undo/Redo, Row 2 = Zoom−/+/Fit -->
           <div class="tb-col-undo">
-            <button
-              class="tb-icon-btn"
-              ?disabled=${!this.canUndo}
-              title=${this.undoLabel ? `Undo: ${this.undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)'}
-              @click=${() => this.undoStack.undo()}
-            >↩</button>
-            <button
-              class="tb-icon-btn"
-              ?disabled=${!this.canRedo}
-              title=${this.redoLabel ? `Redo: ${this.redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)'}
-              @click=${() => this.undoStack.redo()}
-            >↪</button>
+            <div class="tb-icon-row">
+              <button
+                class="tb-icon-btn"
+                ?disabled=${!this.canUndo}
+                title=${this.undoLabel ? `Undo: ${this.undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)'}
+                @click=${() => this.undoStack.undo()}
+              >↩</button>
+              <button
+                class="tb-icon-btn"
+                ?disabled=${!this.canRedo}
+                title=${this.redoLabel ? `Redo: ${this.redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)'}
+                @click=${() => this.undoStack.redo()}
+              >↪</button>
+            </div>
+            <div class="tb-icon-row">
+              <button
+                class="tb-icon-btn"
+                ?disabled=${this.scale <= this.fitScale}
+                title="Zoom out"
+                @click=${() => this.adjustZoom(0.8)}
+              >−</button>
+              <button
+                class="tb-icon-btn"
+                ?disabled=${this.scale >= 5}
+                title="Zoom in"
+                @click=${() => this.adjustZoom(1.25)}
+              >+</button>
+              <button
+                class="tb-icon-btn"
+                title="Fit to canvas"
+                @click=${() => this.resetZoom()}
+              >⊡</button>
+            </div>
           </div>
 
-          <!-- Centre (55%): Row 1 = add/multiselect, Row 2 = Save/Cancel -->
+          <!-- Centre (50%): Row 1 = add/multiselect, Row 2 = Save/Cancel -->
           <div class="tb-col-actions">
             <div class="tb-row tb-row-actions">
               ${multiSelect
@@ -2631,6 +2688,8 @@ export class FlowmeCardEditor extends LitElement {
     if (this.previewMode) return;
     if (this.pending) return;
     if (!this.config) return;
+    // Space+drag is handled by the canvas pan; don't start a node/waypoint drag.
+    if (this.spaceHeld) return;
     const el = event.currentTarget as HTMLElement;
     const waypointIndexRaw = el.dataset['waypointIndex'];
     const flowId = el.dataset['flowId'];
@@ -2950,13 +3009,108 @@ export class FlowmeCardEditor extends LitElement {
     }
   };
 
+  // -- zoom / pan --
+
+  private recalcFit(): void {
+    const canvas = this.canvasRef.value;
+    if (!canvas || !this.config) return;
+    // Stage fills canvas exactly at scale=1; fit level is therefore 1.0.
+    // Pan is reset to (0,0) so the full card is visible.
+    this.fitScale = 1;
+    this.scale = this.fitScale;
+    this.panX = 0;
+    this.panY = 0;
+  }
+
+  private adjustZoom(factor: number, originX?: number, originY?: number): void {
+    const canvas = this.canvasRef.value;
+    const ox = originX ?? (canvas ? canvas.offsetWidth / 2 : 0);
+    const oy = originY ?? (canvas ? canvas.offsetHeight / 2 : 0);
+    const newScale = Math.min(5, Math.max(this.fitScale, this.scale * factor));
+    if (newScale === this.scale) return;
+    // Adjust pan so the point under the origin stays fixed
+    this.panX = ox - (ox - this.panX) * (newScale / this.scale);
+    this.panY = oy - (oy - this.panY) * (newScale / this.scale);
+    this.scale = newScale;
+  }
+
+  private resetZoom(): void {
+    this.scale = this.fitScale;
+    this.panX = 0;
+    this.panY = 0;
+  }
+
+  private onSpaceDown = (e: KeyboardEvent): void => {
+    if (e.code === 'Space' && !e.repeat && !this.spaceHeld) {
+      this.spaceHeld = true;
+      e.preventDefault();
+    }
+  };
+
+  private onSpaceUp = (e: KeyboardEvent): void => {
+    if (e.code === 'Space') {
+      this.spaceHeld = false;
+      if (this.panPointerId !== null) {
+        const canvas = this.canvasRef.value;
+        canvas?.releasePointerCapture(this.panPointerId);
+        this.panPointerId = null;
+      }
+    }
+  };
+
+  private onCanvasWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    const canvas = this.canvasRef.value;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const ox = e.clientX - rect.left;
+    const oy = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.25 : 0.8;
+    this.adjustZoom(factor, ox, oy);
+  };
+
+  private onCanvasPointerDown = (e: PointerEvent): void => {
+    // Middle-mouse pan
+    if (e.button === 1) {
+      e.preventDefault();
+      const canvas = this.canvasRef.value;
+      canvas?.setPointerCapture(e.pointerId);
+      this.panPointerId = e.pointerId;
+      return;
+    }
+    // Space+left-drag pan
+    if (e.button === 0 && this.spaceHeld) {
+      e.preventDefault();
+      e.stopPropagation();
+      const canvas = this.canvasRef.value;
+      canvas?.setPointerCapture(e.pointerId);
+      this.panPointerId = e.pointerId;
+    }
+  };
+
+  private onCanvasPointerMove = (e: PointerEvent): void => {
+    if (this.panPointerId !== e.pointerId) return;
+    this.panX += e.movementX;
+    this.panY += e.movementY;
+  };
+
+  private onCanvasPointerUp = (e: PointerEvent): void => {
+    if (this.panPointerId !== e.pointerId) return;
+    const canvas = this.canvasRef.value;
+    canvas?.releasePointerCapture(e.pointerId);
+    this.panPointerId = null;
+  };
+
   // -- utilities --
 
+  /** Convert client coordinates to card-space percentage, accounting for zoom/pan. */
   private pointerToPercent(event: { clientX: number; clientY: number }): NodePosition | null {
     const stage = this.stageRef.value;
     if (!stage) return null;
     const rect = stage.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
+    // rect already reflects the CSS transform on canvas-content, so clientX/Y maps
+    // directly to card-space coordinates via the stage's bounding rect.
     const x = clampPercent(((event.clientX - rect.left) / rect.width) * 100);
     const y = clampPercent(((event.clientY - rect.top) / rect.height) * 100);
     return { x, y };
@@ -2964,10 +3118,14 @@ export class FlowmeCardEditor extends LitElement {
 
   private pushPatch(prev: FlowmeConfig, next: FlowmeConfig, description: string): void {
     try {
-      const validated = validateConfig(next);
+      // Deep-copy both states via validateConfig to ensure undo/redo restores
+      // fully independent snapshots (prevents shared-reference bugs with waypoints).
+      const validatedPrev = validateConfig(prev);
+      const validatedNext = validateConfig(next);
       this.errorMessage = '';
-      this.undoStack.push({ prev, next: validated, description });
-      this.commitToHa(validated);
+      this.undoStack.push({ prev: validatedPrev, next: validatedNext, description });
+      this.commitToHa(validatedNext);
+      this.config = validatedNext;
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);
       this.config = prev;
@@ -3035,29 +3193,37 @@ export class FlowmeCardEditor extends LitElement {
     .z-toolbar {
       flex: 0 0 72px;
       display: grid;
-      grid-template-columns: 10% 55% 35%;
+      grid-template-columns: 15% 50% 35%;
       background: var(--card-background-color, #1a1a1a);
       border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
       border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.1));
       overflow: hidden;
     }
-    /* ── Toolbar: left column — Undo/Redo ── */
+    /* ── Toolbar: left column — Undo/Redo (row 1) + Zoom (row 2) ── */
     .tb-col-undo {
       display: flex;
       flex-direction: column;
       border-right: 1px solid var(--divider-color, rgba(255,255,255,0.1));
     }
+    .tb-icon-row {
+      flex: 1 1 0;
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.06));
+    }
+    .tb-icon-row:last-child {
+      border-bottom: none;
+    }
     .tb-icon-btn {
       flex: 1 1 0;
-      width: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 14px;
       font: inherit;
       background: transparent;
       border: none;
-      border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.06));
+      border-right: 1px solid var(--divider-color, rgba(255,255,255,0.06));
       color: var(--primary-text-color, #fff);
       cursor: pointer;
       padding: 0;
@@ -3065,7 +3231,7 @@ export class FlowmeCardEditor extends LitElement {
       transition: background 120ms;
     }
     .tb-icon-btn:last-child {
-      border-bottom: none;
+      border-right: none;
     }
     .tb-icon-btn:hover:not(:disabled) {
       background: var(--secondary-background-color, rgba(255,255,255,0.08));
@@ -3205,6 +3371,18 @@ export class FlowmeCardEditor extends LitElement {
     .stage.mode-add-node,
     .stage.mode-add-overlay {
       cursor: copy;
+    }
+    .stage.mode-pan {
+      cursor: grab;
+    }
+    /* canvas-content: receives the CSS transform for zoom/pan */
+    .canvas-content {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: 0 0;
+      will-change: transform;
     }
     .background {
       position: absolute;

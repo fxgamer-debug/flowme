@@ -2,6 +2,41 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.17] — 2026-04-30
+
+### Added
+
+- **FEATURE-1 — Canvas zoom and pan**: The editor canvas now supports interactive zoom and
+  pan. Zoom is applied as a CSS `transform: scale()` on the `canvas-content` layer (the div
+  wrapping background image, SVG connectors, node/overlay handles, and waypoint handles).
+  The canvas zone itself stays at its fixed 140 px height.
+
+  - **Mouse wheel**: Zooms toward the cursor position. `e.preventDefault()` suppresses page
+    scroll. Step: ×1.25 in, ×0.8 out, clamped between fit-scale (1.0) and 5×.
+  - **Middle-mouse drag**: Pans by capturing the pointer on the canvas zone.
+  - **Space + left-drag**: Hold Space to switch the cursor to `grab`; drag to pan.
+    Node/waypoint drag is suppressed while Space is held.
+  - **Fit button (⊡)**: Resets scale to 1.0 and pan to (0, 0).
+  - Zoom/pan state resets when the editor is closed (`disconnectedCallback`).
+  - `pointerToPercent` maps client coordinates through the stage's bounding rect which
+    already accounts for the CSS transform, so node drag positions remain correct at all
+    zoom levels.
+
+- **TOOLBAR-1 — Expanded left column with zoom buttons**: Toolbar grid column proportions
+  updated from `10% 55% 35%` to `15% 50% 35%`. The left column now has two rows:
+  - Row 1: ↩ Undo / ↪ Redo (side by side, as before).
+  - Row 2: − Zoom out / + Zoom in / ⊡ Fit (three equal icon buttons).
+  Zoom out is disabled when at minimum zoom (1×); Zoom in is disabled at 5×; Fit is always
+  enabled.
+
+### Fixed
+
+- **BUG-1 — Waypoint undo deep-copy audit**: `pushPatch` now validates (and thus deep-copies
+  via `JSON.parse/stringify`) both the `prev` and `next` config snapshots before storing them
+  in the undo stack. Previously only `next` was validated/deep-copied; `prev` was stored as a
+  direct reference. Although all commands already called `cloneConfig`, this ensures no shared
+  object references can leak into the undo history regardless of how callers construct configs.
+
 ## [1.16.1] — 2026-04-30
 
 ### Fixed
