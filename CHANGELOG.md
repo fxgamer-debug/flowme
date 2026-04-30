@@ -2,6 +2,53 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.15.3] — 2026-04-30
+
+### Changed
+
+- **LAYOUT-1 — Zone height redistribution and Zone 4 removal**: The HA editor dialog is
+  fixed at approximately 740×510px. The previous four-zone layout wasted too much height on
+  the canvas and element list. New three-zone layout with explicit flex percentages:
+  - **Canvas (Zone 1)**: `flex: 0 0 24%` (~122px) — fills its allocated height, no padding-top
+    aspect ratio trick needed.
+  - **Toolbar (Zone 2)**: `flex: 0 0 7%`, `min-height: 36px` (~36px).
+  - **Options / Context panel (Zone 3)**: `flex: 1 1 0` — fills all remaining height (~352px),
+    scrollable.
+  - **Zone 4 (element list) removed entirely.** Element selection moved into the toolbar
+    right column (see below).
+
+- **TOOLBAR-1 — Redesigned toolbar as a three-column grid**: The toolbar is now a CSS grid
+  (`grid-template-columns: 10% 55% 35%`) with thin vertical dividers between columns.
+  All three columns share identical height and stretch to fill the toolbar zone.
+
+  - **Left column (10%)** — Undo/Redo: Two icon-only buttons (`↩` / `↪`) stacked vertically,
+    each 50% of column height. Icon-only (no label text), tooltip on hover, disabled + 30%
+    opacity when stack is empty.
+
+  - **Centre column (55%)** — Actions: Two rows each 50% of column height.
+    - Row 1 (variable): In normal mode shows `+ Node / + Flow / + Overlay` buttons; in
+      multi-select mode (2+ nodes) shows the existing multi-select action toolbar
+      (`Suggest Path / Hide / Show / Align H / Align V / Delete`). Status and error messages
+      appear inline in Row 2 when set.
+    - Row 2 (fixed): Always shows `💾 Save` (accent colour) and `✕ Cancel` buttons. Logic
+      and behaviour unchanged from v1.0.15.2.
+
+  - **Right column (35%)** — Element selector: Two `<select>` dropdowns stacked vertically.
+    - Type dropdown: `Select type… / Nodes / Flows / Overlays`. Selecting a type clears the
+      canvas selection.
+    - Element dropdown: Populated from the selected type; disabled when no type is chosen.
+      Selecting an element is equivalent to clicking it on the canvas (updates context panel).
+    - Both dropdowns sync automatically when an element is selected on the canvas: the
+      correct type and element are reflected without user interaction.
+
+- **Canvas stage now fills zone height**: With explicit percentage zones the stage no longer
+  needs the `padding-top` aspect-ratio trick. It uses `height: calc(100% - 8px)` to fill
+  the allocated 24% canvas zone.
+
+- `parseAspectRatio` import removed from the editor (no longer used after stage layout change).
+- `elementTab` @state field removed (Zone 4 tabs no longer exist).
+- `renderElementList()` method removed (Zone 4 removed).
+
 ## [1.0.15.2] — 2026-04-29
 
 ### Fixed

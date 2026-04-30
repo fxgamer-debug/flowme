@@ -20,7 +20,7 @@ import type {
 } from './types.js';
 import { LINE_STYLES, ANIMATION_STYLES, PARTICLE_SHAPES, PARTICLE_SPACINGS, FLOW_DIRECTIONS } from './types.js';
 import { validateConfig } from './validate-config.js';
-import { interpolateGradientColor, parseAspectRatio, polylineToSvgPathStyled, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
+import { interpolateGradientColor, polylineToSvgPathStyled, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
 import { getProfile, resolveFlowColor } from './flow-profiles/index.js';
 import { UndoStack } from './editor/undo-stack.js';
 import {
@@ -141,8 +141,10 @@ export class FlowmeCardEditor extends LitElement {
   @state() private redoLabel = '';
   @state() private suggestPreview: SuggestPreview | null = null;
   @state() private suggestBusy = false;
-  /** Active tab in the Zone 4 element list. */
-  @state() private elementTab: 'nodes' | 'flows' | 'overlays' = 'nodes';
+  /** Right-column toolbar selector: which type is shown in the element dropdown. */
+  @state() private selectorType: 'nodes' | 'flows' | 'overlays' | '' = '';
+  /** Right-column toolbar selector: currently shown element id (mirrors canvas selection). */
+  @state() private selectorElement = '';
   /** Config snapshot captured when the editor first opens (external setConfig).
    *  Used by the Cancel button to discard all in-session edits. */
   @state() private savedConfig?: FlowmeConfig;
@@ -214,11 +216,19 @@ export class FlowmeCardEditor extends LitElement {
       `;
     }
 
-    const aspect = parseAspectRatio(this.config.aspect_ratio) ?? 16 / 10;
-    const paddingPct = `${((1 / aspect) * 100).toFixed(4)}%`;
-    this.style.setProperty('--canvas-aspect-padding', paddingPct);
     const bgUrl = this.config.background.default;
     const multiSelect = this.selectedNodeIds.size >= 2;
+
+    // Derive selector dropdown values from canvas selection so they stay in sync.
+    // When something is selected on canvas, reflect it in the dropdowns.
+    // When nothing is selected, keep whatever the user last picked in the type dropdown.
+    const derivedType: typeof this.selectorType =
+      this.selectedNodeId ? 'nodes'
+      : this.selectedFlowId ? 'flows'
+      : this.selectedOverlayId ? 'overlays'
+      : this.selectorType;
+    const derivedElement =
+      this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? '';
 
     return html`
       <div class="wrap">
@@ -233,7 +243,7 @@ export class FlowmeCardEditor extends LitElement {
                   ? 'mode-add-overlay'
                   : ''
             }`}
-            style="padding-top: var(--canvas-aspect-padding, 62.5%);"
+            style=""
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
             @pointerdown=${this.onStagePointerDown}
@@ -258,94 +268,142 @@ export class FlowmeCardEditor extends LitElement {
           ${this.renderSuggestBar()}
         </div>
 
-        <!-- ZONE 2 — Toolbar -->
+        <!-- ZONE 2 — Toolbar (3-column grid) -->
         <div class="z-toolbar">
-          <!-- Left: Undo / Redo -->
-          <div class="tb-group">
+
+          <!-- Left (10%): Undo / Redo stacked -->
+          <div class="tb-col-undo">
             <button
-              class="tb-btn"
+              class="tb-icon-btn"
               ?disabled=${!this.canUndo}
               title=${this.undoLabel ? `Undo: ${this.undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)'}
               @click=${() => this.undoStack.undo()}
-            >↶ Undo</button>
+            >↩</button>
             <button
-              class="tb-btn"
+              class="tb-icon-btn"
               ?disabled=${!this.canRedo}
               title=${this.redoLabel ? `Redo: ${this.redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)'}
               @click=${() => this.undoStack.redo()}
-            >↷ Redo</button>
+            >↪</button>
           </div>
 
-          <!-- Centre: add buttons or multi-select toolbar -->
-          <div class="tb-group tb-centre">
-            ${multiSelect
-              ? this.renderMultiSelectToolbar()
-              : html`
-                <button class="tb-btn"
-                  title="Add node — then click canvas to place"
-                  @click=${() => {
-                    this.pending = { kind: 'add-node' };
-                    this.statusMessage = 'Click anywhere on the canvas to drop a new node.';
-                  }}
-                >+ Node</button>
-                <button class="tb-btn"
-                  title="Add flow between two nodes"
-                  @click=${() => {
-                    this.pending = { kind: 'add-flow', step: 'pick-from' };
-                    this.statusMessage = 'Click the source node.';
-                  }}
-                >+ Flow</button>
-                <button class="tb-btn"
-                  title="Add overlay card"
-                  @click=${() => {
-                    this.pending = { kind: 'add-overlay', overlayType: 'custom' };
-                    this.statusMessage = 'Click anywhere on the canvas to place a custom overlay.';
-                  }}
-                >+ Overlay</button>
-                <button
-                  class="tb-btn"
-                  ?disabled=${this.selectedNodeIds.size !== 2 || this.suggestBusy}
-                  title=${this.selectedNodeIds.size !== 2
-                    ? 'Shift+click exactly two nodes to enable'
-                    : 'Auto-route a flow between the two selected nodes'}
-                  @click=${() => void this.runSuggestPath()}
-                >Suggest path</button>
-              `}
+          <!-- Centre (55%): Row 1 = add/multiselect, Row 2 = Save/Cancel -->
+          <div class="tb-col-actions">
+            <div class="tb-row tb-row-actions">
+              ${multiSelect
+                ? this.renderMultiSelectToolbar()
+                : html`
+                  <button class="tb-btn"
+                    title="Add node — then click canvas to place"
+                    @click=${() => {
+                      this.pending = { kind: 'add-node' };
+                      this.statusMessage = 'Click canvas to place node.';
+                    }}
+                  >+ Node</button>
+                  <button class="tb-btn"
+                    title="Add flow between two nodes"
+                    @click=${() => {
+                      this.pending = { kind: 'add-flow', step: 'pick-from' };
+                      this.statusMessage = 'Click the source node.';
+                    }}
+                  >+ Flow</button>
+                  <button class="tb-btn"
+                    title="Add overlay card"
+                    @click=${() => {
+                      this.pending = { kind: 'add-overlay', overlayType: 'custom' };
+                      this.statusMessage = 'Click canvas to place overlay.';
+                    }}
+                  >+ Overlay</button>
+                `}
+            </div>
+            <div class="tb-row tb-row-save">
+              ${this.statusMessage ? html`<span class="tb-status">${this.statusMessage}</span>` : nothing}
+              ${this.errorMessage ? html`<span class="tb-error">${this.errorMessage}</span>` : nothing}
+              <button
+                class="tb-btn tb-btn-save"
+                title="Apply current configuration to the card"
+                @click=${() => {
+                  if (this.config) this.commitToHa(this.config);
+                  this.statusMessage = 'Saved.';
+                }}
+              >💾 Save</button>
+              <button
+                class="tb-btn tb-btn-cancel"
+                title="Discard all changes since the editor opened"
+                ?disabled=${!this.savedConfig}
+                @click=${() => {
+                  if (!this.savedConfig || !this.config) return;
+                  const prev = this.config;
+                  this.pushPatch(prev, this.savedConfig, 'cancel all changes');
+                }}
+              >✕ Cancel</button>
+            </div>
           </div>
 
-          <!-- Right: status, Save, Cancel -->
-          <div class="tb-group tb-right">
-            ${this.statusMessage ? html`<span class="tb-status">${this.statusMessage}</span>` : nothing}
-            ${this.errorMessage ? html`<span class="tb-error">${this.errorMessage}</span>` : nothing}
-            <button
-              class="tb-btn"
-              title="Apply current configuration to the card"
-              @click=${() => {
-                if (this.config) this.commitToHa(this.config);
-                this.statusMessage = 'Saved.';
+          <!-- Right (35%): Type + Element dropdowns stacked -->
+          <div class="tb-col-selector">
+            <select
+              class="tb-select"
+              .value=${derivedType}
+              @change=${(e: Event) => {
+                this.selectorType = (e.target as HTMLSelectElement).value as typeof this.selectorType;
+                this.selectorElement = '';
+                // Clear canvas selection when manually switching type
+                this.selectedNodeId = null;
+                this.selectedNodeIds = new Set();
+                this.selectedFlowId = null;
+                this.selectedOverlayId = null;
               }}
-            >💾 Save</button>
-            <button
-              class="tb-btn tb-btn-cancel"
-              title="Discard all changes since the editor opened"
-              ?disabled=${!this.savedConfig}
-              @click=${() => {
-                if (!this.savedConfig || !this.config) return;
-                const prev = this.config;
-                this.pushPatch(prev, this.savedConfig, 'cancel all changes');
+            >
+              <option value="">Select type…</option>
+              <option value="nodes">Nodes</option>
+              <option value="flows">Flows</option>
+              <option value="overlays">Overlays</option>
+            </select>
+            <select
+              class="tb-select"
+              ?disabled=${!derivedType}
+              .value=${derivedElement}
+              @change=${(e: Event) => {
+                const id = (e.target as HTMLSelectElement).value;
+                if (!id) return;
+                this.selectorElement = id;
+                if (derivedType === 'nodes') {
+                  this.selectedNodeId = id;
+                  this.selectedNodeIds = new Set([id]);
+                  this.selectedFlowId = null;
+                  this.selectedOverlayId = null;
+                } else if (derivedType === 'flows') {
+                  this.selectedFlowId = id;
+                  this.selectedNodeId = null;
+                  this.selectedNodeIds = new Set();
+                  this.selectedOverlayId = null;
+                } else if (derivedType === 'overlays') {
+                  this.selectedOverlayId = id;
+                  this.selectedNodeId = null;
+                  this.selectedNodeIds = new Set();
+                  this.selectedFlowId = null;
+                }
               }}
-            >✕ Cancel</button>
+            >
+              <option value="">${derivedType ? 'Select element…' : '—'}</option>
+              ${derivedType === 'nodes' ? this.config.nodes.map((n) => html`
+                <option value=${n.id}>${n.label ?? n.id}</option>
+              `) : nothing}
+              ${derivedType === 'flows' ? this.config.flows.map((f) => html`
+                <option value=${f.id}>${f.label ?? f.id}</option>
+              `) : nothing}
+              ${derivedType === 'overlays' ? (this.config.overlays ?? []).map((o, i) => html`
+                <option value=${o.id ?? String(i)}>Overlay ${i + 1}${o.id ? ` (${o.id})` : ''}</option>
+              `) : nothing}
+            </select>
           </div>
+
         </div>
 
         <!-- ZONE 3 — Context panel -->
         <div class="z-context">
           ${this.renderContextPanel()}
-        </div>
-
-        <!-- ZONE 4 — Element list -->
-        <div class="z-elements">
-          ${this.renderElementList()}
         </div>
 
       </div>
@@ -1834,122 +1892,6 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
-  // ── Zone 4: element list ───────────────────────────────────────────────────
-
-  /** Horizontal scrolling chip list with Nodes / Flows / Overlays tabs. */
-  private renderElementList(): TemplateResult {
-    if (!this.config) return html``;
-    const { nodes, flows } = this.config;
-    const overlays = this.config.overlays ?? [];
-    const tab = this.elementTab;
-
-    const switchTab = (t: typeof tab) => { this.elementTab = t; };
-
-    const nodeChips = tab === 'nodes' ? html`
-      <div class="el-chips">
-        ${nodes.map((n) => html`
-          <div
-            class=${`el-chip ${this.selectedNodeId === n.id ? 'active' : ''}`}
-            style="border-left-color: #4ade80;"
-            @click=${() => {
-              this.selectedNodeId = n.id;
-              this.selectedNodeIds = new Set([n.id]);
-              this.selectedFlowId = null;
-              this.selectedOverlayId = null;
-            }}
-          >
-            <span class="el-chip-id">${n.label ?? n.id}</span>
-            ${n.visible === false ? html`<span class="el-chip-hidden">hidden</span>` : nothing}
-          </div>
-        `)}
-        <div
-          class="el-chip el-chip-add"
-          style="border-left-color: transparent;"
-          @click=${() => {
-            this.pending = { kind: 'add-node' };
-            this.statusMessage = 'Click anywhere on the canvas to drop a new node.';
-          }}
-        >+ Node</div>
-      </div>
-    ` : nothing;
-
-    const flowChips = tab === 'flows' ? html`
-      <div class="el-chips">
-        ${flows.map((f) => {
-          const profile = getProfile(f.domain ?? this.config!.domain);
-          const color = resolveFlowColor(f, profile, f.domain ?? this.config!.domain, 1, this.config!.domain_colors);
-          return html`
-            <div
-              class=${`el-chip ${this.selectedFlowId === f.id ? 'active' : ''}`}
-              style=${`border-left-color: ${color};`}
-              @click=${() => {
-                this.selectedFlowId = f.id;
-                this.selectedNodeId = null;
-                this.selectedNodeIds = new Set();
-                this.selectedOverlayId = null;
-              }}
-            >
-              <span class="el-chip-id">${f.id}</span>
-              <span class="el-chip-sub">${f.from_node}→${f.to_node}</span>
-              ${f.visible === false ? html`<span class="el-chip-hidden">hidden</span>` : nothing}
-            </div>
-          `;
-        })}
-        <div
-          class="el-chip el-chip-add"
-          style="border-left-color: transparent;"
-          @click=${() => {
-            this.pending = { kind: 'add-flow', step: 'pick-from' };
-            this.statusMessage = 'Click the source node.';
-          }}
-        >+ Flow</div>
-      </div>
-    ` : nothing;
-
-    const overlayChips = tab === 'overlays' ? html`
-      <div class="el-chips">
-        ${overlays.map((o) => html`
-          <div
-            class=${`el-chip ${this.selectedOverlayId === o.id ? 'active' : ''}`}
-            style="border-left-color: var(--primary-color, #03a9f4);"
-            @click=${() => {
-              this.selectedOverlayId = o.id;
-              this.selectedNodeId = null;
-              this.selectedNodeIds = new Set();
-              this.selectedFlowId = null;
-            }}
-          >
-            <span class="el-chip-id">${o.id}</span>
-            ${o.visible === false ? html`<span class="el-chip-hidden">hidden</span>` : nothing}
-          </div>
-        `)}
-        <div
-          class="el-chip el-chip-add"
-          style="border-left-color: transparent;"
-          @click=${() => {
-            this.pending = { kind: 'add-overlay', overlayType: 'custom' };
-            this.statusMessage = 'Click anywhere on the canvas to place a custom overlay.';
-          }}
-        >+ Overlay</div>
-      </div>
-    ` : nothing;
-
-    return html`
-      <div class="el-tabs">
-        <button class=${`el-tab ${tab === 'nodes' ? 'active' : ''}`} @click=${() => switchTab('nodes')}>
-          Nodes (${nodes.length})
-        </button>
-        <button class=${`el-tab ${tab === 'flows' ? 'active' : ''}`} @click=${() => switchTab('flows')}>
-          Flows (${flows.length})
-        </button>
-        <button class=${`el-tab ${tab === 'overlays' ? 'active' : ''}`} @click=${() => switchTab('overlays')}>
-          Overlays (${overlays.length})
-        </button>
-      </div>
-      ${nodeChips}${flowChips}${overlayChips}
-    `;
-  }
-
   // ──────────────────────────────────────────────────────────────────────────
 
   private renderRubberBand(): TemplateResult | typeof nothing {
@@ -2993,99 +2935,182 @@ export class FlowmeCardEditor extends LitElement {
       display: block;
       font-family: var(--paper-font-body1_-_font-family, inherit);
     }
-    /* ── Four-zone layout ──────────────────────────────────────────────── */
+    /* ── Three-zone layout ─────────────────────────────────────────────────
+       HA editor dialog is ~510px tall. Target split:
+         Canvas   24% ≈ 122px
+         Toolbar   7% ≈  36px  (min 36px)
+         Options  69% ≈ 352px  (flex-grows to fill remainder)
+    ────────────────────────────────────────────────────────────────────── */
     .wrap {
       display: flex;
       flex-direction: column;
-      /* min-height ensures usability when HA doesn't give :host an explicit
-         height; height: 100% fills the host if HA does size it. */
+      /* min-height: HA doesn't always give :host an explicit height;
+         600px ensures the editor is usable in any context. */
       min-height: 600px;
       height: 100%;
       padding: 0;
       gap: 0;
       overflow: hidden;
     }
-    /* ZONE 1 — Canvas */
+    /* ZONE 1 — Canvas (24% of total) */
     .z-canvas {
-      flex: 0 0 auto;
+      flex: 0 0 24%;
       width: 100%;
+      overflow: hidden;
     }
-    /* ZONE 2 — Toolbar */
+    /* ZONE 2 — Toolbar (7% of total, min 36px) */
     .z-toolbar {
-      flex: 0 0 auto;
-      min-height: 48px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
+      flex: 0 0 7%;
+      min-height: 36px;
+      display: grid;
+      grid-template-columns: 10% 55% 35%;
       background: var(--card-background-color, #1a1a1a);
       border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
       border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.1));
-      flex-wrap: wrap;
+      overflow: hidden;
     }
-    .tb-group {
+    /* ── Toolbar: left column — Undo/Redo ── */
+    .tb-col-undo {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+    }
+    .tb-icon-btn {
+      flex: 1 1 0;
+      width: 100%;
       display: flex;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
+      font-size: 16px;
+      font: inherit;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.06));
+      color: var(--primary-text-color, #fff);
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      transition: background 120ms;
     }
-    .tb-centre {
-      flex: 1 1 auto;
-      flex-wrap: wrap;
+    .tb-icon-btn:last-child {
+      border-bottom: none;
     }
-    .tb-right {
-      margin-left: auto;
-      gap: 6px;
+    .tb-icon-btn:hover:not(:disabled) {
+      background: var(--secondary-background-color, rgba(255,255,255,0.08));
+    }
+    .tb-icon-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    /* ── Toolbar: centre column — Actions ── */
+    .tb-col-actions {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+      overflow: hidden;
+    }
+    .tb-row {
+      flex: 1 1 0;
+      display: flex;
+      align-items: stretch;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .tb-row-save {
+      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.06));
     }
     .tb-btn {
-      display: inline-flex;
+      flex: 1 1 0;
+      display: flex;
       align-items: center;
-      gap: 4px;
-      min-height: 36px;
-      padding: 0 12px;
+      justify-content: center;
       font: inherit;
-      font-size: 12px;
-      border-radius: 6px;
-      border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
-      background: var(--secondary-background-color, rgba(255,255,255,0.06));
+      font-size: 11px;
+      padding: 0 4px;
+      border: none;
+      border-right: 1px solid var(--divider-color, rgba(255,255,255,0.08));
+      background: transparent;
       color: var(--primary-text-color, #fff);
       cursor: pointer;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       transition: background 120ms;
     }
+    .tb-btn:last-child {
+      border-right: none;
+    }
     .tb-btn:hover:not(:disabled) {
-      background: var(--primary-color, #03a9f4);
-      color: var(--text-primary-color, #fff);
-      border-color: var(--primary-color, #03a9f4);
+      background: var(--secondary-background-color, rgba(255,255,255,0.1));
     }
     .tb-btn:disabled {
-      opacity: 0.4;
+      opacity: 0.35;
       cursor: not-allowed;
     }
+    .tb-btn-save {
+      background: var(--primary-color, #03a9f4);
+      color: var(--text-primary-color, #fff);
+      font-weight: 600;
+    }
+    .tb-btn-save:hover:not(:disabled) {
+      filter: brightness(1.15);
+    }
     .tb-btn-cancel:hover:not(:disabled) {
-      background: var(--error-color, #ef4444);
-      border-color: var(--error-color, #ef4444);
+      background: var(--error-color, rgba(239,68,68,0.2));
+      color: var(--error-color, #ef4444);
     }
     .tb-status {
-      font-size: 11px;
+      flex: 1 1 auto;
+      font-size: 10px;
       color: #4ade80;
       white-space: nowrap;
-      max-width: 200px;
       overflow: hidden;
       text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
     }
     .tb-error {
-      font-size: 11px;
+      flex: 1 1 auto;
+      font-size: 10px;
       color: var(--error-color, #f44336);
       white-space: nowrap;
-      max-width: 200px;
       overflow: hidden;
       text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
     }
-    /* ZONE 3 — Context panel */
+    /* ── Toolbar: right column — Element selector ── */
+    .tb-col-selector {
+      display: flex;
+      flex-direction: column;
+      padding: 1px 2px;
+      gap: 1px;
+      overflow: hidden;
+    }
+    .tb-select {
+      flex: 1 1 0;
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 11px;
+      font: inherit;
+      font-size: 11px;
+      background: var(--card-background-color, #1a1a1a);
+      color: var(--primary-text-color, #fff);
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.15));
+      border-radius: 3px;
+      padding: 0 2px;
+      min-height: 0;
+    }
+    .tb-select:disabled {
+      opacity: 0.4;
+    }
+    /* ZONE 3 — Context / Options panel (flex-grows to fill remaining height) */
     .z-context {
       flex: 1 1 0;
-      overflow-y: auto;
       min-height: 0;
+      overflow-y: auto;
     }
     .z-context-body {
       padding: 8px 0;
@@ -3094,96 +3119,13 @@ export class FlowmeCardEditor extends LitElement {
       display: flex;
       flex-direction: column;
     }
-    /* ZONE 4 — Element list */
-    .z-elements {
-      flex: 0 0 auto;
-      min-height: 96px;
-      max-height: 130px;
-      display: flex;
-      flex-direction: column;
-      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
-      background: var(--card-background-color, #1a1a1a);
-    }
-    .el-tabs {
-      display: flex;
-      border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.1));
-      flex-shrink: 0;
-    }
-    .el-tab {
-      flex: 1;
-      padding: 5px 4px;
-      font: inherit;
-      font-size: 11px;
-      text-align: center;
-      cursor: pointer;
-      border: none;
-      border-bottom: 2px solid transparent;
-      background: none;
-      color: var(--secondary-text-color, rgba(255,255,255,0.55));
-      transition: color 120ms, border-color 120ms;
-    }
-    .el-tab.active {
-      color: var(--primary-color, #03a9f4);
-      border-bottom-color: var(--primary-color, #03a9f4);
-    }
-    .el-chips {
-      display: flex;
-      gap: 6px;
-      overflow-x: auto;
-      padding: 6px 10px;
-      align-items: stretch;
-      flex: 1;
-    }
-    .el-chip {
-      flex: 0 0 auto;
-      min-width: 72px;
-      max-width: 140px;
-      padding: 4px 8px;
-      border-radius: 6px;
-      border-left: 3px solid var(--primary-color, #03a9f4);
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      background: var(--secondary-background-color, rgba(255,255,255,0.05));
-      font-size: 11px;
-      transition: background 120ms;
-    }
-    .el-chip:hover {
-      background: rgba(255,255,255,0.1);
-    }
-    .el-chip.active {
-      background: rgba(3,169,244,0.18);
-      border-color: var(--primary-color, #03a9f4) !important;
-    }
-    .el-chip-add {
-      border-left-color: transparent !important;
-      opacity: 0.55;
-      font-style: italic;
-    }
-    .el-chip-id {
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .el-chip-sub {
-      font-size: 10px;
-      opacity: 0.6;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .el-chip-hidden {
-      font-size: 10px;
-      color: var(--error-color, #f44336);
-    }
     /* ── Canvas stage ──────────────────────────────────────────────────── */
     .stage {
       position: relative;
-      width: calc(100% - 24px);
-      margin: 8px 12px 4px;
-      height: 0;
+      /* Fill the full z-canvas zone height; width inset for border aesthetics. */
+      width: calc(100% - 16px);
+      margin: 4px 8px;
+      height: calc(100% - 8px);
       overflow: hidden;
       border-radius: 8px;
       border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
