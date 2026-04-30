@@ -2,6 +2,21 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18.2-debug] — 2026-04-30
+
+### Changed (debug pre-release — do not use in production)
+
+- **BUG-1**: Background moved back inside `canvas-content` so it zooms/pans with flow
+  content. Fixed `fitScale`/`fitPanX` calculation: when the card's natural aspect fits
+  within the stage at scale=1 the content is centred horizontally (`fitPanX`); when wider,
+  scale is reduced so the full width fits. `resetZoom` and `disconnectedCallback` now
+  restore `fitPanX/Y` not just zero. `pointerToPercent` rewritten with the correct inverse
+  transform formula: `cardPos = (screenOffset − stageEdge − panX) / (stageSize × scale)`.
+
+- **BUG-2 debug logging**: Added `console.log('[FlowMe] …')` statements to
+  `acceptSuggestion` to diagnose the Suggest Path flow-creation failure. Run Suggest
+  Path → Accept and paste the browser console output to identify the root cause.
+
 ## [1.18.1] — 2026-04-30
 
 ### Fixed

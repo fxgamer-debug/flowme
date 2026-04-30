@@ -149,6 +149,9 @@ export class FlowmeCardEditor extends LitElement {
   @state() private panY = 0;
   /** Minimum scale: fit entire card in canvas zone. Updated by ResizeObserver. */
   private fitScale = 1;
+  /** Pan offset at fit level (centres card horizontally when canvas is wider). */
+  private fitPanX = 0;
+  private fitPanY = 0;
   /** True while spacebar is held (enables drag-to-pan). */
   private spaceHeld = false;
   /** Pointer id captured for middle-mouse or space+drag pan. */
@@ -191,8 +194,8 @@ export class FlowmeCardEditor extends LitElement {
     this._canvasResizeObserver = undefined;
     // Reset zoom on editor close
     this.scale = this.fitScale;
-    this.panX = 0;
-    this.panY = 0;
+    this.panX = this.fitPanX;
+    this.panY = this.fitPanY;
     this.spaceHeld = false;
     this.panPointerId = null;
   }
@@ -203,26 +206,42 @@ export class FlowmeCardEditor extends LitElement {
     this._canvasResizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      const { width, height } = entry.contentRect;
-      if (width === 0 || height === 0) return;
+      // Use the canvas zone's actual dimensions (offsetWidth/Height) for accuracy.
+      const canvasEl = this.canvasRef.value;
+      const canvasW = canvasEl?.offsetWidth ?? entry.contentRect.width;
+      const canvasH = canvasEl?.offsetHeight ?? entry.contentRect.height;
+      if (canvasW === 0 || canvasH === 0) return;
       const cfg = this.config;
       const [rawW, rawH] = (cfg?.aspect_ratio ?? '16:10').split(':').map(Number);
       const w = rawW || 16;
       const h = rawH || 10;
-      // fitScale: shrink scale so the card's full width (w:h aspect) fits within the canvas.
-      // At scale=1 the stage fills the canvas; if the canvas is narrower than its natural
-      // aspect the content clips. Compute the scale that fits width into canvas height.
-      const naturalAspect = w / h;
-      const canvasAspect = width / height;
-      // If natural aspect > canvas aspect: content is wider than canvas → scale down
-      const newFitScale = canvasAspect >= naturalAspect ? 1 : canvasAspect / naturalAspect;
-      const prev = this.fitScale;
+      // canvas-content is sized to fill the stage (inset: 4px 8px inside z-canvas).
+      // Stage width = canvasW - 16, stage height = canvasH - 8.
+      const stageW = canvasW - 16;
+      const stageH = canvasH - 8;
+      // The card's natural width at scale=1 when stage height is fixed:
+      const cardNaturalW = stageH * (w / h);
+      let newFitScale: number;
+      let newFitPanX: number;
+      const newFitPanY = 0;
+      if (cardNaturalW <= stageW) {
+        // Card fits within stage width at scale=1 → no scaling needed, centre horizontally.
+        newFitScale = 1;
+        newFitPanX = (stageW - cardNaturalW) / 2;
+      } else {
+        // Card is wider than stage → scale down so full card width fits.
+        newFitScale = stageW / cardNaturalW;
+        newFitPanX = 0;
+      }
+      const prevScale = this.fitScale;
       this.fitScale = newFitScale;
-      // Reset pan/scale only if still at the previous fit level (no user interaction)
-      if (this.scale === 1 || this.scale === prev) {
-        this.scale = this.fitScale;
-        this.panX = 0;
-        this.panY = 0;
+      this.fitPanX = newFitPanX;
+      this.fitPanY = newFitPanY;
+      // Reset to fit only if the user hasn't interacted (still at previous fit level).
+      if (this.scale === 1 || this.scale === prevScale) {
+        this.scale = newFitScale;
+        this.panX = newFitPanX;
+        this.panY = newFitPanY;
       }
     });
     this._canvasResizeObserver.observe(canvasEl);
@@ -296,16 +315,16 @@ export class FlowmeCardEditor extends LitElement {
             @contextmenu=${this.onStageContextMenu}
             ${ref(this.stageRef)}
           >
-            <!-- background fills the stage at all zoom levels (not transformed) -->
-            <div
-              class="background"
-              style=${bgUrl ? `background-image: url('${bgUrl}');` : ''}
-            ></div>
-            <!-- canvas-content: zoom/pan transform applied here -->
+            <!-- canvas-content: zoom/pan transform applied here.
+                 Background and all content are inside so they move together. -->
             <div
               class="canvas-content"
               style=${`transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
             >
+              <div
+                class="background"
+                style=${bgUrl ? `background-image: url('${bgUrl}');` : ''}
+              ></div>
               <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
                 ${this.config.flows.map((f) => this.renderFlowConnector(f))}
               </svg>
@@ -2363,6 +2382,13 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   private acceptSuggestion = (): void => {
+    /* eslint-disable no-console */
+    console.log('[FlowMe] acceptSuggestion START');
+    console.log('[FlowMe] selectedNodeIds:', [...this.selectedNodeIds]);
+    console.log('[FlowMe] suggestPreview:', JSON.stringify(this.suggestPreview));
+    console.log('[FlowMe] current flows count:', this.config?.flows.length ?? 'no config');
+    console.log('[FlowMe] current flows:', this.config?.flows.map((f) => f.id) ?? []);
+    /* eslint-enable no-console */
     if (!this.config || !this.suggestPreview) return;
     const { fromNodeId, toNodeId, waypoints } = this.suggestPreview;
     const entity =
@@ -2403,11 +2429,19 @@ export class FlowmeCardEditor extends LitElement {
     }
     // Clear preview and selection BEFORE pushPatch so Lit sees all state updates
     // in the same render batch.
+    /* eslint-disable no-console */
+    console.log('[FlowMe] nextConfig flows count:', next.flows.length);
+    console.log('[FlowMe] new/updated flow:', JSON.stringify(next.flows.find((f) => f.id === flowId)));
+    /* eslint-enable no-console */
     this.suggestPreview = null;
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
     this.selectedOverlayId = null;
     this.pushPatch(prev, next, `suggest-path ${flowId}`);
+    /* eslint-disable no-console */
+    console.log('[FlowMe] after pushPatch flows:', this.config?.flows.length ?? 'no config');
+    console.log('[FlowMe] selectedFlowId:', flowId);
+    /* eslint-enable no-console */
     // Select the new/updated flow after config is updated so renderWaypointHandles
     // sees the correct waypoints in this.config.
     this.selectedFlowId = flowId;
@@ -2987,8 +3021,8 @@ export class FlowmeCardEditor extends LitElement {
 
   private resetZoom(): void {
     this.scale = this.fitScale;
-    this.panX = 0;
-    this.panY = 0;
+    this.panX = this.fitPanX;
+    this.panY = this.fitPanY;
   }
 
   private onSpaceDown = (e: KeyboardEvent): void => {
@@ -3070,33 +3104,41 @@ export class FlowmeCardEditor extends LitElement {
    * equals the canvas rect. At scale>1 the stage bounding rect is larger.
    * Dividing by scale restores the original CSS size.
    */
+  /**
+   * Convert a screen-space pointer coordinate to a card-space percentage [0..100].
+   *
+   * Layout chain:
+   *   canvas (.z-canvas)
+   *     └─ stage (position:absolute; inset:4px 8px)
+   *          └─ canvas-content (position:absolute; inset:0)
+   *               transform: translate(panX, panY) scale(scale); transform-origin:0 0
+   *
+   * canvas-content origin is at stage top-left (CSS coords). A card point at
+   * (cx%, cy%) sits at CSS position (stageW*cx/100, stageH*cy/100) within
+   * canvas-content. After the transform it appears at screen offset:
+   *   screenX = stageLeft + panX + stageW*(cx/100)*scale
+   *   screenY = stageTop  + panY + stageH*(cy/100)*scale
+   *
+   * Inverting:
+   *   cx% = (screenX - stageLeft - panX) / (stageW * scale) * 100
+   *   cy% = (screenY - stageTop  - panY) / (stageH * scale) * 100
+   *
+   * stageLeft = canvasLeft + 8;  stageTop = canvasTop + 4
+   */
   private pointerToPercent(event: { clientX: number; clientY: number }): NodePosition | null {
     const canvas = this.canvasRef.value;
     if (!canvas) return null;
     const canvasRect = canvas.getBoundingClientRect();
-    if (canvasRect.width === 0 || canvasRect.height === 0) return null;
-    // Unscaled (CSS) stage dimensions — the stage has 4px top/bottom and 8px l/r inset.
-    const stageW = canvasRect.width - 16;  // 8px left + 8px right
-    const stageH = canvasRect.height - 8;  // 4px top + 4px bottom
+    // Unscaled stage dimensions
+    const stageW = canvasRect.width - 16;   // 8px left + 8px right inset
+    const stageH = canvasRect.height - 8;   // 4px top + 4px bottom inset
     if (stageW <= 0 || stageH <= 0) return null;
-    // Mouse position relative to the canvas top-left corner (screen space)
-    const relX = event.clientX - canvasRect.left;
-    const relY = event.clientY - canvasRect.top;
-    // Reverse the transform to get position within the stage in CSS pixels.
-    // The stage origin within the canvas is at (8px, 4px), which is also the
-    // pan origin. The canvas-content transform starts at the canvas top-left.
-    // panX/panY are offsets applied to the canvas-content origin (0,0 = canvas TL).
-    // Stage CSS origin = (8, 4) within canvas.
-    // canvas-content origin = (0, 0) relative to canvas.
-    // cardPos in content space = (relX - panX) / scale
-    // cardPos in stage space = cardPos_content - 8, cardPos_content - 4
-    const contentX = (relX - this.panX) / this.scale;
-    const contentY = (relY - this.panY) / this.scale;
-    // Stage inset: left=8, top=4 (from .stage { position:absolute; inset: 4px 8px })
-    const stageX = contentX - 8;
-    const stageY = contentY - 4;
-    const x = clampPercent((stageX / stageW) * 100);
-    const y = clampPercent((stageY / stageH) * 100);
+    // Pointer offset from the stage top-left corner (screen space)
+    const fromStageLeft = event.clientX - (canvasRect.left + 8);
+    const fromStageTop  = event.clientY - (canvasRect.top  + 4);
+    // Reverse translate then scale:  cardPos = (screenOffset - pan) / (stageSize * scale)
+    const x = clampPercent(((fromStageLeft - this.panX) / (stageW * this.scale)) * 100);
+    const y = clampPercent(((fromStageTop  - this.panY) / (stageH * this.scale)) * 100);
     return { x, y };
   }
 
