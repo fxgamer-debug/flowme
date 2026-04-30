@@ -619,47 +619,161 @@ export class FlowmeCardEditor extends LitElement {
     if (this.selectedNodeId) {
       const node = this.config.nodes.find((n) => n.id === this.selectedNodeId);
       if (!node) return nothing;
+
+      const patchNode = (patch: Partial<typeof node>, description: string) => {
+        if (!this.config) return;
+        const prev = this.config;
+        const next = {
+          ...prev,
+          nodes: prev.nodes.map((n) => n.id === node.id ? { ...n, ...patch } : n),
+        };
+        this.pushPatch(prev, next, description);
+      };
+
       return html`
         <div class="inspector">
           <h4>Node: ${node.id}</h4>
-          <label>
-            Label
-            <input
-              type="text"
-              .value=${node.label ?? ''}
-              @change=${(e: Event) => this.onNodeLabelChange(node.id, e)}
-            />
-          </label>
-          <label>
-            Entity
-            ${this.renderEntityPicker(
-              node.entity ?? '',
-              (value) => this.setNodeEntity(node.id, value),
-              { includeDomains: ['sensor', 'binary_sensor', 'input_number', 'number'] },
-            )}
-          </label>
-          <label>
-            Node opacity
-            <div class="inspector-slider-row">
+
+          <!-- Row 1: Label | Entity -->
+          <div class="node-row">
+            <label class="node-cell">
+              <span class="node-cell-label">Label</span>
               <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
+                type="text"
+                .value=${node.label ?? ''}
+                @change=${(e: Event) => this.onNodeLabelChange(node.id, e)}
+              />
+            </label>
+            <label class="node-cell">
+              <span class="node-cell-label">Entity</span>
+              ${this.renderEntityPicker(
+                node.entity ?? '',
+                (value) => this.setNodeEntity(node.id, value),
+                { includeDomains: ['sensor', 'binary_sensor', 'input_number', 'number'] },
+              )}
+            </label>
+          </div>
+
+          <!-- Row 2: Colour | Visible | Show value | Show label -->
+          <div class="node-row">
+            <label class="node-cell">
+              <span class="node-cell-label">Colour</span>
+              <input
+                type="color"
+                .value=${node.color ?? '#ffffff'}
+                @change=${(e: Event) => {
+                  const v = (e.target as HTMLInputElement).value;
+                  patchNode({ color: v }, `set color of ${node.id}`);
+                }}
+              />
+            </label>
+            <label class="node-cell node-cell-toggle">
+              <input
+                type="checkbox"
+                .checked=${node.visible !== false}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const checked = (e.target as HTMLInputElement).checked;
+                  const prev = this.config;
+                  const next = setNodeVisible(prev, node.id, checked);
+                  this.pushPatch(prev, next, `set visible of ${node.id}`);
+                }}
+              />
+              <span class="node-cell-label">Visible</span>
+            </label>
+            <label class="node-cell node-cell-toggle">
+              <input
+                type="checkbox"
+                .checked=${node.show_value !== false}
+                @change=${(e: Event) => {
+                  const checked = (e.target as HTMLInputElement).checked;
+                  patchNode({ show_value: checked || undefined }, `set show_value of ${node.id}`);
+                }}
+              />
+              <span class="node-cell-label">Show value</span>
+            </label>
+            <label class="node-cell node-cell-toggle">
+              <input
+                type="checkbox"
+                .checked=${node.show_label !== false}
+                @change=${(e: Event) => {
+                  const checked = (e.target as HTMLInputElement).checked;
+                  patchNode({ show_label: checked || undefined }, `set show_label of ${node.id}`);
+                }}
+              />
+              <span class="node-cell-label">Show label</span>
+            </label>
+          </div>
+
+          <!-- Row 3: X% | Y% | Size | Opacity -->
+          <div class="node-row">
+            <label class="node-cell">
+              <span class="node-cell-label">X %</span>
+              <input
+                type="number"
+                min="0" max="100" step="1"
+                .value=${String(Math.round(node.position.x))}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!Number.isFinite(v)) return;
+                  const prev = this.config;
+                  const next = moveNode(prev, node.id, { x: v, y: node.position.y });
+                  this.pushPatch(prev, next, `move ${node.id} x`);
+                }}
+              />
+            </label>
+            <label class="node-cell">
+              <span class="node-cell-label">Y %</span>
+              <input
+                type="number"
+                min="0" max="100" step="1"
+                .value=${String(Math.round(node.position.y))}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  if (!Number.isFinite(v)) return;
+                  const prev = this.config;
+                  const next = moveNode(prev, node.id, { x: node.position.x, y: v });
+                  this.pushPatch(prev, next, `move ${node.id} y`);
+                }}
+              />
+            </label>
+            <label class="node-cell">
+              <span class="node-cell-label">Size px</span>
+              <input
+                type="number"
+                min="4" max="60" step="1"
+                .value=${String(node.size ?? 12)}
+                @change=${(e: Event) => {
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!Number.isFinite(v)) return;
+                  patchNode({ size: v }, `set size of ${node.id}`);
+                }}
+              />
+            </label>
+            <label class="node-cell">
+              <span class="node-cell-label">Opacity</span>
+              <input
+                type="number"
+                min="0" max="1" step="0.05"
                 .value=${String(node.opacity ?? 1)}
                 @change=${(e: Event) => {
                   if (!this.config) return;
                   const v = parseFloat((e.target as HTMLInputElement).value);
                   if (!Number.isFinite(v)) return;
                   const prev = this.config;
-                  const next = setNodeOpacity(prev, node.id, v < 1 || v > 0 ? v : undefined);
+                  const next = setNodeOpacity(prev, node.id, v >= 1 ? undefined : v);
                   this.pushPatch(prev, next, `set opacity of ${node.id}`);
                 }}
               />
-              <span>${(node.opacity ?? 1).toFixed(2)}</span>
-            </div>
-          </label>
-          <button class="danger" @click=${() => this.removeNode(node.id)}>Delete node</button>
+            </label>
+          </div>
+
+          <!-- Delete -->
+          <div class="node-row">
+            <button class="danger" @click=${() => this.removeNode(node.id)}>Delete node</button>
+          </div>
         </div>
       `;
     }
@@ -2933,9 +3047,9 @@ export class FlowmeCardEditor extends LitElement {
     }
     /* ── Three-zone layout ─────────────────────────────────────────────────
        HA editor dialog is ~510px tall. Target split:
-         Canvas   24% ≈ 122px
-         Toolbar   7% ≈  36px  (min 36px)
-         Options  69% ≈ 352px  (flex-grows to fill remainder)
+         Canvas  140px  (fixed — avoids %-of-min-height ambiguity)
+         Toolbar  36px  (fixed)
+         Options  flex-grows to fill all remaining height
     ────────────────────────────────────────────────────────────────────── */
     .wrap {
       display: flex;
@@ -2948,16 +3062,16 @@ export class FlowmeCardEditor extends LitElement {
       gap: 0;
       overflow: hidden;
     }
-    /* ZONE 1 — Canvas (24% of total) */
+    /* ZONE 1 — Canvas (fixed 140px so height is never ambiguous) */
     .z-canvas {
-      flex: 0 0 24%;
+      flex: 0 0 140px;
       width: 100%;
+      position: relative;
       overflow: hidden;
     }
-    /* ZONE 2 — Toolbar (7% of total, min 36px) */
+    /* ZONE 2 — Toolbar (fixed 72px — two rows of 36px each) */
     .z-toolbar {
-      flex: 0 0 7%;
-      min-height: 36px;
+      flex: 0 0 72px;
       display: grid;
       grid-template-columns: 10% 55% 35%;
       background: var(--card-background-color, #1a1a1a);
@@ -3117,11 +3231,9 @@ export class FlowmeCardEditor extends LitElement {
     }
     /* ── Canvas stage ──────────────────────────────────────────────────── */
     .stage {
-      position: relative;
-      /* Fill the full z-canvas zone height; width inset for border aesthetics. */
-      width: calc(100% - 16px);
-      margin: 4px 8px;
-      height: calc(100% - 8px);
+      position: absolute;
+      /* Inset slightly for border aesthetics; position:absolute fills z-canvas. */
+      inset: 4px 8px;
       overflow: hidden;
       border-radius: 8px;
       border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
@@ -3430,6 +3542,61 @@ export class FlowmeCardEditor extends LitElement {
     }
     .inspector code {
       font-family: var(--code-font-family, ui-monospace, monospace);
+    }
+    /* ── Node inspector compact rows ── */
+    .node-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 6px;
+    }
+    .node-cell {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 0;
+      min-width: 60px;
+      gap: 2px;
+      font-size: 11px;
+    }
+    .node-cell-label {
+      font-size: 10px;
+      opacity: 0.65;
+      white-space: nowrap;
+    }
+    .node-cell input[type='text'],
+    .node-cell input[type='number'] {
+      width: 100%;
+      box-sizing: border-box;
+      font: inherit;
+      font-size: 11px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.2));
+      background: var(--secondary-background-color, rgba(255,255,255,0.06));
+      color: var(--primary-text-color, #fff);
+    }
+    .node-cell input[type='color'] {
+      width: 100%;
+      height: 24px;
+      padding: 1px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.2));
+      background: transparent;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    .node-cell-toggle {
+      flex-direction: row;
+      align-items: center;
+      gap: 4px;
+      min-width: auto;
+    }
+    .node-cell-toggle input[type='checkbox'] {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+      flex-shrink: 0;
     }
     button.danger {
       align-self: flex-start;

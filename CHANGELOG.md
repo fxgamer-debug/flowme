@@ -2,6 +2,32 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.15.5] — 2026-04-30
+
+### Fixed
+
+- **BUG-1 — Canvas not visible after v1.0.15.3 layout changes**: `flex: 0 0 24%` on
+  `.z-canvas` is computed from the flex container's resolved height. When `.wrap` has
+  `height: 100%; min-height: 600px` and HA doesn't give the host an explicit height, the
+  percentage flex-basis resolves to zero. Fixed by switching to explicit pixel heights for
+  all fixed zones:
+  - `.z-canvas { flex: 0 0 140px; position: relative }` — canvas zone always exactly 140px.
+  - `.z-toolbar { flex: 0 0 72px }` — toolbar always 72px (two rows of 36px).
+  - `.z-context { flex: 1 1 0 }` — fills all remaining height.
+  - `.stage` changed from `width/height calc(100% - ...)` to `position: absolute; inset: 4px 8px`
+    so it fills its `position: relative` parent without relying on inherited height.
+
+- **BUG-2 — Node inspector missing fields**: The node settings panel only showed Label,
+  Entity, Opacity, and Delete. Added all missing fields in a compact three-row layout:
+  - **Row 1**: Label (text input) | Entity picker
+  - **Row 2**: Colour (color picker) | Visible (checkbox) | Show value (checkbox) |
+    Show label (checkbox)
+  - **Row 3**: X position % | Y position % | Size px | Opacity (all number inputs)
+  - **Row 4**: Delete button
+  All inputs read from and write back to the node config via `pushPatch()` with undo support.
+  Position changes use the existing `moveNode()` command. Visible uses `setNodeVisible()`.
+  Color, size, show_value, show_label patch the node directly via a local `patchNode` helper.
+
 ## [1.0.15.4] — 2026-04-30
 
 ### Fixed
