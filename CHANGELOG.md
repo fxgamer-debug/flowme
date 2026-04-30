@@ -2,9 +2,9 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.18.2-debug] — 2026-04-30
+## [1.18.3] — 2026-05-01
 
-### Changed (debug pre-release — do not use in production)
+### Changed
 
 - **BUG-1**: Background moved back inside `canvas-content` so it zooms/pans with flow
   content. Fixed `fitScale`/`fitPanX` calculation: when the card's natural aspect fits

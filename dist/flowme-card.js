@@ -6772,7 +6772,7 @@ var Ks = Object.defineProperty, Js = Object.getOwnPropertyDescriptor, J = (e, t,
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Ks(t, i, s), s;
 };
-const Qs = "1.18.2-debug", ii = 5e3;
+const Qs = "1.18.3", ii = 5e3;
 console.info(
   `%c flowme %c v${Qs} `,
   "color: white; background: #4ADE80; font-weight: 700;",
