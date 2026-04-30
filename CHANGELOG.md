@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18.4] — 2026-05-01
+
+### Fixed
+
+- **Suggest Path Accept button never fired**: `renderSuggestBar()` was rendered as a child
+  of `.z-canvas` which has `overflow: hidden` and is only `140px` tall. The bar was visually
+  clipped and received no click events. Moved `renderSuggestBar()` outside `.z-canvas` into
+  its own flex slot between the canvas zone and the toolbar. The Accept and Cancel buttons
+  now work correctly.
+
 ## [1.18.3] — 2026-05-01
 
 ### Changed

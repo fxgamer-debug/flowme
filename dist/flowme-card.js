@@ -3219,7 +3219,7 @@ let C = class extends G {
       const e = new Set(Object.keys(this.config.background.weather_states ?? {})), t = C.KNOWN_WEATHER_STATES.find((s) => !e.has(s)) ?? "custom", i = this.config, n = Be(i, t, "");
       this.pushPatch(i, n, `add weather state ${t}`);
     }, this.acceptSuggestion = () => {
-      if (console.log("[FlowMe] acceptSuggestion START"), console.log("[FlowMe] selectedNodeIds:", [...this.selectedNodeIds]), console.log("[FlowMe] suggestPreview:", JSON.stringify(this.suggestPreview)), console.log("[FlowMe] current flows count:", this.config?.flows.length ?? "no config"), console.log("[FlowMe] current flows:", this.config?.flows.map((l) => l.id) ?? []), !this.config || !this.suggestPreview) return;
+      if (!this.config || !this.suggestPreview) return;
       const { fromNodeId: e, toNodeId: t, waypoints: i } = this.suggestPreview, n = window.prompt(
         "Entity for this flow (e.g. sensor.grid_power):",
         "sensor.placeholder_entity"
@@ -3243,7 +3243,7 @@ let C = class extends G {
           )
         };
       }
-      console.log("[FlowMe] nextConfig flows count:", r.flows.length), console.log("[FlowMe] new/updated flow:", JSON.stringify(r.flows.find((l) => l.id === a))), this.suggestPreview = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedNodeId = null, this.selectedOverlayId = null, this.pushPatch(s, r, `suggest-path ${a}`), console.log("[FlowMe] after pushPatch flows:", this.config?.flows.length ?? "no config"), console.log("[FlowMe] selectedFlowId:", a), this.selectedFlowId = a;
+      this.suggestPreview = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedNodeId = null, this.selectedOverlayId = null, this.pushPatch(s, r, `suggest-path ${a}`), this.selectedFlowId = a;
     }, this.cancelSuggestion = () => {
       this.suggestPreview = null;
     }, this.onStageClick = (e) => {
@@ -3535,8 +3535,10 @@ let C = class extends G {
               ${this.renderSuggestPreview()}
             </div>
           </div>
-          ${this.renderSuggestBar()}
         </div>
+
+        <!-- Suggest Path accept/cancel bar — shown between canvas and toolbar -->
+        ${this.renderSuggestBar()}
 
         <!-- ZONE 2 — Toolbar (3-column grid) -->
         <div class="z-toolbar">
@@ -6772,7 +6774,7 @@ var Ks = Object.defineProperty, Js = Object.getOwnPropertyDescriptor, J = (e, t,
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Ks(t, i, s), s;
 };
-const Qs = "1.18.3", ii = 5e3;
+const Qs = "1.18.4", ii = 5e3;
 console.info(
   `%c flowme %c v${Qs} `,
   "color: white; background: #4ADE80; font-weight: 700;",

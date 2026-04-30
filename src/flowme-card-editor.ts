@@ -334,8 +334,10 @@ export class FlowmeCardEditor extends LitElement {
               ${this.renderSuggestPreview()}
             </div>
           </div>
-          ${this.renderSuggestBar()}
         </div>
+
+        <!-- Suggest Path accept/cancel bar — shown between canvas and toolbar -->
+        ${this.renderSuggestBar()}
 
         <!-- ZONE 2 — Toolbar (3-column grid) -->
         <div class="z-toolbar">
@@ -2382,13 +2384,6 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   private acceptSuggestion = (): void => {
-    /* eslint-disable no-console */
-    console.log('[FlowMe] acceptSuggestion START');
-    console.log('[FlowMe] selectedNodeIds:', [...this.selectedNodeIds]);
-    console.log('[FlowMe] suggestPreview:', JSON.stringify(this.suggestPreview));
-    console.log('[FlowMe] current flows count:', this.config?.flows.length ?? 'no config');
-    console.log('[FlowMe] current flows:', this.config?.flows.map((f) => f.id) ?? []);
-    /* eslint-enable no-console */
     if (!this.config || !this.suggestPreview) return;
     const { fromNodeId, toNodeId, waypoints } = this.suggestPreview;
     const entity =
@@ -2429,19 +2424,11 @@ export class FlowmeCardEditor extends LitElement {
     }
     // Clear preview and selection BEFORE pushPatch so Lit sees all state updates
     // in the same render batch.
-    /* eslint-disable no-console */
-    console.log('[FlowMe] nextConfig flows count:', next.flows.length);
-    console.log('[FlowMe] new/updated flow:', JSON.stringify(next.flows.find((f) => f.id === flowId)));
-    /* eslint-enable no-console */
     this.suggestPreview = null;
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
     this.selectedOverlayId = null;
     this.pushPatch(prev, next, `suggest-path ${flowId}`);
-    /* eslint-disable no-console */
-    console.log('[FlowMe] after pushPatch flows:', this.config?.flows.length ?? 'no config');
-    console.log('[FlowMe] selectedFlowId:', flowId);
-    /* eslint-enable no-console */
     // Select the new/updated flow after config is updated so renderWaypointHandles
     // sees the correct waypoints in this.config.
     this.selectedFlowId = flowId;
