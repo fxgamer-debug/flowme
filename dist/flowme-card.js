@@ -3545,8 +3545,6 @@ let C = class extends G {
                 `}
             </div>
             <div class="tb-row tb-row-save">
-              ${this.statusMessage ? b`<span class="tb-status">${this.statusMessage}</span>` : w}
-              ${this.errorMessage ? b`<span class="tb-error">${this.errorMessage}</span>` : w}
               <button
                 class="tb-btn tb-btn-save"
                 title="Apply current configuration to the card"
@@ -5884,19 +5882,19 @@ C.styles = se`
       box-sizing: border-box;
       font: inherit;
       font-size: 11px;
-      padding: 2px 4px;
+      padding: 4px 6px;
       border-radius: 4px;
-      border: 1px solid var(--divider-color, rgba(255,255,255,0.2));
-      background: var(--secondary-background-color, rgba(255,255,255,0.06));
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+      background: var(--card-background-color, #1a1a1a);
       color: var(--primary-text-color, #fff);
     }
     .node-cell input[type='color'] {
       width: 100%;
-      height: 24px;
-      padding: 1px;
+      height: 26px;
+      padding: 1px 2px;
       border-radius: 4px;
-      border: 1px solid var(--divider-color, rgba(255,255,255,0.2));
-      background: transparent;
+      border: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+      background: var(--card-background-color, #1a1a1a);
       cursor: pointer;
       box-sizing: border-box;
     }
@@ -6689,7 +6687,7 @@ var Jn = Object.defineProperty, Zn = Object.getOwnPropertyDescriptor, Z = (e, t,
     (r = e[o]) && (n = (s ? r(t, i, n) : r(n)) || n);
   return s && n && Jn(t, i, n), n;
 };
-const Qn = "1.0.15.5", ti = 5e3;
+const Qn = "1.16", ti = 5e3;
 console.info(
   `%c flowme %c v${Qn} `,
   "color: white; background: #4ADE80; font-weight: 700;",

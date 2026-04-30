@@ -2,6 +2,34 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.16] — 2026-04-30
+
+### Changed
+
+- **VERSION-1 — Versioning scheme simplification**: Removed the redundant middle `0` from
+  version numbers. The scheme changes from `v1.0.x.y` to `v1.x` going forward. This release
+  is `v1.16`, continuing directly from `v1.0.15.x`. The GitHub Actions release workflow
+  already uses the `'v*'` tag pattern which matches all formats including `v1.16`.
+
+### Fixed
+
+- **BUG-1 — Status/error notices overflowing toolbar Row 2**: When a status or error message
+  was set (e.g. after Suggest Path or on a config error), the message appeared in Row 2
+  alongside Save/Cancel, pushing those buttons out of the row. Row 2 is the fixed Save/Cancel
+  row that must never change layout. Removed the status and error `<span>` elements from
+  Row 2 entirely. Row 1 (the add/multiselect row) still shows Suggest Path feedback when
+  relevant; status messages remain in the `@state` for any future use.
+
+- **BUG-2 — Node inspector input fields lacked visible contrast**: The `.node-cell
+  input[type='text']` and `.node-cell input[type='number']` CSS used
+  `var(--secondary-background-color, rgba(255,255,255,0.06))` — nearly transparent,
+  identical to the panel background. The `.node-cell input[type='color']` background was also
+  transparent. Fixed by matching the established `.inspector input` style:
+  `background: var(--card-background-color, #1a1a1a)` with
+  `border: 1px solid var(--divider-color, rgba(255,255,255,0.12))`. All node inspector inputs
+  now have a clearly distinct, opaque dark background with a visible border, matching the
+  styling used across all other inspector panels (flow, overlay, general settings).
+
 ## [1.0.15.5] — 2026-04-30
 
 ### Fixed
