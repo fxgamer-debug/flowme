@@ -2,6 +2,37 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18] — 2026-04-30
+
+### Fixed
+
+- **BUG-1 — Canvas clipping at fit level**: Replaced the one-shot `firstUpdated()` fit-scale
+  calculation with a `ResizeObserver` that fires after the canvas zone has its final rendered
+  dimensions. At scale=1 the stage fills the canvas exactly, so the fit-scale computation now
+  accounts for the canvas aspect ratio vs the card's configured aspect ratio and scales down
+  only when the canvas is narrower than the card's natural aspect. The observer fires
+  immediately on attachment, guaranteeing correct fit dimensions before the first user
+  interaction, and updates whenever the dialog is resized.
+
+- **BUG-2 — Node drag acceleration/drift at zoom**: `pointerToPercent` was dividing by the
+  CSS-transformed (visual) stage bounding-rect dimensions, which are scaled up at zoom > 1.
+  The method now takes pointer coordinates relative to the canvas element (unaffected by
+  transform), reverses the pan+scale transform to get card-space pixels, then converts to
+  percentage using the unscaled stage dimensions (canvas size minus the `4px 8px` inset).
+  Bulk-node drag and overlay-resize also had the same bug and are fixed: they now divide
+  screen-space deltas by `this.scale` to get card-space deltas before converting to
+  percentages.
+
+- **BUG-3 — Space+drag triggers rubber band**: `onStagePointerDown` now returns early when
+  `this.spaceHeld` is true, preventing rubber-band selection from starting concurrently with
+  the canvas pan gesture. This is in addition to the existing `onHandlePointerDown` guard.
+
+- **BUG-4 — Suggest Path waypoints not selectable**: `acceptSuggestion` now calls
+  `pushPatch` (which updates `this.config`) before setting `this.selectedFlowId`. This
+  ensures the render that follows finds the correct flow — including its waypoints — already
+  in the live config, and correctly renders interactive waypoint handles on the canvas.
+  Also added `this.selectedOverlayId = null` to the suggestion accept path for consistency.
+
 ## [1.17] — 2026-04-30
 
 ### Added

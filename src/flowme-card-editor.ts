@@ -150,12 +150,13 @@ export class FlowmeCardEditor extends LitElement {
   @state() private scale = 1;
   @state() private panX = 0;
   @state() private panY = 0;
-  /** Minimum scale: fit entire card in canvas zone. Computed in firstUpdated(). */
+  /** Minimum scale: fit entire card in canvas zone. Updated by ResizeObserver. */
   private fitScale = 1;
   /** True while spacebar is held (enables drag-to-pan). */
   private spaceHeld = false;
   /** Pointer id captured for middle-mouse or space+drag pan. */
   private panPointerId: number | null = null;
+  private _canvasResizeObserver?: ResizeObserver;
 
   private readonly stageRef: Ref<HTMLDivElement> = createRef();
   private readonly canvasRef: Ref<HTMLDivElement> = createRef();
@@ -195,6 +196,8 @@ export class FlowmeCardEditor extends LitElement {
     document.removeEventListener('keydown', this.onKeyDown, true);
     document.removeEventListener('keydown', this.onSpaceDown, true);
     document.removeEventListener('keyup', this.onSpaceUp, true);
+    this._canvasResizeObserver?.disconnect();
+    this._canvasResizeObserver = undefined;
     // Reset zoom on editor close
     this.scale = this.fitScale;
     this.panX = 0;
@@ -204,7 +207,34 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   override firstUpdated(): void {
-    this.recalcFit();
+    const canvasEl = this.canvasRef.value;
+    if (!canvasEl) return;
+    this._canvasResizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width === 0 || height === 0) return;
+      const cfg = this.config;
+      const [rawW, rawH] = (cfg?.aspect_ratio ?? '16:10').split(':').map(Number);
+      const w = rawW || 16;
+      const h = rawH || 10;
+      // fitScale: shrink scale so the card's full width (w:h aspect) fits within the canvas.
+      // At scale=1 the stage fills the canvas; if the canvas is narrower than its natural
+      // aspect the content clips. Compute the scale that fits width into canvas height.
+      const naturalAspect = w / h;
+      const canvasAspect = width / height;
+      // If natural aspect > canvas aspect: content is wider than canvas → scale down
+      const newFitScale = canvasAspect >= naturalAspect ? 1 : canvasAspect / naturalAspect;
+      const prev = this.fitScale;
+      this.fitScale = newFitScale;
+      // Reset pan/scale only if still at the previous fit level (no user interaction)
+      if (this.scale === 1 || this.scale === prev) {
+        this.scale = this.fitScale;
+        this.panX = 0;
+        this.panY = 0;
+      }
+    });
+    this._canvasResizeObserver.observe(canvasEl);
   }
 
   setConfig(config: unknown): void {
@@ -2381,8 +2411,11 @@ export class FlowmeCardEditor extends LitElement {
     this.suggestPreview = null;
     this.selectedNodeIds = new Set();
     this.selectedNodeId = null;
-    this.selectedFlowId = flow.id;
+    this.selectedOverlayId = null;
     this.pushPatch(prev, next, `suggest-path ${flow.id}`);
+    // Select the new flow AFTER config is updated so renderWaypointHandles sees
+    // the correct waypoints in this.config.
+    this.selectedFlowId = flow.id;
   }
 
   private cancelSuggestion(): void {
@@ -2495,8 +2528,8 @@ export class FlowmeCardEditor extends LitElement {
     const target = event.target as HTMLElement;
     const isBackground = target.classList.contains('stage') || target.classList.contains('background') || target.classList.contains('connectors');
     if (!isBackground || this.previewMode || this.pending) return;
-    // Left button only
-    if (event.button !== 0) return;
+    // Left button only; space+drag is handled by canvas pan — do not start rubber band
+    if (event.button !== 0 || this.spaceHeld) return;
     const pct = this.pointerToPercent(event);
     if (!pct) return;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
@@ -2748,12 +2781,16 @@ export class FlowmeCardEditor extends LitElement {
     if (!this.dragMoved) return; // don't start live-preview until it's a real drag
 
     if (target.kind === 'overlay-resize') {
-      const stage = this.stageRef.value;
-      if (!stage) return;
-      const rect = stage.getBoundingClientRect();
+      const canvas = this.canvasRef.value;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
-      const dxPct = ((event.clientX - target.startPx.x) / rect.width) * 100;
-      const dyPct = ((event.clientY - target.startPx.y) / rect.height) * 100;
+      // Delta in screen pixels → card-space pixels → percentage
+      // Stage inset: 8px left+right, 4px top+bottom
+      const stageW = rect.width - 16;
+      const stageH = rect.height - 8;
+      const dxPct = ((event.clientX - target.startPx.x) / this.scale / stageW) * 100;
+      const dyPct = ((event.clientY - target.startPx.y) / this.scale / stageH) * 100;
       let w = target.startSize.width + dxPct;
       let h = target.startSize.height + dyPct;
       if (this.dragShiftHeld) {
@@ -2774,13 +2811,16 @@ export class FlowmeCardEditor extends LitElement {
     if (target.kind === 'node') {
       this.config = moveNode(this.config, target.id, snapped);
     } else if (target.kind === 'node-bulk') {
-      // Bulk move: compute delta from drag start and apply to all selected nodes
-      const stage = this.stageRef.value;
-      if (!stage) return;
-      const rect = stage.getBoundingClientRect();
+      // Bulk move: delta in screen pixels → card-space pixels → percentage
+      const canvas = this.canvasRef.value;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
-      const dxPct = ((event.clientX - target.startPx.x) / rect.width) * 100;
-      const dyPct = ((event.clientY - target.startPx.y) / rect.height) * 100;
+      const stageW = rect.width - 16;
+      const stageH = rect.height - 8;
+      // screen delta / scale = card-space delta; card-space / stageSize * 100 = %
+      const dxPct = ((event.clientX - target.startPx.x) / this.scale / stageW) * 100;
+      const dyPct = ((event.clientY - target.startPx.y) / this.scale / stageH) * 100;
       const moves = new Map<string, NodePosition>();
       for (const [id, startPos] of target.startPositions) {
         const x = this.dragShiftHeld ? snapToGrid(startPos.x + dxPct) : startPos.x + dxPct;
@@ -3011,17 +3051,6 @@ export class FlowmeCardEditor extends LitElement {
 
   // -- zoom / pan --
 
-  private recalcFit(): void {
-    const canvas = this.canvasRef.value;
-    if (!canvas || !this.config) return;
-    // Stage fills canvas exactly at scale=1; fit level is therefore 1.0.
-    // Pan is reset to (0,0) so the full card is visible.
-    this.fitScale = 1;
-    this.scale = this.fitScale;
-    this.panX = 0;
-    this.panY = 0;
-  }
-
   private adjustZoom(factor: number, originX?: number, originY?: number): void {
     const canvas = this.canvasRef.value;
     const ox = originX ?? (canvas ? canvas.offsetWidth / 2 : 0);
@@ -3103,16 +3132,49 @@ export class FlowmeCardEditor extends LitElement {
 
   // -- utilities --
 
-  /** Convert client coordinates to card-space percentage, accounting for zoom/pan. */
+  /**
+   * Convert client coordinates to card-space percentage, correctly accounting
+   * for zoom (scale) and pan. The canvas-content layer has a CSS transform
+   * applied, so stage.getBoundingClientRect() returns visually-scaled dimensions.
+   * We reverse the transform to get true card-space coordinates.
+   *
+   * Transform applied to canvas-content:
+   *   screenPos = panOffset + cardPos * scale
+   * Inverse:
+   *   cardPos = (screenPos - panOffset) / scale
+   *
+   * The stage's CSS (unscaled) size equals the canvas size because it uses
+   * position:absolute;inset:4px 8px. At scale=1 the stage bounding rect
+   * equals the canvas rect. At scale>1 the stage bounding rect is larger.
+   * Dividing by scale restores the original CSS size.
+   */
   private pointerToPercent(event: { clientX: number; clientY: number }): NodePosition | null {
-    const stage = this.stageRef.value;
-    if (!stage) return null;
-    const rect = stage.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return null;
-    // rect already reflects the CSS transform on canvas-content, so clientX/Y maps
-    // directly to card-space coordinates via the stage's bounding rect.
-    const x = clampPercent(((event.clientX - rect.left) / rect.width) * 100);
-    const y = clampPercent(((event.clientY - rect.top) / rect.height) * 100);
+    const canvas = this.canvasRef.value;
+    if (!canvas) return null;
+    const canvasRect = canvas.getBoundingClientRect();
+    if (canvasRect.width === 0 || canvasRect.height === 0) return null;
+    // Unscaled (CSS) stage dimensions — the stage has 4px top/bottom and 8px l/r inset.
+    const stageW = canvasRect.width - 16;  // 8px left + 8px right
+    const stageH = canvasRect.height - 8;  // 4px top + 4px bottom
+    if (stageW <= 0 || stageH <= 0) return null;
+    // Mouse position relative to the canvas top-left corner (screen space)
+    const relX = event.clientX - canvasRect.left;
+    const relY = event.clientY - canvasRect.top;
+    // Reverse the transform to get position within the stage in CSS pixels.
+    // The stage origin within the canvas is at (8px, 4px), which is also the
+    // pan origin. The canvas-content transform starts at the canvas top-left.
+    // panX/panY are offsets applied to the canvas-content origin (0,0 = canvas TL).
+    // Stage CSS origin = (8, 4) within canvas.
+    // canvas-content origin = (0, 0) relative to canvas.
+    // cardPos in content space = (relX - panX) / scale
+    // cardPos in stage space = cardPos_content - 8, cardPos_content - 4
+    const contentX = (relX - this.panX) / this.scale;
+    const contentY = (relY - this.panY) / this.scale;
+    // Stage inset: left=8, top=4 (from .stage { position:absolute; inset: 4px 8px })
+    const stageX = contentX - 8;
+    const stageY = contentY - 4;
+    const x = clampPercent((stageX / stageW) * 100);
+    const y = clampPercent((stageY / stageH) * 100);
     return { x, y };
   }
 
