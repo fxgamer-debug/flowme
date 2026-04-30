@@ -2,6 +2,24 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18.5] — 2026-05-01
+
+### Fixed
+
+- **BUG-1 — Background image clipped at bottom**: `canvas-content` was sized via CSS
+  `inset: 0` which locked it to the stage dimensions (~132 px tall). When panned at any
+  zoom level the background image did not extend beyond that logical box, showing the
+  stage background colour instead. Fix: `canvas-content` is now sized inline to the
+  card's natural pixel dimensions (`cardNaturalW × cardNaturalH` at scale = 1, derived
+  from the aspect ratio and stage height). The background `div` with `inset: 0` inside
+  it therefore fills the full card area. `@state() cardNaturalW/H` are updated by the
+  existing `ResizeObserver` and trigger a re-render. `pointerToPercent`, `overlay-resize`
+  and `node-bulk` drag code updated to divide screen deltas by `cardNaturalW/H` instead
+  of `stageW/H` so percentage positions remain correct.
+
+- **Debug logging removed**: All `[FlowMe]` prefixed `console.log` statements added in
+  `v1.18.3` were already removed in `v1.18.4`. No further action needed.
+
 ## [1.18.4] — 2026-05-01
 
 ### Fixed
