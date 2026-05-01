@@ -3496,7 +3496,7 @@ let C = class extends G {
           ${this.errorMessage ? v`<pre class="error">${this.errorMessage}</pre>` : w}
         </div>
       `;
-    const e = this.config.background.default, t = e ? `background-image: url('${e}'); background-size: ${this.scale * 100}% ${this.scale * 100}%; background-position: ${this.panX}px ${this.panY}px; background-repeat: no-repeat;` : "", i = this.selectedNodeIds.size >= 2, n = this.selectedNodeId ? "nodes" : this.selectedFlowId ? "flows" : this.selectedOverlayId ? "overlays" : this.selectorType, s = this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? "";
+    const e = this.config.background.default, t = e ? `background-image: url('${e}'); background-size: ${this.scale * 100}%; background-position: ${this.panX}px ${this.panY}px; background-repeat: no-repeat;` : "", i = this.selectedNodeIds.size >= 2, n = this.selectedNodeId ? "nodes" : this.selectedFlowId ? "flows" : this.selectedOverlayId ? "overlays" : this.selectorType, s = this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? "";
     return v`
       <div class="wrap">
 
@@ -6768,7 +6768,7 @@ var Ks = Object.defineProperty, Js = Object.getOwnPropertyDescriptor, J = (e, t,
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Ks(t, i, s), s;
 };
-const Qs = "1.18.6", ii = 5e3;
+const Qs = "1.18.7", ii = 5e3;
 console.info(
   `%c flowme %c v${Qs} `,
   "color: white; background: #4ADE80; font-weight: 700;",

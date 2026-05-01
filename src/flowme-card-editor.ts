@@ -283,7 +283,7 @@ export class FlowmeCardEditor extends LitElement {
     // transform (translate + scale with origin 0 0), so the image tracks zoom/pan exactly
     // without touching canvas-content dimensions or coordinate math.
     const stageBgStyle = bgUrl
-      ? `background-image: url('${bgUrl}'); background-size: ${this.scale * 100}% ${this.scale * 100}%; background-position: ${this.panX}px ${this.panY}px; background-repeat: no-repeat;`
+      ? `background-image: url('${bgUrl}'); background-size: ${this.scale * 100}%; background-position: ${this.panX}px ${this.panY}px; background-repeat: no-repeat;`
       : '';
     const multiSelect = this.selectedNodeIds.size >= 2;
 

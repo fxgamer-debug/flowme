@@ -2,6 +2,18 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18.7] — 2026-05-01
+
+### Fixed
+
+- **BUG-1 — Background image squashed/distorted**: `background-size` was set to
+  `${scale * 100}% ${scale * 100}%`, forcing both width and height to the same percentage
+  and ignoring the image's natural aspect ratio. Fixed by using a single-value form
+  `${scale * 100}%`, which sets the width and leaves height as `auto` so the browser
+  preserves the image aspect ratio. Since the background images share the same 16:10
+  aspect ratio as the canvas, at `scale=1` the image fills the stage exactly with no
+  distortion, and zoom/pan continue to work correctly.
+
 ## [1.18.6] — 2026-05-01
 
 ### Fixed
