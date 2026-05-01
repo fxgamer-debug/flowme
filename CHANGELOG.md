@@ -2,23 +2,25 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.18.5] — 2026-05-01
+## [1.18.6] — 2026-05-01
 
 ### Fixed
 
-- **BUG-1 — Background image clipped at bottom**: `canvas-content` was sized via CSS
-  `inset: 0` which locked it to the stage dimensions (~132 px tall). When panned at any
-  zoom level the background image did not extend beyond that logical box, showing the
-  stage background colour instead. Fix: `canvas-content` is now sized inline to the
-  card's natural pixel dimensions (`cardNaturalW × cardNaturalH` at scale = 1, derived
-  from the aspect ratio and stage height). The background `div` with `inset: 0` inside
-  it therefore fills the full card area. `@state() cardNaturalW/H` are updated by the
-  existing `ResizeObserver` and trigger a re-render. `pointerToPercent`, `overlay-resize`
-  and `node-bulk` drag code updated to divide screen deltas by `cardNaturalW/H` instead
-  of `stageW/H` so percentage positions remain correct.
+- **BUG-1 — Background image clipped at bottom**: v1.18.5 attempted to fix this by resizing
+  `canvas-content` to card natural dimensions, which broke the entire coordinate system
+  (all nodes collapsed to the same position, dragging stopped working). v1.18.5 changes
+  were reverted to v1.18.4 state first.
 
-- **Debug logging removed**: All `[FlowMe]` prefixed `console.log` statements added in
-  `v1.18.3` were already removed in `v1.18.4`. No further action needed.
+  The correct minimal fix: background image is now rendered directly on the `.stage` element
+  using CSS `background-image`, `background-size`, and `background-position` set as inline
+  styles that mirror the `canvas-content` transform exactly:
+  - `background-size: ${scale * 100}% ${scale * 100}%` — scales the image with zoom
+  - `background-position: ${panX}px ${panY}px` — pans the image with the content
+
+  This means the background always covers the full stage area at any zoom/pan level with
+  zero clipping. The `.background` div inside `canvas-content` is removed. All coordinate
+  math, `canvas-content` dimensions, `pointerToPercent`, and drag calculations are
+  completely unchanged from v1.18.4.
 
 ## [1.18.4] — 2026-05-01
 

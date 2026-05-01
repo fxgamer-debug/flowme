@@ -263,7 +263,7 @@ it.elementStyles = [], it.shadowRootOptions = { mode: "open" }, it[dt("elementPr
  * SPDX-License-Identifier: BSD-3-Clause
  */
 const pt = globalThis, ye = (e) => e, St = pt.trustedTypes, we = St ? St.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, si = "$lit$", H = `lit$${Math.random().toFixed(9).slice(2)}$`, oi = "?" + H, Pi = `<${oi}>`, Y = document, ft = () => Y.createComment(""), gt = (e) => e === null || typeof e != "object" && typeof e != "function", ae = Array.isArray, Mi = (e) => ae(e) || typeof e?.[Symbol.iterator] == "function", zt = `[ 	
-\f\r]`, rt = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, xe = /-->/g, $e = />/g, W = RegExp(`>|${zt}(?:([^\\s"'>=/]+)(${zt}*=${zt}*(?:[^ 	
+\f\r]`, rt = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, xe = /-->/g, $e = />/g, j = RegExp(`>|${zt}(?:([^\\s"'>=/]+)(${zt}*=${zt}*(?:[^ 	
 \f\r"'\`<>=]|("|')|))|$)`, "g"), _e = /'/g, ke = /"/g, ri = /^(?:script|style|textarea|title)$/i, ai = (e) => (t, ...i) => ({ _$litType$: e, strings: t, values: i }), v = ai(1), Se = ai(2), nt = Symbol.for("lit-noChange"), w = Symbol.for("lit-nothing"), Ae = /* @__PURE__ */ new WeakMap(), V = Y.createTreeWalker(Y, 129);
 function li(e, t) {
   if (!ae(e) || !e.hasOwnProperty("raw")) throw Error("invalid template strings array");
@@ -275,8 +275,8 @@ const Fi = (e, t) => {
   for (let a = 0; a < i; a++) {
     const l = e[a];
     let d, c, p = -1, h = 0;
-    for (; h < l.length && (r.lastIndex = h, c = r.exec(l), c !== null); ) h = r.lastIndex, r === rt ? c[1] === "!--" ? r = xe : c[1] !== void 0 ? r = $e : c[2] !== void 0 ? (ri.test(c[2]) && (s = RegExp("</" + c[2], "g")), r = W) : c[3] !== void 0 && (r = W) : r === W ? c[0] === ">" ? (r = s ?? rt, p = -1) : c[1] === void 0 ? p = -2 : (p = r.lastIndex - c[2].length, d = c[1], r = c[3] === void 0 ? W : c[3] === '"' ? ke : _e) : r === ke || r === _e ? r = W : r === xe || r === $e ? r = rt : (r = W, s = void 0);
-    const u = r === W && e[a + 1].startsWith("/>") ? " " : "";
+    for (; h < l.length && (r.lastIndex = h, c = r.exec(l), c !== null); ) h = r.lastIndex, r === rt ? c[1] === "!--" ? r = xe : c[1] !== void 0 ? r = $e : c[2] !== void 0 ? (ri.test(c[2]) && (s = RegExp("</" + c[2], "g")), r = j) : c[3] !== void 0 && (r = j) : r === j ? c[0] === ">" ? (r = s ?? rt, p = -1) : c[1] === void 0 ? p = -2 : (p = r.lastIndex - c[2].length, d = c[1], r = c[3] === void 0 ? j : c[3] === '"' ? ke : _e) : r === ke || r === _e ? r = j : r === xe || r === $e ? r = rt : (r = j, s = void 0);
+    const u = r === j && e[a + 1].startsWith("/>") ? " " : "";
     o += r === rt ? l + Pi : p >= 0 ? (n.push(d), l.slice(0, p) + si + l.slice(p) + H + u) : l + H + (p === -2 ? a : u);
   }
   return [li(e, o + (e[i] || "<?>") + (t === 2 ? "</svg>" : t === 3 ? "</math>" : "")), n];
@@ -581,8 +581,8 @@ const Hi = (e) => e.strings === void 0;
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const Bi = { CHILD: 2 }, Wi = (e) => (...t) => ({ _$litDirective$: e, values: t });
-class ji {
+const Bi = { CHILD: 2 }, ji = (e) => (...t) => ({ _$litDirective$: e, values: t });
+class Wi {
   constructor(t) {
   }
   get _$AU() {
@@ -634,7 +634,7 @@ function Gi(e, t = !1, i = 0) {
 const qi = (e) => {
   e.type == Bi.CHILD && (e._$AP ?? (e._$AP = Gi), e._$AQ ?? (e._$AQ = Vi));
 };
-class Yi extends ji {
+class Yi extends Wi {
   constructor() {
     super(...arguments), this._$AN = void 0;
   }
@@ -664,7 +664,7 @@ class Yi extends ji {
 const Vt = () => new Xi();
 class Xi {
 }
-const Ot = /* @__PURE__ */ new WeakMap(), Gt = Wi(class extends Yi {
+const Ot = /* @__PURE__ */ new WeakMap(), Gt = ji(class extends Yi {
   render(e) {
     return w;
   }
@@ -1433,14 +1433,14 @@ let gi = !1;
 function $n(e) {
   gi = e;
 }
-function F(...e) {
+function M(...e) {
   gi && console.warn(xn, ...e);
 }
 const _n = "[FlowMe Renderer]";
 function at(...e) {
-  F(_n, ...e);
+  M(_n, ...e);
 }
-const C = "http://www.w3.org/2000/svg", U = "http://www.w3.org/1999/xlink";
+const A = "http://www.w3.org/2000/svg", U = "http://www.w3.org/1999/xlink";
 function kn() {
   try {
     return new URLSearchParams(window.location.search).get("flowme_debug") === "1";
@@ -1455,7 +1455,7 @@ class Qt {
   }
   async init(t, i) {
     at("init:", t.getBoundingClientRect(), "flows:", i.flows.length), this.container = t, this.config = i, this.flowsById = new Map(i.flows.map((s) => [s.id, s]));
-    const n = document.createElementNS(C, "svg");
+    const n = document.createElementNS(A, "svg");
     n.setAttribute("width", "100%"), n.setAttribute("height", "100%"), n.setAttribute("preserveAspectRatio", "none"), n.style.position = "absolute", n.style.inset = "0", n.style.pointerEvents = "none", n.style.overflow = "visible", this.svg = n, t.appendChild(n), this.buildSkeleton(), this.resizeObserver = new ResizeObserver(() => this.onResize()), this.resizeObserver.observe(t), this.startFpsLoop();
   }
   updateFlow(t, i) {
@@ -1498,17 +1498,17 @@ class Qt {
     if (!this.svg || !this.config) return;
     const t = this.containerSize();
     this.svg.setAttribute("viewBox", `0 0 ${t.width} ${t.height}`);
-    const i = document.createElementNS(C, "defs");
+    const i = document.createElementNS(A, "defs");
     this.svg.appendChild(i);
     const n = new Map(this.config.nodes.map((s) => [s.id, s]));
     for (const s of this.config.flows) {
       const o = n.get(s.from_node), r = n.get(s.to_node);
       if (!o || !r) continue;
-      const a = [o.position, ...s.waypoints, r.position], l = `flowme-path-${s.id}`, d = document.createElementNS(C, "path");
+      const a = [o.position, ...s.waypoints, r.position], l = `flowme-path-${s.id}`, d = document.createElementNS(A, "path");
       d.setAttribute("id", l), d.setAttribute("d", Jt(a, t, s.line_style ?? "corner")), d.setAttribute("fill", "none"), i.appendChild(d);
-      const c = document.createElementNS(C, "g");
+      const c = document.createElementNS(A, "g");
       c.setAttribute("data-flow-id", s.id), s.opacity !== void 0 && c.setAttribute("opacity", String(s.opacity)), s.visible === !1 && (c.style.display = "none");
-      const p = this.config?.defaults?.line_width ?? Ut, h = document.createElementNS(C, "use");
+      const p = this.config?.defaults?.line_width ?? Ut, h = document.createElementNS(A, "use");
       h.setAttributeNS(U, "href", `#${l}`), h.setAttribute("href", `#${l}`), h.setAttribute("stroke", this.primaryColor(s)), h.setAttribute("stroke-opacity", "0.2"), h.setAttribute("stroke-width", String(p)), h.setAttribute("stroke-linecap", "round"), h.setAttribute("stroke-linejoin", "round"), h.setAttribute("fill", "none"), c.appendChild(h);
       const u = {
         group: c,
@@ -1862,9 +1862,9 @@ class Qt {
       for (let _ = 0; _ < m.length; _++) {
         const S = m[_];
         this.updateParticleColor(S, r, i, n, h);
-        const k = document.createElementNS(C, "animateMotion");
+        const k = document.createElementNS(A, "animateMotion");
         k.setAttribute("repeatCount", "indefinite"), k.setAttribute("dur", u), k.setAttribute("rotate", "auto"), k.setAttribute("begin", `${(b[_] ?? 0).toFixed(3)}s`), x < 0 && (k.setAttribute("keyPoints", "1;0"), k.setAttribute("keyTimes", "0;1"));
-        const I = document.createElementNS(C, "mpath");
+        const I = document.createElementNS(A, "mpath");
         I.setAttributeNS(U, "href", `#${t.pathId}`), I.setAttribute("href", `#${t.pathId}`), k.appendChild(I), S.animateMotion.replaceWith(k), S.animateMotion = k, S.shape.appendChild(k);
       }
     };
@@ -1878,14 +1878,14 @@ class Qt {
   applyDash(t, i, n, s, o, r) {
     for (const m of t.particles) m.shape.remove();
     if (t.particles = [], !t.lineStroke) {
-      const m = document.createElementNS(C, "use");
+      const m = document.createElementNS(A, "use");
       m.setAttributeNS(U, "href", `#${t.pathId}`), m.setAttribute("href", `#${t.pathId}`), m.setAttribute("fill", "none"), m.setAttribute("stroke-linecap", "round"), m.setAttribute("stroke-linejoin", "round"), t.group.appendChild(m), t.lineStroke = m;
     }
     const a = this.config?.defaults?.line_width ?? Ut, d = (i.animation ?? {}).dash_gap ?? 0.5, c = Math.max(0.1, d / r), p = 14, h = p * c, u = this.glowFilter(i, this.profileFor(i), s);
     t.lineStroke.setAttribute("stroke", s), t.lineStroke.setAttribute("stroke-width", String(a * 2)), t.lineStroke.setAttribute("stroke-dasharray", `${p} ${h}`), u && t.lineStroke.setAttribute("filter", u);
     const f = p + h, b = t.lineStroke.querySelector("animate");
     b && b.remove();
-    const g = document.createElementNS(C, "animate");
+    const g = document.createElementNS(A, "animate");
     g.setAttribute("attributeName", "stroke-dashoffset"), g.setAttribute("from", o > 0 ? "0" : `-${f}`), g.setAttribute("to", o > 0 ? `-${f}` : "0"), g.setAttribute("dur", `${(n / 1e3).toFixed(3)}s`), g.setAttribute("repeatCount", "indefinite"), t.lineStroke.appendChild(g);
   }
   /**
@@ -1907,11 +1907,11 @@ class Qt {
       if (t.pulseCircles) for (const S of t.pulseCircles) S.circle.remove();
       t.pulseCircles = [];
       for (let S = 0; S < b; S++) {
-        const k = document.createElementNS(C, "circle");
+        const k = document.createElementNS(A, "circle");
         k.setAttribute("r", "0"), k.setAttribute("fill", "none"), k.setAttribute("stroke", r), k.setAttribute("stroke-width", String(m)), k.setAttribute("opacity", "0"), _ && k.setAttribute("filter", this.glowFilter(i, n, r));
-        const I = document.createElementNS(C, "animate");
+        const I = document.createElementNS(A, "animate");
         I.setAttribute("attributeName", "r"), I.setAttribute("values", `0;${x};0`), I.setAttribute("repeatCount", "indefinite"), k.appendChild(I);
-        const E = document.createElementNS(C, "animate");
+        const E = document.createElementNS(A, "animate");
         E.setAttribute("attributeName", "opacity"), E.setAttribute("values", "0;0.9;0"), E.setAttribute("repeatCount", "indefinite"), k.appendChild(E), t.group.appendChild(k), t.pulseCircles.push({ circle: k, animateRadius: I, animateOpacity: E });
       }
     }
@@ -1937,9 +1937,9 @@ class Qt {
     for (let f = 0; f < t.particles.length; f++) {
       const b = t.particles[f];
       this.updateParticleColor(b, s, i, a, p);
-      const g = document.createElementNS(C, "animateMotion");
+      const g = document.createElementNS(A, "animateMotion");
       g.setAttribute("repeatCount", "indefinite"), g.setAttribute("dur", h), g.setAttribute("rotate", "auto"), g.setAttribute("begin", `${(u[f] ?? 0).toFixed(3)}s`), o < 0 && (g.setAttribute("keyPoints", "1;0"), g.setAttribute("keyTimes", "0;1"));
-      const m = document.createElementNS(C, "mpath");
+      const m = document.createElementNS(A, "mpath");
       m.setAttributeNS(U, "href", `#${t.pathId}`), m.setAttribute("href", `#${t.pathId}`), g.appendChild(m), b.animateMotion.replaceWith(g), b.animateMotion = g, b.shape.appendChild(g);
     }
   }
@@ -1959,9 +1959,9 @@ class Qt {
     for (let f = 0; f < t.particles.length; f++) {
       const b = t.particles[f];
       this.updateParticleColor(b, s, i, a, p);
-      const g = document.createElementNS(C, "animateMotion");
+      const g = document.createElementNS(A, "animateMotion");
       g.setAttribute("repeatCount", "indefinite"), g.setAttribute("dur", h), g.setAttribute("rotate", "auto"), g.setAttribute("begin", `${(u[f] ?? 0).toFixed(3)}s`), o < 0 && (g.setAttribute("keyPoints", "1;0"), g.setAttribute("keyTimes", "0;1"));
-      const m = document.createElementNS(C, "mpath");
+      const m = document.createElementNS(A, "mpath");
       m.setAttributeNS(U, "href", `#${t.pathId}`), m.setAttribute("href", `#${t.pathId}`), g.appendChild(m), b.animateMotion.replaceWith(g), b.animateMotion = g, b.shape.appendChild(g);
     }
   }
@@ -1972,14 +1972,14 @@ class Qt {
   applyFluid(t, i, n, s, o) {
     for (const c of t.particles) c.shape.remove();
     if (t.particles = [], !t.lineStroke) {
-      const c = document.createElementNS(C, "use");
+      const c = document.createElementNS(A, "use");
       c.setAttributeNS(U, "href", `#${t.pathId}`), c.setAttribute("href", `#${t.pathId}`), c.setAttribute("fill", "none"), c.setAttribute("stroke-linecap", "round"), t.group.appendChild(c), t.lineStroke = c;
     }
     const r = (this.config?.defaults?.line_width ?? Ut) * 3, a = this.glowFilter(i, this.profileFor(i), s);
     t.lineStroke.setAttribute("stroke", s), t.lineStroke.setAttribute("stroke-width", String(r)), t.lineStroke.setAttribute("stroke-dasharray", "50 200"), a && t.lineStroke.setAttribute("filter", a);
     const l = t.lineStroke.querySelector("animate");
     l && l.remove();
-    const d = document.createElementNS(C, "animate");
+    const d = document.createElementNS(A, "animate");
     d.setAttribute("attributeName", "stroke-dashoffset"), d.setAttribute("from", o > 0 ? "0" : "-250"), d.setAttribute("to", o > 0 ? "-250" : "0"), d.setAttribute("dur", `${(n / 1e3).toFixed(3)}s`), d.setAttribute("repeatCount", "indefinite"), t.lineStroke.appendChild(d);
   }
   /**
@@ -2003,9 +2003,9 @@ class Qt {
     for (let f = 0; f < t.particles.length; f++) {
       const b = t.particles[f], g = 0.5 + Math.random() * 0.5;
       b.shape.setAttribute("opacity", String(g.toFixed(2))), this.updateParticleColor(b, r, i, n, h);
-      const m = document.createElementNS(C, "animateMotion");
+      const m = document.createElementNS(A, "animateMotion");
       m.setAttribute("repeatCount", "indefinite"), m.setAttribute("dur", u), m.setAttribute("rotate", "auto"), m.setAttribute("begin", `${(-o * f / (t.particles.length * 1e3)).toFixed(3)}s`), a < 0 && (m.setAttribute("keyPoints", "1;0"), m.setAttribute("keyTimes", "0;1"));
-      const x = document.createElementNS(C, "mpath");
+      const x = document.createElementNS(A, "mpath");
       x.setAttributeNS(U, "href", `#${t.pathId}`), x.setAttribute("href", `#${t.pathId}`), m.appendChild(x), b.animateMotion.replaceWith(m), b.animateMotion = m, b.shape.appendChild(m);
     }
   }
@@ -2019,22 +2019,22 @@ class Qt {
     let l, d = !1;
     switch (i) {
       case "square": {
-        const h = r * 2, u = document.createElementNS(C, "rect");
+        const h = r * 2, u = document.createElementNS(A, "rect");
         u.setAttribute("width", String(h)), u.setAttribute("height", String(h)), u.setAttribute("x", String(-h / 2)), u.setAttribute("y", String(-h / 2)), u.setAttribute("rx", "1.5"), u.setAttribute("fill", n), u.setAttribute("opacity", "0"), l = u;
         break;
       }
       case "arrow": {
-        const h = r * 2.2, u = r * 1.5, f = document.createElementNS(C, "polygon");
+        const h = r * 2.2, u = r * 1.5, f = document.createElementNS(A, "polygon");
         f.setAttribute("points", `${h},0 ${-h * 0.4},${u} 0,0 ${-h * 0.4},${-u}`), f.setAttribute("fill", n), f.setAttribute("opacity", "0"), f.setAttribute("data-kind", "arrow"), l = f;
         break;
       }
       case "teardrop": {
-        const h = s.animation?.trail_length ?? 2, u = r, f = r * h, b = document.createElementNS(C, "ellipse");
+        const h = s.animation?.trail_length ?? 2, u = r, f = r * h, b = document.createElementNS(A, "ellipse");
         b.setAttribute("rx", String(u)), b.setAttribute("ry", String(f)), b.setAttribute("cy", String(-f * 0.3)), b.setAttribute("fill", n), b.setAttribute("opacity", "0"), l = b;
         break;
       }
       case "diamond": {
-        const h = r * 1.4, u = document.createElementNS(C, "polygon");
+        const h = r * 1.4, u = document.createElementNS(A, "polygon");
         u.setAttribute("points", `0,${-h} ${h},0 0,${h} ${-h},0`), u.setAttribute("fill", n), u.setAttribute("opacity", "0"), u.setAttribute("data-kind", "diamond"), l = u;
         break;
       }
@@ -2042,11 +2042,11 @@ class Qt {
         const h = s.animation?.custom_svg_path ?? "";
         if (!h) {
           console.warn(`[FlowMe] particle_shape is custom_svg but custom_svg_path is empty or invalid — falling back to circle. Flow: ${s.id}`);
-          const f = document.createElementNS(C, "circle");
+          const f = document.createElementNS(A, "circle");
           f.setAttribute("r", String(r)), f.setAttribute("fill", n), f.setAttribute("opacity", "0"), l = f;
           break;
         }
-        const u = document.createElementNS(C, "path");
+        const u = document.createElementNS(A, "path");
         u.setAttribute("d", h), u.setAttribute("fill", n), u.setAttribute("opacity", "0"), u.setAttribute("data-kind", "custom_svg"), t.group.appendChild(u), d = !0;
         try {
           const f = u.getBBox(), b = Math.max(f.width, f.height, 1), m = r * 2 / b, x = -(f.x + f.width / 2), _ = -(f.y + f.height / 2);
@@ -2057,20 +2057,20 @@ class Qt {
         break;
       }
       default: {
-        const h = document.createElementNS(C, "circle");
+        const h = document.createElementNS(A, "circle");
         h.setAttribute("r", String(r)), h.setAttribute("fill", n), h.setAttribute("opacity", "0"), l = h;
       }
     }
     a && (l.setAttribute("filter", this.glowFilter(s, o, n)), l.style.color = n);
-    const c = document.createElementNS(C, "animateMotion");
+    const c = document.createElementNS(A, "animateMotion");
     c.setAttribute("repeatCount", "indefinite"), c.setAttribute("dur", "2s");
-    const p = document.createElementNS(C, "mpath");
+    const p = document.createElementNS(A, "mpath");
     return p.setAttributeNS(U, "href", `#${t.pathId}`), p.setAttribute("href", `#${t.pathId}`), c.appendChild(p), l.appendChild(c), d || t.group.appendChild(l), { shape: l, animateMotion: c };
   }
   updateParticleColor(t, i, n, s, o) {
     if (t.shape.setAttribute("fill", i), t.shape.style.color = i, this.resolveGlow(n, s) && t.shape.setAttribute("filter", this.glowFilter(n, s, i)), t.shape.setAttribute("opacity", "1"), o) {
       if (!t.flickerAnim) {
-        const h = document.createElementNS(C, "animate");
+        const h = document.createElementNS(A, "animate");
         h.setAttribute("attributeName", "opacity"), h.setAttribute("repeatCount", "indefinite"), t.shape.appendChild(h), t.flickerAnim = h;
       }
       const d = (1 / (2 + Math.random() * 6)).toFixed(3), c = (0.85 + Math.random() * 0.1).toFixed(2), p = (0.95 + Math.random() * 0.05).toFixed(2);
@@ -2311,7 +2311,7 @@ function drawWave(ctx, points, color, lineWidth, amplitude, progress, direction)
 
 registerPaint('flowme-painter', FlowmePainter);
 `, Oe = "flowme-keyframes", te = "flowme-cycle", En = 5, In = 2;
-let j = null, Te = !1;
+let W = null, Te = !1;
 function zn() {
   if (document.getElementById(Oe)) return;
   const e = document.createElement("style");
@@ -2337,15 +2337,15 @@ function On() {
   Te = !0;
 }
 async function Tn() {
-  if (j) return j;
+  if (W) return W;
   const e = CSS.paintWorklet;
   if (!e)
-    return j = Promise.reject(new Error("paintWorklet not available")), j;
+    return W = Promise.reject(new Error("paintWorklet not available")), W;
   const t = new Blob([Nn], { type: "application/javascript" }), i = URL.createObjectURL(t);
-  return j = e.addModule(i).catch((n) => {
-    throw j = null, n;
+  return W = e.addModule(i).catch((n) => {
+    throw W = null, n;
   }).finally(() => {
-  }), j;
+  }), W;
 }
 class Rn {
   constructor() {
@@ -2410,7 +2410,7 @@ class Rn {
 }
 function Dn() {
   const e = Un(), t = e ?? "svg", i = Ln();
-  return F(
+  return M(
     "renderer selected:",
     t === "houdini" ? "HoudiniRenderer" : "SvgRenderer",
     "| override=",
@@ -2419,7 +2419,7 @@ function Dn() {
     i,
     "| paintWorklet in CSS?",
     typeof CSS < "u" && "paintWorklet" in CSS
-  ), t === "houdini" ? i ? new Rn() : (F("?flowme_renderer=houdini requested but unsupported — falling back to SVG"), new Qt()) : new Qt();
+  ), t === "houdini" ? i ? new Rn() : (M("?flowme_renderer=houdini requested but unsupported — falling back to SVG"), new Qt()) : new Qt();
 }
 function Ln() {
   try {
@@ -2442,7 +2442,7 @@ function Re(e) {
   return `left: ${e.position.x}%; top: ${e.position.y}%; width: ${t}%; height: ${i}%;`;
 }
 function Hn(e, t) {
-  F(
+  M(
     "renderOverlayHost →",
     "id=",
     e.id,
@@ -2493,14 +2493,14 @@ async function Bn() {
     throw et = null, i;
   }), et);
 }
-async function Wn(e) {
+async function jn(e) {
   const t = await Bn();
   return t ? t.createCardElement(e) : null;
 }
-var jn = Object.defineProperty, Vn = Object.getOwnPropertyDescriptor, Ft = (e, t, i, n) => {
+var Wn = Object.defineProperty, Vn = Object.getOwnPropertyDescriptor, Ft = (e, t, i, n) => {
   for (var s = n > 1 ? void 0 : n ? Vn(t, i) : t, o = e.length - 1, r; o >= 0; o--)
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
-  return n && s && jn(t, i, s), s;
+  return n && s && Wn(t, i, s), s;
 };
 let ot = class extends G {
   updated(e) {
@@ -2521,7 +2521,7 @@ let ot = class extends G {
         this.errorMessage = i instanceof Error ? i.message : String(i);
         return;
       }
-      this.errorMessage = void 0, Wn(e).then((i) => {
+      this.errorMessage = void 0, jn(e).then((i) => {
         if (!i) {
           this.errorMessage = "HA card helpers unavailable", this.requestUpdate();
           return;
@@ -2639,7 +2639,7 @@ function Xn(e) {
   }
   return `flow_${Date.now()}`;
 }
-function Wt(e, t, i) {
+function jt(e, t, i) {
   const n = $(e);
   for (const s of n.nodes)
     s.id === t && (s.position = { x: N(i.x), y: N(i.y) });
@@ -2691,7 +2691,7 @@ function es(e, t, i) {
     t.has(o.id) && (o.position = { ...o.position, x: n.position.x });
   return s;
 }
-function jt(e, t, i, n) {
+function Wt(e, t, i, n) {
   const s = $(e);
   for (const o of s.flows)
     if (o.id === t) {
@@ -2792,7 +2792,7 @@ function ps(e, t, i) {
     s.id === t && (s.position = { x: N(i.x), y: N(i.y) });
   return n;
 }
-function We(e, t, i) {
+function je(e, t, i) {
   const n = $(e), s = Math.max(2, Math.min(100, i.width)), o = Math.max(2, Math.min(100, i.height));
   for (const r of n.overlays ?? [])
     r.id === t && (r.size = { width: s, height: o });
@@ -2819,7 +2819,7 @@ function fs(e, t, i) {
     }
   return n;
 }
-function je(e, t, i) {
+function We(e, t, i) {
   const n = $(e);
   return n.opacity = { ...n.opacity, [t]: i }, n;
 }
@@ -3119,7 +3119,7 @@ function Bs(e, t, i) {
   const { width: n, height: s, rgba: o } = Hs(e, t, i), r = Ds(o, n, s), a = Ls(r, n, s);
   return Us(a, n, s);
 }
-function Ws(e) {
+function js(e) {
   if (e.length <= 2) return [...e];
   const t = [e[0]];
   for (let i = 1; i < e.length - 1; i++) {
@@ -3129,7 +3129,7 @@ function Ws(e) {
   return t.push(e[e.length - 1]), t;
 }
 const _t = /* @__PURE__ */ new Map();
-async function js(e, t = {}) {
+async function Ws(e, t = {}) {
   const i = performance.now(), n = t.cellSize ?? mi, s = `${e.imageUrl}|${n}`, o = _t.has(s);
   let r = null;
   try {
@@ -3151,7 +3151,7 @@ async function js(e, t = {}) {
     edgesUsable: !0,
     elapsedMs: performance.now() - i
   } : {
-    waypoints: Ws(d).slice(1, -1).map((u) => Ys(u, r)),
+    waypoints: js(d).slice(1, -1).map((u) => Ys(u, r)),
     cached: o,
     edgesUsable: !0,
     elapsedMs: performance.now() - i
@@ -3195,14 +3195,14 @@ function Ys(e, t) {
 function ei(e, t, i) {
   return e < t ? t : e > i ? i : e;
 }
-var Xs = Object.defineProperty, Zs = Object.getOwnPropertyDescriptor, M = (e, t, i, n) => {
+var Xs = Object.defineProperty, Zs = Object.getOwnPropertyDescriptor, F = (e, t, i, n) => {
   for (var s = n > 1 ? void 0 : n ? Zs(t, i) : t, o = e.length - 1, r; o >= 0; o--)
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Xs(t, i, s), s;
 };
-let A = class extends G {
+let C = class extends G {
   constructor() {
-    super(...arguments), this.pending = null, this.previewMode = !1, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null, this.customConfigDraft = "", this.customConfigError = "", this.errorMessage = "", this.canUndo = !1, this.canRedo = !1, this.undoLabel = "", this.redoLabel = "", this.suggestPreview = null, this.suggestBusy = !1, this.selectorType = "", this.scale = 1, this.panX = 0, this.panY = 0, this.fitScale = 1, this.fitPanX = 0, this.fitPanY = 0, this.cardNaturalW = 0, this.cardNaturalH = 0, this.spaceHeld = !1, this.panPointerId = null, this.stageRef = Vt(), this.canvasRef = Vt(), this.undoStack = new qn((e) => this.applyConfig(
+    super(...arguments), this.pending = null, this.previewMode = !1, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null, this.customConfigDraft = "", this.customConfigError = "", this.errorMessage = "", this.canUndo = !1, this.canRedo = !1, this.undoLabel = "", this.redoLabel = "", this.suggestPreview = null, this.suggestBusy = !1, this.selectorType = "", this.scale = 1, this.panX = 0, this.panY = 0, this.fitScale = 1, this.fitPanX = 0, this.fitPanY = 0, this.spaceHeld = !1, this.panPointerId = null, this.stageRef = Vt(), this.canvasRef = Vt(), this.undoStack = new qn((e) => this.applyConfig(
       e,
       /*commitToHa*/
       !1
@@ -3216,7 +3216,7 @@ let A = class extends G {
       this.pushPatch(t, i, `remove weather state ${e}`);
     }, this.onWeatherStateAdd = () => {
       if (!this.config) return;
-      const e = new Set(Object.keys(this.config.background.weather_states ?? {})), t = A.KNOWN_WEATHER_STATES.find((s) => !e.has(s)) ?? "custom", i = this.config, n = Be(i, t, "");
+      const e = new Set(Object.keys(this.config.background.weather_states ?? {})), t = C.KNOWN_WEATHER_STATES.find((s) => !e.has(s)) ?? "custom", i = this.config, n = Be(i, t, "");
       this.pushPatch(i, n, `add weather state ${t}`);
     }, this.acceptSuggestion = () => {
       if (!this.config || !this.suggestPreview) return;
@@ -3371,28 +3371,28 @@ let A = class extends G {
         if (!s) return;
         const o = s.getBoundingClientRect();
         if (o.width === 0 || o.height === 0) return;
-        const r = this.cardNaturalW > 0 ? this.cardNaturalW : o.width - 16, a = this.cardNaturalH > 0 ? this.cardNaturalH : o.height - 8, l = (e.clientX - t.startPx.x) / this.scale / r * 100, d = (e.clientY - t.startPx.y) / this.scale / a * 100;
+        const r = o.width - 16, a = o.height - 8, l = (e.clientX - t.startPx.x) / this.scale / r * 100, d = (e.clientY - t.startPx.y) / this.scale / a * 100;
         let c = t.startSize.width + l, p = t.startSize.height + d;
-        this.dragShiftHeld && (c = Math.round(c), p = Math.round(p)), this.config = We(this.config, t.id, { width: c, height: p });
+        this.dragShiftHeld && (c = Math.round(c), p = Math.round(p)), this.config = je(this.config, t.id, { width: c, height: p });
         return;
       }
       const i = this.pointerToPercent(e);
       if (!i) return;
       const n = this.dragShiftHeld ? { x: N(xt(i.x)), y: N(xt(i.y)) } : i;
       if (t.kind === "node")
-        this.config = Wt(this.config, t.id, n);
+        this.config = jt(this.config, t.id, n);
       else if (t.kind === "node-bulk") {
         const s = this.canvasRef.value;
         if (!s) return;
         const o = s.getBoundingClientRect();
         if (o.width === 0 || o.height === 0) return;
-        const r = this.cardNaturalW > 0 ? this.cardNaturalW : o.width - 16, a = this.cardNaturalH > 0 ? this.cardNaturalH : o.height - 8, l = (e.clientX - t.startPx.x) / this.scale / r * 100, d = (e.clientY - t.startPx.y) / this.scale / a * 100, c = /* @__PURE__ */ new Map();
+        const r = o.width - 16, a = o.height - 8, l = (e.clientX - t.startPx.x) / this.scale / r * 100, d = (e.clientY - t.startPx.y) / this.scale / a * 100, c = /* @__PURE__ */ new Map();
         for (const [p, h] of t.startPositions) {
           const u = this.dragShiftHeld ? xt(h.x + l) : h.x + l, f = this.dragShiftHeld ? xt(h.y + d) : h.y + d;
           c.set(p, { x: u, y: f });
         }
         this.config = Jn(this.config, c);
-      } else t.kind === "overlay" ? this.config = ps(this.config, t.id, n) : t.kind === "waypoint" && (this.config = jt(this.config, t.flowId, t.index, n));
+      } else t.kind === "overlay" ? this.config = ps(this.config, t.id, n) : t.kind === "waypoint" && (this.config = Wt(this.config, t.flowId, t.index, n));
     }, this.onHandlePointerUp = (e) => {
       if (this.dragPointerId !== e.pointerId) return;
       const t = e.currentTarget;
@@ -3473,13 +3473,12 @@ let A = class extends G {
       if (!i) return;
       const n = this.canvasRef.value, s = n?.offsetWidth ?? i.contentRect.width, o = n?.offsetHeight ?? i.contentRect.height;
       if (s === 0 || o === 0) return;
-      const r = this.config, [a, l] = (r?.aspect_ratio ?? "16:10").split(":").map(Number), d = a || 16, c = l || 10, p = s - 16, h = o - 8, u = h * (d / c), f = h;
-      this.cardNaturalW = u, this.cardNaturalH = f;
-      let b, g;
-      const m = 0;
-      u <= p ? (b = 1, g = (p - u) / 2) : (b = p / u, g = 0);
-      const x = this.fitScale;
-      this.fitScale = b, this.fitPanX = g, this.fitPanY = m, (this.scale === 1 || this.scale === x) && (this.scale = b, this.panX = g, this.panY = m);
+      const r = this.config, [a, l] = (r?.aspect_ratio ?? "16:10").split(":").map(Number), d = a || 16, c = l || 10, p = s - 16, u = (o - 8) * (d / c);
+      let f, b;
+      const g = 0;
+      u <= p ? (f = 1, b = (p - u) / 2) : (f = p / u, b = 0);
+      const m = this.fitScale;
+      this.fitScale = f, this.fitPanX = b, this.fitPanY = g, (this.scale === 1 || this.scale === m) && (this.scale = f, this.panX = b, this.panY = g);
     }), this._canvasResizeObserver.observe(e));
   }
   setConfig(e) {
@@ -3497,7 +3496,7 @@ let A = class extends G {
           ${this.errorMessage ? v`<pre class="error">${this.errorMessage}</pre>` : w}
         </div>
       `;
-    const e = this.config.background.default, t = this.selectedNodeIds.size >= 2, i = this.selectedNodeId ? "nodes" : this.selectedFlowId ? "flows" : this.selectedOverlayId ? "overlays" : this.selectorType, n = this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? "";
+    const e = this.config.background.default, t = e ? `background-image: url('${e}'); background-size: ${this.scale * 100}% ${this.scale * 100}%; background-position: ${this.panX}px ${this.panY}px; background-repeat: no-repeat;` : "", i = this.selectedNodeIds.size >= 2, n = this.selectedNodeId ? "nodes" : this.selectedFlowId ? "flows" : this.selectedOverlayId ? "overlays" : this.selectorType, s = this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? "";
     return v`
       <div class="wrap">
 
@@ -3513,27 +3512,25 @@ let A = class extends G {
         >
           <div
             class=${`stage ${this.spaceHeld ? "mode-pan" : this.pending?.kind === "add-node" ? "mode-add-node" : this.pending?.kind === "add-overlay" ? "mode-add-overlay" : ""}`}
+            style=${t}
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
             ${Gt(this.stageRef)}
           >
-            <!-- canvas-content: explicitly sized to card natural dimensions (px) so the
-                 background image and all children cover the full card area at any zoom.
-                 Falls back to 100%/100% before the ResizeObserver fires. -->
+            <!-- canvas-content: zoom/pan transform applied here.
+                 Coordinate math unchanged — canvas-content still fills the stage (inset:0).
+                 Background is rendered on the stage element itself and tracks the transform
+                 via background-position/background-size so it never clips. -->
             <div
               class="canvas-content"
-              style=${this.cardNaturalW > 0 ? `width:${this.cardNaturalW}px;height:${this.cardNaturalH}px;transform:translate(${this.panX}px,${this.panY}px) scale(${this.scale});transform-origin:0 0;` : `transform:translate(${this.panX}px,${this.panY}px) scale(${this.scale});transform-origin:0 0;`}
+              style=${`transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
             >
-              <div
-                class="background"
-                style=${e ? `background-image: url('${e}');` : ""}
-              ></div>
               <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
-                ${this.config.flows.map((s) => this.renderFlowConnector(s))}
+                ${this.config.flows.map((o) => this.renderFlowConnector(o))}
               </svg>
-              ${this.config.flows.filter((s) => s.id === this.selectedFlowId).map((s) => this.renderWaypointHandles(s))}
-              ${(this.config.overlays ?? []).map((s) => this.renderOverlayHandle(s))}
-              ${this.config.nodes.map((s) => this.renderHandle(s))}
+              ${this.config.flows.filter((o) => o.id === this.selectedFlowId).map((o) => this.renderWaypointHandles(o))}
+              ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
+              ${this.config.nodes.map((o) => this.renderHandle(o))}
               ${this.renderSuggestPreview()}
             </div>
           </div>
@@ -3585,7 +3582,7 @@ let A = class extends G {
           <!-- Centre (50%): Row 1 = add/multiselect, Row 2 = Save/Cancel -->
           <div class="tb-col-actions">
             <div class="tb-row tb-row-actions">
-              ${t ? this.renderMultiSelectToolbar() : v`
+              ${i ? this.renderMultiSelectToolbar() : v`
                   <button class="tb-btn"
                     title="Add node — then click canvas to place"
                     @click=${() => {
@@ -3620,8 +3617,8 @@ let A = class extends G {
                 ?disabled=${!this.savedConfig}
                 @click=${() => {
       if (!this.savedConfig || !this.config) return;
-      const s = this.config;
-      this.pushPatch(s, this.savedConfig, "cancel all changes");
+      const o = this.config;
+      this.pushPatch(o, this.savedConfig, "cancel all changes");
     }}
               >✕ Cancel</button>
             </div>
@@ -3631,9 +3628,9 @@ let A = class extends G {
           <div class="tb-col-selector">
             <select
               class="tb-select"
-              .value=${i}
-              @change=${(s) => {
-      this.selectorType = s.target.value, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null;
+              .value=${n}
+              @change=${(o) => {
+      this.selectorType = o.target.value, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null;
     }}
             >
               <option value="">Select type…</option>
@@ -3643,22 +3640,22 @@ let A = class extends G {
             </select>
             <select
               class="tb-select"
-              ?disabled=${!i}
-              .value=${n}
-              @change=${(s) => {
-      const o = s.target.value;
-      o && (i === "nodes" ? (this.selectedNodeId = o, this.selectedNodeIds = /* @__PURE__ */ new Set([o]), this.selectedFlowId = null, this.selectedOverlayId = null) : i === "flows" ? (this.selectedFlowId = o, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedOverlayId = null) : i === "overlays" && (this.selectedOverlayId = o, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null));
+              ?disabled=${!n}
+              .value=${s}
+              @change=${(o) => {
+      const r = o.target.value;
+      r && (n === "nodes" ? (this.selectedNodeId = r, this.selectedNodeIds = /* @__PURE__ */ new Set([r]), this.selectedFlowId = null, this.selectedOverlayId = null) : n === "flows" ? (this.selectedFlowId = r, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedOverlayId = null) : n === "overlays" && (this.selectedOverlayId = r, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null));
     }}
             >
-              <option value="">${i ? "Select element…" : "—"}</option>
-              ${i === "nodes" ? this.config.nodes.map((s) => v`
-                <option value=${s.id}>${s.label ?? s.id}</option>
+              <option value="">${n ? "Select element…" : "—"}</option>
+              ${n === "nodes" ? this.config.nodes.map((o) => v`
+                <option value=${o.id}>${o.label ?? o.id}</option>
               `) : w}
-              ${i === "flows" ? this.config.flows.map((s) => v`
-                <option value=${s.id}>${s.id}</option>
+              ${n === "flows" ? this.config.flows.map((o) => v`
+                <option value=${o.id}>${o.id}</option>
               `) : w}
-              ${i === "overlays" ? (this.config.overlays ?? []).map((s, o) => v`
-                <option value=${s.id ?? String(o)}>Overlay ${o + 1}${s.id ? ` (${s.id})` : ""}</option>
+              ${n === "overlays" ? (this.config.overlays ?? []).map((o, r) => v`
+                <option value=${o.id ?? String(r)}>Overlay ${r + 1}${o.id ? ` (${o.id})` : ""}</option>
               `) : w}
             </select>
           </div>
@@ -3926,7 +3923,7 @@ let A = class extends G {
         if (!this.config) return;
         const n = parseFloat(i.target.value);
         if (!Number.isFinite(n)) return;
-        const s = this.config, o = Wt(s, e.id, { x: n, y: e.position.y });
+        const s = this.config, o = jt(s, e.id, { x: n, y: e.position.y });
         this.pushPatch(s, o, `move ${e.id} x`);
       }}
               />
@@ -3941,7 +3938,7 @@ let A = class extends G {
         if (!this.config) return;
         const n = parseFloat(i.target.value);
         if (!Number.isFinite(n)) return;
-        const s = this.config, o = Wt(s, e.id, { x: e.position.x, y: n });
+        const s = this.config, o = jt(s, e.id, { x: e.position.x, y: n });
         this.pushPatch(s, o, `move ${e.id} y`);
       }}
               />
@@ -4526,7 +4523,7 @@ let A = class extends G {
       if (!this.config) return;
       const l = parseFloat(a.target.value);
       if (!Number.isFinite(l)) return;
-      const d = this.config, c = jt(d, e.id, r, { x: l, y: o.y });
+      const d = this.config, c = Wt(d, e.id, r, { x: l, y: o.y });
       this.pushPatch(d, c, `move waypoint ${r} of ${e.id}`);
     }}
                     />
@@ -4539,7 +4536,7 @@ let A = class extends G {
       if (!this.config) return;
       const l = parseFloat(a.target.value);
       if (!Number.isFinite(l)) return;
-      const d = this.config, c = jt(d, e.id, r, { x: o.x, y: l });
+      const d = this.config, c = Wt(d, e.id, r, { x: o.x, y: l });
       this.pushPatch(d, c, `move waypoint ${r} of ${e.id}`);
     }}
                     />
@@ -4828,14 +4825,14 @@ let A = class extends G {
         if (!this.config) return;
         const a = parseFloat(r.target.value);
         if (!Number.isFinite(a)) return;
-        const l = this.config, d = je(l, i, a);
+        const l = this.config, d = We(l, i, a);
         this.config = d, this.commitToHa(d);
       }}
             @change=${(r) => {
         if (!this.config) return;
         const a = parseFloat(r.target.value);
         if (!Number.isFinite(a)) return;
-        const l = this.config, d = je(l, i, a);
+        const l = this.config, d = We(l, i, a);
         this.pushPatch(l, d, `set opacity.${i}`);
       }}
           />
@@ -5150,7 +5147,7 @@ let A = class extends G {
               `
     )}
             <datalist id="flowme-weather-states">
-              ${A.KNOWN_WEATHER_STATES.map(
+              ${C.KNOWN_WEATHER_STATES.map(
       (n) => v`<option value=${n}></option>`
     )}
             </datalist>
@@ -5159,7 +5156,7 @@ let A = class extends G {
           <details class="hint-details">
             <summary>Standard Met.no state list (for reference)</summary>
             <div class="hint-states">
-              ${A.KNOWN_WEATHER_STATES.map(
+              ${C.KNOWN_WEATHER_STATES.map(
       (n) => v`<code>${n}</code>`
     )}
               <p class="hint-sub">
@@ -5198,7 +5195,7 @@ let A = class extends G {
     if (!(!i || !n)) {
       this.suggestBusy = !0;
       try {
-        const s = await js({
+        const s = await Ws({
           imageUrl: this.config.background.default,
           from: i.position,
           to: n.position
@@ -5287,7 +5284,7 @@ let A = class extends G {
     if (!n) return;
     const s = n.size ?? { width: 20, height: 15 }, o = Number(i.target.value);
     if (!Number.isFinite(o) || o <= 0) return;
-    const r = this.config, a = We(r, e, { ...s, [t]: o });
+    const r = this.config, a = je(r, e, { ...s, [t]: o });
     this.pushPatch(r, a, `resize overlay ${e}`);
   }
   applyCustomConfig(e) {
@@ -5362,28 +5359,28 @@ let A = class extends G {
    * Layout chain:
    *   canvas (.z-canvas)
    *     └─ stage (position:absolute; inset:4px 8px)
-   *          └─ canvas-content (position:absolute; top:0; left:0;
-   *                             width:cardNaturalW px; height:cardNaturalH px)
+   *          └─ canvas-content (position:absolute; inset:0)
    *               transform: translate(panX, panY) scale(scale); transform-origin:0 0
    *
-   * canvas-content is sized to the card's natural pixel dimensions so the background
-   * and children cover the full card area at any zoom level. A card point at (cx%, cy%)
-   * sits at CSS position (cardNaturalW*cx/100, cardNaturalH*cy/100) within canvas-content.
-   * After the transform it appears at screen offset:
-   *   screenX = stageLeft + panX + cardNaturalW*(cx/100)*scale
-   *   screenY = stageTop  + panY + cardNaturalH*(cy/100)*scale
+   * canvas-content origin is at stage top-left (CSS coords). A card point at
+   * (cx%, cy%) sits at CSS position (stageW*cx/100, stageH*cy/100) within
+   * canvas-content. After the transform it appears at screen offset:
+   *   screenX = stageLeft + panX + stageW*(cx/100)*scale
+   *   screenY = stageTop  + panY + stageH*(cy/100)*scale
    *
    * Inverting:
-   *   cx% = (screenX - stageLeft - panX) / (cardNaturalW * scale) * 100
-   *   cy% = (screenY - stageTop  - panY) / (cardNaturalH * scale) * 100
+   *   cx% = (screenX - stageLeft - panX) / (stageW * scale) * 100
+   *   cy% = (screenY - stageTop  - panY) / (stageH * scale) * 100
    *
    * stageLeft = canvasLeft + 8;  stageTop = canvasTop + 4
    */
   pointerToPercent(e) {
     const t = this.canvasRef.value;
     if (!t) return null;
-    const i = t.getBoundingClientRect(), n = i.left + 8, s = i.top + 4, o = e.clientX - n, r = e.clientY - s, a = (o - this.panX) / this.scale, l = (r - this.panY) / this.scale, d = this.cardNaturalW > 0 ? this.cardNaturalW : i.width - 16, c = this.cardNaturalH > 0 ? this.cardNaturalH : i.height - 8, p = N(a / d * 100), h = N(l / c * 100);
-    return { x: p, y: h };
+    const i = t.getBoundingClientRect(), n = i.width - 16, s = i.height - 8;
+    if (n <= 0 || s <= 0) return null;
+    const o = e.clientX - (i.left + 8), r = e.clientY - (i.top + 4), a = N((o - this.panX) / (n * this.scale) * 100), l = N((r - this.panY) / (s * this.scale) * 100);
+    return { x: a, y: l };
   }
   pushPatch(e, t, i) {
     try {
@@ -5409,7 +5406,7 @@ let A = class extends G {
     this.canUndo = this.undoStack.canUndo(), this.canRedo = this.undoStack.canRedo(), this.undoLabel = this.undoStack.topUndoDescription() ?? "", this.redoLabel = this.undoStack.topRedoDescription() ?? "";
   }
 };
-A.KNOWN_WEATHER_STATES = [
+C.KNOWN_WEATHER_STATES = [
   "clear-night",
   "cloudy",
   "exceptional",
@@ -5426,7 +5423,7 @@ A.KNOWN_WEATHER_STATES = [
   "windy",
   "windy-variant"
 ];
-A.styles = oe`
+C.styles = oe`
     :host {
       display: block;
       font-family: var(--paper-font-body1_-_font-family, inherit);
@@ -5641,22 +5638,17 @@ A.styles = oe`
     .stage.mode-pan {
       cursor: grab;
     }
-    /* canvas-content: positioned at top-left of stage; width/height set inline to card
-       natural dimensions so background and children cover the full card at any zoom. */
+    /* canvas-content: receives the CSS transform for zoom/pan */
     .canvas-content {
       position: absolute;
-      top: 0;
-      left: 0;
+      inset: 0;
+      width: 100%;
+      height: 100%;
       transform-origin: 0 0;
       will-change: transform;
     }
-    .background {
-      position: absolute;
-      inset: 0;
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-    }
+    /* .background rule removed: background image is now rendered directly on .stage
+       via inline background-image/size/position that tracks the canvas-content transform. */
     .connectors {
       position: absolute;
       inset: 0;
@@ -6702,87 +6694,81 @@ A.styles = oe`
       cursor: pointer;
     }
   `;
-M([
+F([
   yt({ attribute: !1 })
-], A.prototype, "hass", 2);
-M([
+], C.prototype, "hass", 2);
+F([
   P()
-], A.prototype, "config", 2);
-M([
+], C.prototype, "config", 2);
+F([
   P()
-], A.prototype, "pending", 2);
-M([
+], C.prototype, "pending", 2);
+F([
   P()
-], A.prototype, "previewMode", 2);
-M([
+], C.prototype, "previewMode", 2);
+F([
   P()
-], A.prototype, "selectedNodeId", 2);
-M([
+], C.prototype, "selectedNodeId", 2);
+F([
   P()
-], A.prototype, "selectedNodeIds", 2);
-M([
+], C.prototype, "selectedNodeIds", 2);
+F([
   P()
-], A.prototype, "selectedFlowId", 2);
-M([
+], C.prototype, "selectedFlowId", 2);
+F([
   P()
-], A.prototype, "selectedOverlayId", 2);
-M([
+], C.prototype, "selectedOverlayId", 2);
+F([
   P()
-], A.prototype, "customConfigDraft", 2);
-M([
+], C.prototype, "customConfigDraft", 2);
+F([
   P()
-], A.prototype, "customConfigError", 2);
-M([
+], C.prototype, "customConfigError", 2);
+F([
   P()
-], A.prototype, "errorMessage", 2);
-M([
+], C.prototype, "errorMessage", 2);
+F([
   P()
-], A.prototype, "canUndo", 2);
-M([
+], C.prototype, "canUndo", 2);
+F([
   P()
-], A.prototype, "canRedo", 2);
-M([
+], C.prototype, "canRedo", 2);
+F([
   P()
-], A.prototype, "undoLabel", 2);
-M([
+], C.prototype, "undoLabel", 2);
+F([
   P()
-], A.prototype, "redoLabel", 2);
-M([
+], C.prototype, "redoLabel", 2);
+F([
   P()
-], A.prototype, "suggestPreview", 2);
-M([
+], C.prototype, "suggestPreview", 2);
+F([
   P()
-], A.prototype, "suggestBusy", 2);
-M([
+], C.prototype, "suggestBusy", 2);
+F([
   P()
-], A.prototype, "selectorType", 2);
-M([
+], C.prototype, "selectorType", 2);
+F([
   P()
-], A.prototype, "savedConfig", 2);
-M([
+], C.prototype, "savedConfig", 2);
+F([
   P()
-], A.prototype, "scale", 2);
-M([
+], C.prototype, "scale", 2);
+F([
   P()
-], A.prototype, "panX", 2);
-M([
+], C.prototype, "panX", 2);
+F([
   P()
-], A.prototype, "panY", 2);
-M([
-  P()
-], A.prototype, "cardNaturalW", 2);
-M([
-  P()
-], A.prototype, "cardNaturalH", 2);
-A = M([
+], C.prototype, "panY", 2);
+C = F([
   le("flowme-card-editor")
-], A);
+], C);
 var Ks = Object.defineProperty, Js = Object.getOwnPropertyDescriptor, J = (e, t, i, n) => {
   for (var s = n > 1 ? void 0 : n ? Js(t, i) : t, o = e.length - 1, r; o >= 0; o--)
     (r = e[o]) && (s = (n ? r(t, i, s) : r(s)) || s);
   return n && s && Ks(t, i, s), s;
 };
-const Qs = "1.18.5", ii = 5e3;
+const Qs = "1.18.6", ii = 5e3;
 console.info(
   `%c flowme %c v${Qs} `,
   "color: white; background: #4ADE80; font-weight: 700;",
@@ -6822,25 +6808,25 @@ let D = class extends G {
       ].filter((a) => typeof a == "string" && a.length > 0), s = {};
       for (const a of n)
         s[a] = e.states[a]?.state;
-      F("hass setter called. config entity states:", s);
+      M("hass setter called. config entity states:", s);
       const o = i?.background.weather_entity;
       if (o) {
         const a = t?.states[o]?.state, l = e.states[o]?.state;
-        F("[weather] state:", l, "(was:", a, ")"), a !== l && this.syncWeatherBackground();
+        M("[weather] state:", l, "(was:", a, ")"), a !== l && this.syncWeatherBackground();
       }
       const r = i?.background.sun_entity;
       if (r) {
         const a = t?.states[r]?.state, l = e.states[r]?.state;
-        a !== l && (F("[sun] state changed:", a, "→", l), this.syncWeatherBackground());
+        a !== l && (M("[sun] state changed:", a, "→", l), this.syncWeatherBackground());
       }
     } else
-      F("hass setter called with undefined");
+      M("hass setter called with undefined");
     this.requestUpdate("hass", t);
   }
   setConfig(e) {
     try {
       const t = ct(e);
-      $n(t.debug ?? !1), F("setConfig called:", JSON.parse(JSON.stringify(e ?? null))), F("setConfig validated → flows=", t.flows.length, "nodes=", t.nodes.length, "overlays=", t.overlays?.length ?? 0), this.config = t, this.errorMessage = void 0, this.rendererReadyFor && this.rendererReadyFor !== t && this.teardownRenderer();
+      $n(t.debug ?? !1), M("setConfig called:", JSON.parse(JSON.stringify(e ?? null))), M("setConfig validated → flows=", t.flows.length, "nodes=", t.nodes.length, "overlays=", t.overlays?.length ?? 0), this.config = t, this.errorMessage = void 0, this.rendererReadyFor && this.rendererReadyFor !== t && this.teardownRenderer();
       const i = t.background.default;
       this.bgLayerA = i, this.bgLayerB = "", this.activeLayer = "A", this.lastAppliedBgUrl = i;
     } catch (t) {
@@ -6849,10 +6835,10 @@ let D = class extends G {
     }
   }
   connectedCallback() {
-    super.connectedCallback(), F("connectedCallback — shadowRoot present?", !!this.shadowRoot, "config present?", !!this.config, "hass present?", !!this._hass);
+    super.connectedCallback(), M("connectedCallback — shadowRoot present?", !!this.shadowRoot, "config present?", !!this.config, "hass present?", !!this._hass);
   }
   firstUpdated() {
-    F("firstUpdated — shadowRoot children count=", this.shadowRoot?.children.length ?? 0), F("firstUpdated — SVG element found?", !!this.shadowRoot?.querySelector("svg"));
+    M("firstUpdated — shadowRoot children count=", this.shadowRoot?.children.length ?? 0), M("firstUpdated — SVG element found?", !!this.shadowRoot?.querySelector("svg"));
   }
   disconnectedCallback() {
     this.teardownRenderer(), this.transitionTimer !== null && (window.clearTimeout(this.transitionTimer), this.transitionTimer = null), super.disconnectedCallback();
@@ -6866,7 +6852,7 @@ let D = class extends G {
       this.renderer.init(t, i).then(() => {
         this.hass && this.pushAllValuesToRenderer();
       }).catch((n) => {
-        F("renderer init failed — falling back to SVG renderer", n), this.teardownRenderer(), this.renderer = new Qt(), this.rendererReadyFor = i, this.renderer.init(t, i).then(() => {
+        M("renderer init failed — falling back to SVG renderer", n), this.teardownRenderer(), this.renderer = new Qt(), this.rendererReadyFor = i, this.renderer.init(t, i).then(() => {
           this.hass && this.pushAllValuesToRenderer();
         }).catch((s) => {
           console.error("[flowme] SVG renderer init also failed", s);
@@ -6883,10 +6869,10 @@ let D = class extends G {
    */
   pushAllValuesToRenderer() {
     if (!(!this.config || !this.renderer || !this.hass)) {
-      F("pushAllValuesToRenderer → flows:", this.config.flows.length, "renderer:", this.renderer.constructor.name);
+      M("pushAllValuesToRenderer → flows:", this.config.flows.length, "renderer:", this.renderer.constructor.name);
       for (const e of this.config.flows) {
         const t = this.hass.states[e.entity], i = Ne(t?.state), n = q(e.domain ?? this.config.domain), s = t?.attributes?.unit_of_measurement, o = pn(i, s, n.unit_scale);
-        if (F(
+        if (M(
           "updateFlow →",
           e.id,
           "entity=",
@@ -6906,11 +6892,11 @@ let D = class extends G {
         ), t) {
           if (t.state === "unavailable" || t.state === "unknown") {
             const r = `${e.id}:${e.entity}:unavailable`;
-            this.warnedMissing.has(r) || (this.warnedMissing.add(r), F(`flow "${e.id}" entity "${e.entity}" is currently ${t.state} — no flow will render until it reports a number`));
+            this.warnedMissing.has(r) || (this.warnedMissing.add(r), M(`flow "${e.id}" entity "${e.entity}" is currently ${t.state} — no flow will render until it reports a number`));
           }
         } else {
           const r = `${e.id}:${e.entity}`;
-          this.warnedMissing.has(r) || (this.warnedMissing.add(r), F(`flow "${e.id}" references entity "${e.entity}" but it is not present in hass.states — check spelling / domain permissions`));
+          this.warnedMissing.has(r) || (this.warnedMissing.add(r), M(`flow "${e.id}" references entity "${e.entity}" but it is not present in hass.states — check spelling / domain permissions`));
         }
         if (this.renderer.updateFlow(e.id, o.value), e.value_gradient && this.renderer.setGradientColor) {
           const r = e.value_gradient.entity, a = this.hass.states[r];
@@ -6918,7 +6904,7 @@ let D = class extends G {
             const l = parseFloat(a.state);
             if (Number.isFinite(l)) {
               const d = e.value_gradient, c = Math.max(d.low_value, Math.min(d.high_value, l)), p = ui(l, d);
-              F(
+              M(
                 "[gradient]",
                 e.id,
                 "entity value:",
@@ -6931,9 +6917,9 @@ let D = class extends G {
                 p
               ), this.renderer.setGradientColor(e.id, p);
             } else
-              F(`flow "${e.id}" gradient entity "${r}" state "${a.state}" is not a number`), this.renderer.setGradientColor(e.id, null);
+              M(`flow "${e.id}" gradient entity "${r}" state "${a.state}" is not a number`), this.renderer.setGradientColor(e.id, null);
           } else
-            F(`flow "${e.id}" gradient entity "${r}" unavailable/unknown — falling back to flow color`), this.renderer.setGradientColor(e.id, null);
+            M(`flow "${e.id}" gradient entity "${r}" unavailable/unknown — falling back to flow color`), this.renderer.setGradientColor(e.id, null);
         }
       }
     }
@@ -7025,7 +7011,7 @@ let D = class extends G {
           ></div>
           <div class="renderer-mount" ${Gt(this.rendererMount)}></div>
           ${e.nodes.map((r) => this.renderNodeHandle(r))}
-          ${(e.overlays ?? []).map((r) => (F("rendering overlay →", r.type, "position=", r.position, "size=", r.size), Hn(r, this.hass)))}
+          ${(e.overlays ?? []).map((r) => (M("rendering overlay →", r.type, "position=", r.position, "size=", r.size), Hn(r, this.hass)))}
         </div>
       </ha-card>
     `;
@@ -7041,7 +7027,7 @@ let D = class extends G {
       if (t) {
         const i = t.state, n = e.sun_entity ? this.hass.states[e.sun_entity]?.state : void 0, s = hn(i, n, e.weather_states, e.default);
         let o = i;
-        return n === "below_horizon" && !i.endsWith("-night") && (o = `${i}-night`), F("[FlowMe] sun:", n, "weather:", i, "→ lookup key:", o, "→ image:", s !== e.default ? s : "default"), s;
+        return n === "below_horizon" && !i.endsWith("-night") && (o = `${i}-night`), M("[FlowMe] sun:", n, "weather:", i, "→ lookup key:", o, "→ image:", s !== e.default ? s : "default"), s;
       }
     }
     return e.default;
