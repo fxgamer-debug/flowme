@@ -31,6 +31,11 @@ import { html, nothing, type TemplateResult } from 'lit';
 import type { HomeAssistant, OverlayConfig } from '../types.js';
 import { dlog } from '../debug-log.js';
 
+/** Optional handlers for interactive overlay hosts (keyboard, future hooks). */
+export interface OverlayHostOptions {
+  onOverlayKeydown?: (e: KeyboardEvent, overlay: OverlayConfig) => void;
+}
+
 /** Build the inline style that positions and sizes the overlay box. */
 export function overlayBoxStyle(overlay: OverlayConfig): string {
   const w = overlay.size?.width ?? 20;
@@ -52,6 +57,7 @@ export function overlayBoxStyle(overlay: OverlayConfig): string {
 export function renderOverlayHost(
   overlay: OverlayConfig,
   hass: HomeAssistant | undefined,
+  options?: OverlayHostOptions,
 ): TemplateResult {
   dlog(
     'renderOverlayHost →',
@@ -75,6 +81,7 @@ export function renderOverlayHost(
         class="overlay overlay-migration-warning"
         data-overlay-id=${overlay.id}
         style=${overlayBoxStyle(overlay) + extraStyle}
+        tabindex="-1"
         title=${overlay._migration_warning}
       >
         <div class="migration-warning-inner">
@@ -86,11 +93,15 @@ export function renderOverlayHost(
 
   return html`
     <div
-      class="overlay overlay-custom"
+      class="overlay overlay-custom overlay-interactive overlay-wrapper"
       data-overlay-id=${overlay.id}
       style=${overlayBoxStyle(overlay) + extraStyle}
+      tabindex=${visible ? '0' : '-1'}
+      role="button"
+      @keydown=${(e: KeyboardEvent) => options?.onOverlayKeydown?.(e, overlay)}
     >
       <flowme-custom-overlay
+        class="overlay-interactive"
         .hass=${hass}
         .card=${overlay.card}
       ></flowme-custom-overlay>

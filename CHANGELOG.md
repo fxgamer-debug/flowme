@@ -2,6 +2,29 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.19] — Overlay interaction feedback
+
+### Added
+
+- **Overlay tap feedback (CSS ripple)**: Interactive custom overlays use a Material-style
+  white radial ripple on press. Implemented on the overlay wrapper and on
+  `flowme-custom-overlay` so taps on the embedded HA card (inside shadow DOM) still
+  animate the burst.
+- **Keyboard activation**: Custom overlay wrappers are focusable (`tabindex="0"` when
+  visible, `-1` when hidden), `role="button"`, and Enter / Space runs the same
+  `activatePrimaryAction()` path as a click on the embedded card. `:focus-visible`
+  outline uses `--primary-color`.
+- **Toast on connection loss**: When `hass` becomes undefined (e.g. connection lost),
+  a short bottom-centre toast shows “Connection lost”. Generic “Action failed — please retry”
+  toast if overlay activation throws (embedded cards still perform their own
+  service calls; FlowMe cannot intercept those).
+
+### Changed
+
+- **GitHub Releases**: `release.yml` extracts the changelog heading subtitle (text after
+  `## [version] —`) and sets the release title to `flowme vX.Y — <subtitle>` when present.
+  CI already runs on every push/PR to `main` via `.github/workflows/ci.yml` (unchanged).
+
 ## [1.18.8] — 2026-05-02
 
 ### Fixed

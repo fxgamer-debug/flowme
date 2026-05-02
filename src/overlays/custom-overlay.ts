@@ -35,6 +35,19 @@ export class FlowmeCustomOverlay extends LitElement {
     super.disconnectedCallback();
   }
 
+  /**
+   * Simulate a primary click on the mounted HA card so keyboard activation
+   * (Enter / Space on the overlay wrapper) matches a tap on the tile/card.
+   */
+  activatePrimaryAction(): void {
+    const root =
+      this.childCard ??
+      (this.renderRoot.querySelector('.mount')?.firstElementChild as HTMLElement | undefined);
+    if (root instanceof HTMLElement) {
+      root.click();
+    }
+  }
+
   override render(): TemplateResult {
     if (this.errorMessage) {
       return html`<div class="err" title=${this.errorMessage}>!</div>`;
@@ -92,6 +105,33 @@ export class FlowmeCustomOverlay extends LitElement {
       display: block;
       width: 100%;
       height: 100%;
+    }
+    /* Ripple when the embedded card is pressed (:active applies to host). */
+    :host(.overlay-interactive) {
+      position: relative;
+      overflow: hidden;
+    }
+    :host(.overlay-interactive)::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        circle,
+        rgba(255, 255, 255, 0.4) 0%,
+        transparent 70%
+      );
+      transform: scale(0);
+      opacity: 0;
+      transition: none;
+      pointer-events: none;
+      z-index: 12;
+    }
+    :host(.overlay-interactive:active)::after {
+      transform: scale(2.5);
+      opacity: 1;
+      transition:
+        transform 0.3s ease-out,
+        opacity 0.3s ease-out;
     }
     .mount {
       width: 100%;

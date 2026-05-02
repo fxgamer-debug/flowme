@@ -7,6 +7,7 @@ import type {
   HomeAssistant,
   NodeConfig,
   OpacityConfig,
+  OverlayConfig,
   VisibilityConfig,
 } from './types.js';
 import { FlowmeConfigError, validateConfig } from './validate-config.js';
@@ -16,11 +17,12 @@ import type { FlowRenderer } from './animation/types.js';
 import { getProfile, NEUTRAL_NODE_COLOR, resolveFlowColor } from './flow-profiles/index.js';
 import { interpolateGradientColor, parseAspectRatio, parseSensorValue, resolveNightBackground, scaleSensorValue } from './utils.js';
 import { renderOverlayHost } from './overlays/render.js';
+import type { FlowmeCustomOverlay } from './overlays/custom-overlay.js';
 import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.18.8';
+const CARD_VERSION = '1.19';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -129,12 +131,18 @@ export class FlowmeCard extends LitElement {
       }
     } else {
       dlog('hass setter called with undefined');
+      if (prev) {
+        this.showToast('Connection lost');
+      }
     }
     this.requestUpdate('hass', prev);
   }
 
   @state() private config?: FlowmeConfig;
   @state() private errorMessage?: string;
+  @state() private toastVisible = false;
+  @state() private toastMessage = '';
+  private toastHideTimer: number | null = null;
 
   private renderer: FlowRenderer | null = null;
   private readonly rendererMount: Ref<HTMLDivElement> = createRef();
@@ -199,6 +207,10 @@ export class FlowmeCard extends LitElement {
     if (this.transitionTimer !== null) {
       window.clearTimeout(this.transitionTimer);
       this.transitionTimer = null;
+    }
+    if (this.toastHideTimer !== null) {
+      window.clearTimeout(this.toastHideTimer);
+      this.toastHideTimer = null;
     }
     super.disconnectedCallback();
   }
@@ -420,11 +432,55 @@ export class FlowmeCard extends LitElement {
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
           ${(config.overlays ?? []).map((o) => {
             dlog('rendering overlay →', o.type, 'position=', o.position, 'size=', o.size);
-            return renderOverlayHost(o, this.hass);
+            return renderOverlayHost(o, this.hass, {
+              onOverlayKeydown: this.onOverlayKeydown,
+            });
           })}
+        </div>
+        <div
+          class=${`fm-toast ${this.toastVisible ? 'fm-toast--visible' : ''}`}
+        >
+          ${this.toastMessage}
         </div>
       </ha-card>
     `;
+  }
+
+  private showToast(message: string, durationMs = 3000): void {
+    if (this.toastHideTimer !== null) {
+      window.clearTimeout(this.toastHideTimer);
+      this.toastHideTimer = null;
+    }
+    this.toastMessage = message;
+    this.toastVisible = true;
+    this.toastHideTimer = window.setTimeout(() => {
+      this.toastVisible = false;
+      this.toastHideTimer = null;
+    }, durationMs);
+  }
+
+  private onOverlayKeydown = (e: KeyboardEvent, overlay: OverlayConfig): void => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      this.handleOverlayTap(overlay);
+    }
+  };
+
+  /** Activate the embedded HA card (same intent as a tap). Best-effort error toast. */
+  private handleOverlayTap(overlay: OverlayConfig): void {
+    try {
+      const wraps = this.shadowRoot?.querySelectorAll('.overlay-custom') ?? [];
+      let custom: FlowmeCustomOverlay | undefined;
+      for (const el of wraps) {
+        if (el.getAttribute('data-overlay-id') === overlay.id) {
+          custom = el.querySelector('flowme-custom-overlay') as FlowmeCustomOverlay | undefined;
+          break;
+        }
+      }
+      custom?.activatePrimaryAction();
+    } catch {
+      this.showToast('Action failed — please retry');
+    }
   }
 
   private buildLayerStyle(url: string, transitionMs: number): string {
@@ -733,6 +789,59 @@ export class FlowmeCard extends LitElement {
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
       opacity: var(--flowme-opacity-overlays, 1);
+    }
+    /* Material-style tap ripple on interactive overlay wrappers + embedded card host. */
+    .overlay.overlay-interactive {
+      position: relative;
+      overflow: hidden;
+    }
+    .overlay.overlay-interactive::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        circle,
+        rgba(255, 255, 255, 0.4) 0%,
+        transparent 70%
+      );
+      transform: scale(0);
+      opacity: 0;
+      transition: none;
+      pointer-events: none;
+      z-index: 11;
+    }
+    .overlay.overlay-interactive:active::after {
+      transform: scale(2.5);
+      opacity: 1;
+      transition:
+        transform 0.3s ease-out,
+        opacity 0.3s ease-out;
+    }
+    .overlay-wrapper:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+    .fm-toast {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      transition:
+        opacity 0.2s,
+        transform 0.2s;
+      pointer-events: none;
+      z-index: 1000;
+      white-space: nowrap;
+    }
+    .fm-toast--visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
     .error {
       padding: 16px;
