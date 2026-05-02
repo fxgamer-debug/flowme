@@ -2,6 +2,14 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.21] — i18n
+
+### Added
+
+- **Internationalisation**: All user-facing strings are centralised in `src/strings.ts` with runtime lookup via `t()` in `src/i18n.ts`.
+- **HA language detection**: When `hass.language` changes, FlowMe loads `/local/flowme/translations/{lang}.json` for non-English bases (e.g. `fr` from `fr-FR`). Missing or invalid files fall back to English with no UI error.
+- **Reference translation**: `translations/en.json` documents the JSON shape for community translators; see README **Translations**.
+
 ## [1.20] — Accessibility audit
 
 ### Added

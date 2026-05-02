@@ -1,4 +1,6 @@
 import { LitElement, css, html, type TemplateResult } from 'lit';
+
+import { t } from '../i18n.js';
 import { customElement, property } from 'lit/decorators.js';
 
 export type ToolbarAction =
@@ -68,42 +70,42 @@ export class FlowmeEditorToolbar extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <button @click=${() => this.fire('add-node')} title="Add node">+ Node</button>
-      <button @click=${() => this.fire('add-flow')} title="Add flow">+ Flow</button>
-      <button @click=${() => this.fire('add-overlay')} title="Add overlay">+ Overlay</button>
+      <button @click=${() => this.fire('add-node')} title=${t('editor.standaloneToolbar.addNodeTitle')}>${t('editor.toolbar.addNode')}</button>
+      <button @click=${() => this.fire('add-flow')} title=${t('editor.standaloneToolbar.addFlowTitle')}>${t('editor.toolbar.addFlow')}</button>
+      <button @click=${() => this.fire('add-overlay')} title=${t('editor.standaloneToolbar.addOverlayTitle')}>${t('editor.toolbar.addOverlay')}</button>
       <button
         @click=${() => this.fire('suggest-path')}
         ?disabled=${this.suggestPathDisabled}
         title=${this.suggestPathDisabled
-          ? 'Shift+click exactly two nodes to suggest a path between them'
-          : 'Create a new flow with auto-routed waypoints between the two selected nodes'}
+          ? t('editor.standaloneToolbar.suggestDisabled')
+          : t('editor.standaloneToolbar.suggestEnabled')}
       >
-        Suggest path
+        ${t('editor.toolbar.suggestPath')}
       </button>
       <button
         @click=${() => this.fire('undo')}
         ?disabled=${!this.canUndo}
-        title=${this.undoLabel ? `Undo: ${this.undoLabel}` : 'Undo (⌘Z)'}
+        title=${this.undoLabel ? t('editor.standaloneToolbar.undoTitleWithDesc', this.undoLabel) : t('editor.standaloneToolbar.undoTitlePlain')}
       >
-        ↶ Undo
+        ↶ ${t('editor.toolbar.undo')}
       </button>
       <button
         @click=${() => this.fire('redo')}
         ?disabled=${!this.canRedo}
-        title=${this.redoLabel ? `Redo: ${this.redoLabel}` : 'Redo (⌘⇧Z)'}
+        title=${this.redoLabel ? t('editor.standaloneToolbar.redoTitleWithDesc', this.redoLabel) : t('editor.standaloneToolbar.redoTitlePlain')}
       >
-        ↷ Redo
+        ↷ ${t('editor.toolbar.redo')}
       </button>
       <button
         class=${this.previewMode ? 'active' : ''}
         @click=${() => this.fire('toggle-preview')}
-        title="Toggle preview animations"
+        title=${t('editor.standaloneToolbar.togglePreviewTitle')}
       >
-        ${this.previewMode ? 'Editing' : 'Preview'}
+        ${this.previewMode ? t('editor.standaloneToolbar.editing') : t('editor.standaloneToolbar.preview')}
       </button>
       <span class="spacer"></span>
-      <span class="hint">Shift+click node = select for path · Shift+drag = snap · right-click to delete</span>
-      <button @click=${() => this.fire('save')} title="Apply to card config">Save</button>
+      <span class="hint">${t('editor.standaloneToolbar.keyboardHint')}</span>
+      <button @click=${() => this.fire('save')} title=${t('editor.standaloneToolbar.saveTitle')}>${t('editor.toolbar.save')}</button>
     `;
   }
 

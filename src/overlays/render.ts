@@ -30,6 +30,7 @@ import { html, nothing, type TemplateResult } from 'lit';
 
 import type { HomeAssistant, OverlayConfig } from '../types.js';
 import { dlog } from '../debug-log.js';
+import { t } from '../i18n.js';
 
 /** Optional handlers for interactive overlay hosts (keyboard, future hooks). */
 export interface OverlayHostOptions {
@@ -85,7 +86,7 @@ export function renderOverlayHost(
         title=${overlay._migration_warning}
       >
         <div class="migration-warning-inner">
-          ⚠ ${overlay._migration_warning}
+          ${t('overlays.migrationPrefix')} ${overlay._migration_warning}
         </div>
       </div>
     `;

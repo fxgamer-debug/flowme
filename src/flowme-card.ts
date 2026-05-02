@@ -21,9 +21,10 @@ import { renderOverlayHost } from './overlays/render.js';
 import type { FlowmeCustomOverlay } from './overlays/custom-overlay.js';
 import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
+import { loadLanguage, t } from './i18n.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.20';
+const CARD_VERSION = '1.21';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -80,6 +81,7 @@ function buildVisibilityVars(visibility?: VisibilityConfig): string {
 @customElement('flowme-card')
 export class FlowmeCard extends LitElement {
   private _hass?: HomeAssistant;
+  private _lastLanguage?: string;
 
   @property({ attribute: false })
   get hass(): HomeAssistant | undefined {
@@ -88,6 +90,10 @@ export class FlowmeCard extends LitElement {
   set hass(value: HomeAssistant | undefined) {
     const prev = this._hass;
     this._hass = value;
+    if (value && value.language !== this._lastLanguage) {
+      this._lastLanguage = value.language;
+      loadLanguage(value.language);
+    }
     if (value) {
       // Build the watch list dynamically from the current config so no
       // personal entity IDs are ever hardcoded in the bundle.
@@ -133,7 +139,7 @@ export class FlowmeCard extends LitElement {
     } else {
       dlog('hass setter called with undefined');
       if (prev) {
-        this.showToast('Connection lost');
+        this.showToast(t('card.connectionLost'));
       }
     }
     this.requestUpdate('hass', prev);
@@ -342,10 +348,10 @@ export class FlowmeCard extends LitElement {
   }
 
   private describeFlowReading(flow: FlowConfig): string {
-    if (!this.hass || !this.config) return 'no connection';
+    if (!this.hass || !this.config) return t('card.noConnection');
     const state = this.hass.states[flow.entity];
     const profile = getProfile(flow.domain ?? this.config.domain);
-    if (!state) return 'entity not found';
+    if (!state) return t('card.entityNotFound');
     if (state.state === 'unavailable' || state.state === 'unknown') return state.state;
     const rawParsed = parseSensorValue(state.state);
     const sensorUnit = (state.attributes?.['unit_of_measurement'] as string | undefined) ?? '';
@@ -357,7 +363,7 @@ export class FlowmeCard extends LitElement {
   }
 
   private formatFlowAriaLabel(flow: FlowConfig): string {
-    return `${flow.id}: ${this.describeFlowReading(flow)}`;
+    return t('aria.flowGroup', flow.id, this.describeFlowReading(flow));
   }
 
   private formatNodeAriaLabel(node: NodeConfig): string {
@@ -365,14 +371,16 @@ export class FlowmeCard extends LitElement {
     if (!this.hass || !node.entity || !this.config) return title;
     const state = this.hass.states[node.entity];
     const profile = getProfile(this.config.domain);
-    if (!state) return `${title}: entity not found`;
-    if (state.state === 'unavailable' || state.state === 'unknown') return `${title}: ${state.state}`;
+    if (!state) return t('aria.readingWithTitle', title, t('card.entityNotFound'));
+    if (state.state === 'unavailable' || state.state === 'unknown') {
+      return t('aria.readingWithTitle', title, state.state);
+    }
     const rawNum = parseSensorValue(state.state);
     const sensorUnit = (state.attributes?.['unit_of_measurement'] as string | undefined) ?? '';
     if (sensorUnit) {
-      return `${title}: ${this.formatSensorNumber(rawNum)} ${sensorUnit}`;
+      return t('aria.readingWithTitle', title, `${this.formatSensorNumber(rawNum)} ${sensorUnit}`);
     }
-    return `${title}: ${profile.describe(rawNum)}`;
+    return t('aria.readingWithTitle', title, profile.describe(rawNum));
   }
 
   getCardSize(): number {
@@ -447,9 +455,9 @@ export class FlowmeCard extends LitElement {
   override render(): TemplateResult {
     if (this.errorMessage) {
       return html`
-        <ha-card role="region" aria-label="FlowMe energy flow visualisation">
+        <ha-card role="region" aria-label=${t('aria.card')}>
           <div class="error">
-            <strong>flowme: invalid configuration</strong>
+            <strong>${t('card.invalidConfigurationTitle')}</strong>
             <pre>${this.errorMessage}</pre>
           </div>
         </ha-card>
@@ -457,7 +465,7 @@ export class FlowmeCard extends LitElement {
     }
     const config = this.config;
     if (!config) {
-      return html`<ha-card role="region" aria-label="FlowMe energy flow visualisation"><div class="placeholder">flowme loading…</div></ha-card>`;
+      return html`<ha-card role="region" aria-label=${t('aria.card')}><div class="placeholder">${t('card.loading')}</div></ha-card>`;
     }
 
     const aspect = parseAspectRatio(config.aspect_ratio) ?? 16 / 10;
@@ -468,7 +476,7 @@ export class FlowmeCard extends LitElement {
     const visibilityVars = buildVisibilityVars(config.visibility);
 
     return html`
-      <ha-card role="region" aria-label="FlowMe energy flow visualisation">
+      <ha-card role="region" aria-label=${t('aria.card')}>
         <div
           class="stage"
           style=${`padding-top: ${paddingTop};${opacityVars}${visibilityVars}`}
@@ -532,7 +540,7 @@ export class FlowmeCard extends LitElement {
       }
       custom?.activatePrimaryAction();
     } catch {
-      this.showToast('Action failed — please retry');
+      this.showToast(t('card.actionFailed'));
     }
   }
 
@@ -975,7 +983,7 @@ w.customCards = w.customCards ?? [];
 w.customCards.push({
   type: 'flowme-card',
   name: 'flowme',
-  description: 'Animated flow visualisation over a custom background image',
+  description: t('card.hacsDescription'),
   preview: true,
   documentationURL: 'https://github.com/fxgamer-debug/flowme',
 });

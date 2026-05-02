@@ -1,0 +1,42 @@
+{
+  "editor": {
+    "toolbar": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "undo": "Undo",
+      "redo": "Redo",
+      "addNode": "+ Node",
+      "addFlow": "+ Flow",
+      "addOverlay": "+ Overlay",
+      "suggestPath": "Suggest path",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fitCanvas": "Fit to canvas"
+    },
+    "inspector": {
+      "label": "Label",
+      "entity": "Entity",
+      "visible": "Visible",
+      "opacity": "Opacity",
+      "deleteNode": "Delete node",
+      "deleteFlow": "Delete flow",
+      "deleteOverlay": "Delete overlay",
+      "addWaypoint": "+ Add waypoint",
+      "animation": "Animation",
+      "waypoints": "Waypoints",
+      "speedCurve": "Speed curve",
+      "valueGradient": "Value gradient"
+    },
+    "suggestBar": {
+      "message": "Suggested path ready — accept or cancel"
+    }
+  },
+  "card": {
+    "connectionLost": "Connection lost",
+    "actionFailed": "Action failed — please retry",
+    "loading": "Loading..."
+  },
+  "aria": {
+    "card": "FlowMe energy flow visualisation"
+  }
+}

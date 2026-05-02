@@ -10,6 +10,8 @@
  * The list of disallowed schemes mirrors `validate-config.ts` for consistency.
  */
 
+import { t } from '../i18n.js';
+
 const DISALLOWED_SCHEMES = ['javascript:', 'vbscript:', 'data:', 'file:'];
 
 /** One offending path + value found during a scan. */
@@ -57,8 +59,5 @@ export function assertSafeCardConfig(config: unknown, rootPath = 'card_config'):
   const unsafe = findUnsafeUrls(config, rootPath);
   if (unsafe.length === 0) return;
   const first = unsafe[0]!;
-  throw new Error(
-    `Unsafe URL scheme '${first.scheme}' in ${first.path}. flowme rejects ` +
-      `javascript:, vbscript:, data: and file: URLs inside custom overlay configs.`,
-  );
+  throw new Error(t('security.unsafeUrlInCard', first.scheme, first.path));
 }

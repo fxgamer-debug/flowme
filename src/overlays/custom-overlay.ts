@@ -2,6 +2,7 @@ import { LitElement, html, css, type PropertyValues, type TemplateResult } from 
 import { customElement, property, state } from 'lit/decorators.js';
 
 import type { HomeAssistant } from '../types.js';
+import { t } from '../i18n.js';
 import { createOverlayCardElement } from './card-helpers.js';
 import { assertSafeCardConfig } from './url-scan.js';
 
@@ -74,7 +75,7 @@ export class FlowmeCustomOverlay extends LitElement {
     void createOverlayCardElement(config)
       .then((el) => {
         if (!el) {
-          this.errorMessage = 'HA card helpers unavailable';
+          this.errorMessage = t('overlays.haHelpersUnavailable');
           this.requestUpdate();
           return;
         }

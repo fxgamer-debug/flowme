@@ -1,4 +1,4 @@
-import { LitElement, html, svg, css, nothing, type TemplateResult } from 'lit';
+import { LitElement, html, svg, css, nothing, type TemplateResult, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 
@@ -74,6 +74,7 @@ import {
 } from './editor/commands.js';
 import { suggestPath } from './pathfinding/index.js';
 import type { Point } from './pathfinding/types.js';
+import { loadLanguage, t } from './i18n.js';
 
 type DragTarget =
   | { kind: 'node'; id: string }
@@ -112,6 +113,8 @@ interface SuggestPreview {
  */
 @customElement('flowme-card-editor')
 export class FlowmeCardEditor extends LitElement {
+  private _lastLanguage?: string;
+
   @property({ attribute: false }) hass?: HomeAssistant;
   @state() private config?: FlowmeConfig;
   @state() private pending: PendingAction = null;
@@ -205,6 +208,17 @@ export class FlowmeCardEditor extends LitElement {
     this.panPointerId = null;
   }
 
+  override willUpdate(changed: PropertyValues): void {
+    super.willUpdate(changed);
+    if (changed.has('hass')) {
+      const lang = this.hass?.language;
+      if (lang !== this._lastLanguage) {
+        this._lastLanguage = lang;
+        loadLanguage(lang);
+      }
+    }
+  }
+
   override firstUpdated(): void {
     const canvasEl = this.canvasRef.value;
     if (!canvasEl) return;
@@ -294,7 +308,7 @@ export class FlowmeCardEditor extends LitElement {
     if (!this.config) {
       return html`
         <div class="wrap">
-          <p class="hint">No configuration loaded yet. Use "Show code editor" to paste YAML.</p>
+          <p class="hint">${t('editor.hintNoConfig')}</p>
           ${this.errorMessage ? html`<pre class="error">${this.errorMessage}</pre>` : nothing}
         </div>
       `;
@@ -321,7 +335,7 @@ export class FlowmeCardEditor extends LitElement {
         <div
           class="z-canvas"
           role="application"
-          aria-label="FlowMe visual editor canvas"
+          aria-label=${t('editor.canvas.ariaLabel')}
           ${ref(this.canvasRef)}
           @wheel=${this.onCanvasWheel}
           @pointerdown=${this.onCanvasPointerDown}
@@ -371,17 +385,17 @@ export class FlowmeCardEditor extends LitElement {
               <button
                 type="button"
                 class="tb-icon-btn"
-                aria-label="Undo"
+                aria-label=${t('editor.toolbar.undo')}
                 ?disabled=${!this.canUndo}
-                title=${this.undoLabel ? `Undo: ${this.undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)'}
+                title=${this.undoLabel ? t('editor.canvas.undoTitleWithDesc', this.undoLabel) : t('editor.canvas.undoTitlePlain')}
                 @click=${() => this.undoStack.undo()}
               >↩</button>
               <button
                 type="button"
                 class="tb-icon-btn"
-                aria-label="Redo"
+                aria-label=${t('editor.toolbar.redo')}
                 ?disabled=${!this.canRedo}
-                title=${this.redoLabel ? `Redo: ${this.redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)'}
+                title=${this.redoLabel ? t('editor.canvas.redoTitleWithDesc', this.redoLabel) : t('editor.canvas.redoTitlePlain')}
                 @click=${() => this.undoStack.redo()}
               >↪</button>
             </div>
@@ -389,24 +403,24 @@ export class FlowmeCardEditor extends LitElement {
               <button
                 type="button"
                 class="tb-icon-btn"
-                aria-label="Zoom out"
+                aria-label=${t('editor.toolbar.zoomOut')}
                 ?disabled=${this.scale <= this.fitScale}
-                title="Zoom out"
+                title=${t('editor.toolbar.zoomOut')}
                 @click=${() => this.adjustZoom(0.8)}
               >−</button>
               <button
                 type="button"
                 class="tb-icon-btn"
-                aria-label="Zoom in"
+                aria-label=${t('editor.toolbar.zoomIn')}
                 ?disabled=${this.scale >= 5}
-                title="Zoom in"
+                title=${t('editor.toolbar.zoomIn')}
                 @click=${() => this.adjustZoom(1.25)}
               >+</button>
               <button
                 type="button"
                 class="tb-icon-btn"
-                aria-label="Fit to canvas"
-                title="Fit to canvas"
+                aria-label=${t('editor.toolbar.fitCanvas')}
+                title=${t('editor.toolbar.fitCanvas')}
                 @click=${() => this.resetZoom()}
               >⊡</button>
             </div>
@@ -421,54 +435,54 @@ export class FlowmeCardEditor extends LitElement {
                   <button
                     type="button"
                     class="tb-btn"
-                    aria-label="Add node — then click canvas to place"
-                    title="Add node — then click canvas to place"
+                    aria-label=${t('editor.canvas.addNodeAria')}
+                    title=${t('editor.canvas.addNodeAria')}
                     @click=${() => {
                       this.pending = { kind: 'add-node' };
                     }}
-                  >+ Node</button>
+                  >${t('editor.toolbar.addNode')}</button>
                   <button
                     type="button"
                     class="tb-btn"
-                    aria-label="Add flow between two nodes"
-                    title="Add flow between two nodes"
+                    aria-label=${t('editor.canvas.addFlowAria')}
+                    title=${t('editor.canvas.addFlowAria')}
                     @click=${() => {
                       this.pending = { kind: 'add-flow', step: 'pick-from' };
                     }}
-                  >+ Flow</button>
+                  >${t('editor.toolbar.addFlow')}</button>
                   <button
                     type="button"
                     class="tb-btn"
-                    aria-label="Add overlay card"
-                    title="Add overlay card"
+                    aria-label=${t('editor.canvas.addOverlayAria')}
+                    title=${t('editor.canvas.addOverlayAria')}
                     @click=${() => {
                       this.pending = { kind: 'add-overlay', overlayType: 'custom' };
                     }}
-                  >+ Overlay</button>
+                  >${t('editor.toolbar.addOverlay')}</button>
                 `}
             </div>
             <div class="tb-row tb-row-save">
               <button
                 type="button"
                 class="tb-btn tb-btn-save"
-                aria-label="Save configuration to Home Assistant"
-                title="Apply current configuration to the card"
+                aria-label=${t('editor.canvas.saveAria')}
+                title=${t('editor.canvas.saveTitle')}
                 @click=${() => {
                   if (this.config) this.commitToHa(this.config);
                 }}
-              >💾 Save</button>
+              >💾 ${t('editor.toolbar.save')}</button>
               <button
                 type="button"
                 class="tb-btn tb-btn-cancel"
-                aria-label="Discard editor changes"
-                title="Discard all changes since the editor opened"
+                aria-label=${t('editor.canvas.cancelAria')}
+                title=${t('editor.canvas.cancelTitle')}
                 ?disabled=${!this.savedConfig}
                 @click=${() => {
                   if (!this.savedConfig || !this.config) return;
                   const prev = this.config;
                   this.pushPatch(prev, this.savedConfig, 'cancel all changes');
                 }}
-              >✕ Cancel</button>
+              >✕ ${t('editor.toolbar.cancel')}</button>
             </div>
           </div>
 
@@ -476,7 +490,7 @@ export class FlowmeCardEditor extends LitElement {
           <div class="tb-col-selector">
             <select
               class="tb-select"
-              aria-label="Select element type"
+              aria-label=${t('editor.canvas.selectTypeAria')}
               .value=${derivedType}
               @change=${(e: Event) => {
                 this.selectorType = (e.target as HTMLSelectElement).value as typeof this.selectorType;
@@ -487,14 +501,14 @@ export class FlowmeCardEditor extends LitElement {
                 this.selectedOverlayId = null;
               }}
             >
-              <option value="">Select type…</option>
-              <option value="nodes">Nodes</option>
-              <option value="flows">Flows</option>
-              <option value="overlays">Overlays</option>
+              <option value="">${t('editor.toolbar.selectType')}</option>
+              <option value="nodes">${t('editor.toolbar.nodes')}</option>
+              <option value="flows">${t('editor.toolbar.flows')}</option>
+              <option value="overlays">${t('editor.toolbar.overlays')}</option>
             </select>
             <select
               class="tb-select"
-              aria-label="Select element"
+              aria-label=${t('editor.canvas.selectElementAria')}
               ?disabled=${!derivedType}
               .value=${derivedElement}
               @change=${(e: Event) => {
@@ -518,7 +532,7 @@ export class FlowmeCardEditor extends LitElement {
                 }
               }}
             >
-              <option value="">${derivedType ? 'Select element…' : '—'}</option>
+              <option value="">${derivedType ? t('editor.toolbar.selectElement') : t('editor.toolbar.selectElementDash')}</option>
               ${derivedType === 'nodes' ? this.config.nodes.map((n) => html`
                 <option value=${n.id}>${n.label ?? n.id}</option>
               `) : nothing}
@@ -526,7 +540,7 @@ export class FlowmeCardEditor extends LitElement {
                 <option value=${f.id}>${f.id}</option>
               `) : nothing}
               ${derivedType === 'overlays' ? (this.config.overlays ?? []).map((o, i) => html`
-                <option value=${o.id ?? String(i)}>Overlay ${i + 1}${o.id ? ` (${o.id})` : ''}</option>
+                <option value=${o.id ?? String(i)}>${t('editor.canvas.overlayOption', i, o.id ? t('editor.canvas.overlayOptionIdPart', o.id) : '')}</option>
               `) : nothing}
             </select>
           </div>
@@ -603,7 +617,7 @@ export class FlowmeCardEditor extends LitElement {
           class="waypoint"
           role="button"
           tabindex="0"
-          aria-label=${`Waypoint ${index + 1} of flow ${flow.id}`}
+          aria-label=${t('aria.waypointHandle', index, flow.id)}
           data-flow-id=${flow.id}
           data-waypoint-index=${index}
           style=${`left: ${wp.x}%; top: ${wp.y}%;`}
@@ -627,7 +641,7 @@ export class FlowmeCardEditor extends LitElement {
         class=${`overlay-handle overlay-wrapper ${selected ? 'selected' : ''} overlay-${overlay.type}`}
         role="button"
         tabindex="0"
-        aria-label=${`Overlay ${overlay.id}`}
+        aria-label=${t('aria.overlayHandle', overlay.id)}
         aria-selected=${selected ? 'true' : 'false'}
         data-overlay-id=${overlay.id}
         style=${`left: ${overlay.position.x}%; top: ${overlay.position.y}%; width: ${w}%; height: ${h}%;`}
@@ -668,7 +682,7 @@ export class FlowmeCardEditor extends LitElement {
         class=${`handle ${isSingleSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${isInSelection ? 'in-selection' : ''} ${isHidden ? 'handle-hidden' : ''}`}
         role="button"
         tabindex="0"
-        aria-label=${`${node.label ?? node.id} at ${node.position.x.toFixed(1)}%, ${node.position.y.toFixed(1)}%`}
+        aria-label=${t('aria.nodeHandle', node.label ?? node.id, node.position.x, node.position.y)}
         aria-selected=${isInSelection ? 'true' : 'false'}
         data-node-id=${node.id}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
@@ -687,8 +701,8 @@ export class FlowmeCardEditor extends LitElement {
         <button
           type="button"
           class="eye-toggle"
-          aria-label=${isHidden ? 'Show node' : 'Hide node'}
-          title=${isHidden ? 'Show node' : 'Hide node'}
+          aria-label=${isHidden ? t('editor.inspector.showNode') : t('editor.inspector.hideNode')}
+          title=${isHidden ? t('editor.inspector.showNode') : t('editor.inspector.hideNode')}
           @click=${(e: Event) => {
             e.stopPropagation();
             if (!this.config) return;
@@ -718,7 +732,7 @@ export class FlowmeCardEditor extends LitElement {
       !!window.customElements &&
       !!window.customElements.get('ha-entity-picker');
     const domains = opts?.includeDomains ?? [];
-    const placeholder = opts?.placeholder ?? 'entity.id';
+    const placeholder = opts?.placeholder ?? t('editor.inspector.entityPickerFallbackPlaceholder');
 
     if (hasPicker) {
       const handler = (e: CustomEvent<{ value?: string }>) => {
@@ -781,12 +795,12 @@ export class FlowmeCardEditor extends LitElement {
 
       return html`
         <div class="inspector">
-          <h3>Node: ${node.id}</h3>
+          <h3>${t('editor.inspector.nodeHeading', node.id)}</h3>
 
           <!-- Row 1: Label | Entity -->
           <div class="node-row">
             <label class="node-cell">
-              <span class="node-cell-label">Label</span>
+              <span class="node-cell-label">${t('editor.inspector.label')}</span>
               <input
                 type="text"
                 .value=${node.label ?? ''}
@@ -794,7 +808,7 @@ export class FlowmeCardEditor extends LitElement {
               />
             </label>
             <label class="node-cell">
-              <span class="node-cell-label">Entity</span>
+              <span class="node-cell-label">${t('editor.inspector.entity')}</span>
               ${this.renderEntityPicker(
                 node.entity ?? '',
                 (value) => this.setNodeEntity(node.id, value),
@@ -806,7 +820,7 @@ export class FlowmeCardEditor extends LitElement {
           <!-- Row 2: Colour | Visible | Show value | Show label -->
           <div class="node-row">
             <label class="node-cell">
-              <span class="node-cell-label">Colour</span>
+              <span class="node-cell-label">${t('editor.inspector.colour')}</span>
               <input
                 type="color"
                 .value=${node.color ?? '#ffffff'}
@@ -828,7 +842,7 @@ export class FlowmeCardEditor extends LitElement {
                   this.pushPatch(prev, next, `set visible of ${node.id}`);
                 }}
               />
-              <span class="node-cell-label">Visible</span>
+              <span class="node-cell-label">${t('editor.inspector.visible')}</span>
             </label>
             <label class="node-cell node-cell-toggle">
               <input
@@ -839,7 +853,7 @@ export class FlowmeCardEditor extends LitElement {
                   patchNode({ show_value: checked || undefined }, `set show_value of ${node.id}`);
                 }}
               />
-              <span class="node-cell-label">Show value</span>
+              <span class="node-cell-label">${t('editor.inspector.showValue')}</span>
             </label>
             <label class="node-cell node-cell-toggle">
               <input
@@ -850,14 +864,14 @@ export class FlowmeCardEditor extends LitElement {
                   patchNode({ show_label: checked || undefined }, `set show_label of ${node.id}`);
                 }}
               />
-              <span class="node-cell-label">Show label</span>
+              <span class="node-cell-label">${t('editor.inspector.showLabel')}</span>
             </label>
           </div>
 
           <!-- Row 3: X% | Y% | Size | Opacity -->
           <div class="node-row">
             <label class="node-cell">
-              <span class="node-cell-label">X %</span>
+              <span class="node-cell-label">${t('editor.inspector.positionX')}</span>
               <input
                 type="number"
                 min="0" max="100" step="1"
@@ -873,7 +887,7 @@ export class FlowmeCardEditor extends LitElement {
               />
             </label>
             <label class="node-cell">
-              <span class="node-cell-label">Y %</span>
+              <span class="node-cell-label">${t('editor.inspector.positionY')}</span>
               <input
                 type="number"
                 min="0" max="100" step="1"
@@ -889,7 +903,7 @@ export class FlowmeCardEditor extends LitElement {
               />
             </label>
             <label class="node-cell">
-              <span class="node-cell-label">Size px</span>
+              <span class="node-cell-label">${t('editor.inspector.sizePx')}</span>
               <input
                 type="number"
                 min="4" max="60" step="1"
@@ -902,7 +916,7 @@ export class FlowmeCardEditor extends LitElement {
               />
             </label>
             <label class="node-cell">
-              <span class="node-cell-label">Opacity</span>
+              <span class="node-cell-label">${t('editor.inspector.opacity')}</span>
               <input
                 type="number"
                 min="0" max="1" step="0.05"
@@ -921,7 +935,7 @@ export class FlowmeCardEditor extends LitElement {
 
           <!-- Delete -->
           <div class="node-row">
-            <button class="danger" @click=${() => this.removeNode(node.id)}>Delete node</button>
+            <button class="danger" @click=${() => this.removeNode(node.id)}>${t('editor.inspector.deleteNode')}</button>
           </div>
         </div>
       `;
@@ -931,14 +945,14 @@ export class FlowmeCardEditor extends LitElement {
       if (!flow) return nothing;
       return html`
         <div class="inspector">
-          <h3>Flow: ${flow.id}</h3>
+          <h3>${t('editor.inspector.flowHeading', flow.id)}</h3>
           <fieldset class="inspector-fieldset">
-            <legend class="inspector-legend">Route and sensor</legend>
+            <legend class="inspector-legend">${t('editor.inspector.routeAndSensor')}</legend>
             <div class="row">
               <span>${flow.from_node} → ${flow.to_node}</span>
             </div>
             <label>
-              Entity
+              ${t('editor.inspector.entity')}
               ${this.renderEntityPicker(
                 flow.entity,
                 (value) => this.setFlowEntity(flow.id, value),
@@ -948,7 +962,7 @@ export class FlowmeCardEditor extends LitElement {
           </fieldset>
           ${this.renderWaypointList(flow)}
           <label>
-            Line style
+            ${t('editor.inspector.lineStyle')}
             <select
               .value=${flow.line_style ?? 'corner'}
               @change=${(e: Event) => {
@@ -965,7 +979,7 @@ export class FlowmeCardEditor extends LitElement {
             </select>
           </label>
           <label>
-            Colour override
+            ${t('editor.inspector.colourOverride')}
             <div class="color-row">
               ${(() => {
                 const profile = getProfile(flow.domain ?? this.config.domain);
@@ -982,21 +996,21 @@ export class FlowmeCardEditor extends LitElement {
                       this.pushPatch(prev, next, `set colour of ${flow.id}`);
                     }}
                   />
-                  <span class="color-effective">${flow.color ? 'override' : 'domain default'}</span>
+                  <span class="color-effective">${flow.color ? t('editor.inspector.colourOverrideActive') : t('editor.inspector.colourDomainDefault')}</span>
                   ${flow.color
                     ? html`<button class="ghost" @click=${() => {
                         if (!this.config) return;
                         const prev = this.config;
                         const next = setFlowColor(prev, flow.id, undefined);
                         this.pushPatch(prev, next, `clear colour of ${flow.id}`);
-                      }}>Clear</button>`
+                      }}>${t('editor.inspector.clearColour')}</button>`
                     : nothing}
                 `;
               })()}
             </div>
           </label>
           <label>
-            Flow opacity
+            ${t('editor.inspector.flowOpacity')}
             <div class="inspector-slider-row">
               <input
                 type="range"
@@ -1017,7 +1031,7 @@ export class FlowmeCardEditor extends LitElement {
             </div>
           </label>
           <label>
-            Visible
+            ${t('editor.inspector.flowVisible')}
             <div class="row">
               <input
                 type="checkbox"
@@ -1030,13 +1044,13 @@ export class FlowmeCardEditor extends LitElement {
                   this.pushPatch(prev, next, `${checked ? 'show' : 'hide'} flow ${flow.id}`);
                 }}
               />
-              <span>${flow.visible !== false ? 'shown' : 'hidden'}</span>
+              <span>${flow.visible !== false ? t('editor.inspector.shown') : t('editor.inspector.hidden')}</span>
             </div>
           </label>
           ${this.renderSpeedCurveSection(flow)}
           ${this.renderAnimationSection(flow)}
           ${this.renderValueGradientSection(flow)}
-          <button class="danger" @click=${() => this.removeFlow(flow.id)}>Delete flow</button>
+          <button class="danger" @click=${() => this.removeFlow(flow.id)}>${t('editor.inspector.deleteFlow')}</button>
         </div>
       `;
     }
@@ -1100,20 +1114,19 @@ export class FlowmeCardEditor extends LitElement {
 
     return html`
       <details class="speed-curve-details">
-        <summary>Speed curve override</summary>
+        <summary>${t('editor.inspector.speedCurveOverrideSummary')}</summary>
         <div class="speed-curve-body">
           <p class="hint-sub">
-            Leave blank to use domain profile defaults.
-            Domain: <strong>${profile.unit_label}</strong> (${flow.domain ?? this.config.domain})
+            ${t('editor.inspector.speedCurveHint', profile.unit_label, flow.domain ?? this.config.domain)}
           </p>
-          ${numInput('threshold', 'Threshold', profile.unit_label)}
-          ${numInput('p50', 'Median (p50)', profile.unit_label)}
-          ${numInput('peak', 'Peak', profile.unit_label)}
-          ${numInput('max_duration', 'Max duration', 'ms')}
-          ${numInput('min_duration', 'Min duration', 'ms')}
-          ${numInput('steepness', 'Steepness', 'k')}
+          ${numInput('threshold', t('editor.inspector.threshold'), profile.unit_label)}
+          ${numInput('p50', t('editor.inspector.medianP50'), profile.unit_label)}
+          ${numInput('peak', t('editor.inspector.peak'), profile.unit_label)}
+          ${numInput('max_duration', t('editor.inspector.maxDuration'), t('editor.inspector.ms'))}
+          ${numInput('min_duration', t('editor.inspector.minDuration'), t('editor.inspector.ms'))}
+          ${numInput('steepness', t('editor.inspector.steepness'), t('editor.inspector.k'))}
           <div class="speed-curve-preview">
-            <span>Preview (at threshold / p50 / peak):</span>
+            <span>${t('editor.inspector.previewAtPoints')}</span>
             <strong>${previewDurations[0]}</strong>
             /
             <strong>${previewDurations[1]}</strong>
@@ -1126,7 +1139,7 @@ export class FlowmeCardEditor extends LitElement {
                 const prev = this.config;
                 const next = clearSpeedCurveOverride(prev, flow.id);
                 this.pushPatch(prev, next, `reset speed curve for ${flow.id}`);
-              }}>Reset to domain defaults</button>`
+              }}>${t('editor.inspector.resetToDomainDefaults')}</button>`
             : nothing}
         </div>
       </details>
@@ -1157,7 +1170,7 @@ export class FlowmeCardEditor extends LitElement {
 
     return html`
       <details class="anim-details" open>
-        <summary>Animation</summary>
+        <summary>${t('editor.inspector.animation')}</summary>
         <div class="anim-body">
 
           <!-- Live preview strip -->
@@ -1167,7 +1180,7 @@ export class FlowmeCardEditor extends LitElement {
             </svg>
           </div>
 
-          <label>Style
+          <label>${t('editor.inspector.style')}
             <select
               .value=${style}
               @change=${(e: Event) => {
@@ -1181,7 +1194,7 @@ export class FlowmeCardEditor extends LitElement {
           </label>
 
           ${showShape ? html`
-            <label>Particle shape
+            <label>${t('editor.inspector.particleShape')}
               <select
                 .value=${anim.particle_shape ?? 'circle'}
                 @change=${(e: Event) => {
@@ -1194,9 +1207,9 @@ export class FlowmeCardEditor extends LitElement {
               </select>
             </label>
             ${(anim.particle_shape ?? 'circle') === 'custom_svg' ? html`
-              <label>SVG path (d= attribute)
+              <label>${t('editor.inspector.svgPathLabel')}
                 <input type="text"
-                  placeholder="M 0 -8 L 5 8 L -5 8 Z"
+                  placeholder=${t('editor.inspector.svgPathPlaceholder')}
                   .value=${anim.custom_svg_path ?? ''}
                   @change=${(e: Event) => {
                     patch({ custom_svg_path: (e.target as HTMLInputElement).value.trim() });
@@ -1211,7 +1224,7 @@ export class FlowmeCardEditor extends LitElement {
             ` : nothing}
           ` : nothing}
 
-          <label>Direction
+          <label>${t('editor.inspector.direction')}
             <select
               .value=${anim.direction ?? 'auto'}
               @change=${(e: Event) => {
@@ -1224,7 +1237,7 @@ export class FlowmeCardEditor extends LitElement {
             </select>
           </label>
 
-          <label>Particle size
+          <label>${t('editor.inspector.particleSize')}
             <div class="inspector-slider-row">
               <input type="range" min="0.5" max="3" step="0.1"
                 .value=${String(anim.particle_size ?? 1.0)}
@@ -1237,9 +1250,9 @@ export class FlowmeCardEditor extends LitElement {
             </div>
           </label>
 
-          <label>Particle count
+          <label>${t('editor.inspector.particleCount')}
             <input type="number" min="1" max="20" step="1"
-              placeholder="profile default"
+              placeholder=${t('editor.inspector.profileDefaultPlaceholder')}
               .value=${anim.particle_count !== undefined ? String(anim.particle_count) : ''}
               @change=${(e: Event) => {
                 const raw = (e.target as HTMLInputElement).value.trim();
@@ -1250,7 +1263,7 @@ export class FlowmeCardEditor extends LitElement {
             />
           </label>
 
-          <label>Particle spacing
+          <label>${t('editor.inspector.particleSpacing')}
             <select
               .value=${anim.particle_spacing ?? 'even'}
               @change=${(e: Event) => {
@@ -1264,7 +1277,7 @@ export class FlowmeCardEditor extends LitElement {
           </label>
 
           ${(anim.particle_spacing === 'clustered') ? html`
-            <label>Cluster size
+            <label>${t('editor.inspector.clusterSize')}
               <input type="number" min="1" max="10" step="1"
                 .value=${String(anim.cluster_size ?? 3)}
                 @change=${(e: Event) => {
@@ -1273,7 +1286,7 @@ export class FlowmeCardEditor extends LitElement {
                 }}
               />
             </label>
-            <label>Cluster gap (×)
+            <label>${t('editor.inspector.clusterGap')}
               <input type="number" min="0.5" max="10" step="0.5"
                 .value=${String(anim.cluster_gap ?? 2.0)}
                 @change=${(e: Event) => {
@@ -1285,7 +1298,7 @@ export class FlowmeCardEditor extends LitElement {
           ` : nothing}
 
           ${(anim.particle_spacing === 'pulse') ? html`
-            <label>Pulse frequency (Hz)
+            <label>${t('editor.inspector.pulseFrequencyHz')}
               <input type="number" min="0.1" max="10" step="0.1"
                 .value=${String(anim.pulse_frequency ?? 1.0)}
                 @change=${(e: Event) => {
@@ -1294,7 +1307,7 @@ export class FlowmeCardEditor extends LitElement {
                 }}
               />
             </label>
-            <label>Pulse ratio
+            <label>${t('editor.inspector.pulseRatio')}
               <div class="inspector-slider-row">
                 <input type="range" min="0.1" max="0.9" step="0.05"
                   .value=${String(anim.pulse_ratio ?? 0.3)}
@@ -1309,7 +1322,7 @@ export class FlowmeCardEditor extends LitElement {
           ` : nothing}
 
           ${(anim.particle_spacing === 'wave_spacing' || anim.particle_spacing === 'wave_lateral') ? html`
-            <label>Wave frequency
+            <label>${t('editor.inspector.waveFrequency')}
               <input type="number" min="0.1" max="10" step="0.1"
                 .value=${String(anim.wave_frequency ?? 1.0)}
                 @change=${(e: Event) => {
@@ -1318,7 +1331,7 @@ export class FlowmeCardEditor extends LitElement {
                 }}
               />
             </label>
-            <label>${anim.particle_spacing === 'wave_lateral' ? 'Wave amplitude (px)' : 'Wave amplitude (0–1)'}
+            <label>${anim.particle_spacing === 'wave_lateral' ? t('editor.inspector.waveAmplitudePx') : t('editor.inspector.waveAmplitude01')}
               <input type="number"
                 min=${anim.particle_spacing === 'wave_lateral' ? '1' : '0.05'}
                 max=${anim.particle_spacing === 'wave_lateral' ? '40' : '1'}
@@ -1332,7 +1345,7 @@ export class FlowmeCardEditor extends LitElement {
             </label>
           ` : nothing}
 
-          <label>Glow intensity
+          <label>${t('editor.inspector.glowIntensity')}
             <div class="inspector-slider-row">
               <input type="range" min="0" max="2" step="0.1"
                 .value=${String(anim.glow_intensity ?? 1.0)}
@@ -1350,7 +1363,7 @@ export class FlowmeCardEditor extends LitElement {
               .checked=${anim.shimmer === true}
               @change=${(e: Event) => patch({ shimmer: (e.target as HTMLInputElement).checked })}
             />
-            Shimmer at threshold
+            ${t('editor.inspector.shimmerThreshold')}
           </label>
 
           <label class="anim-toggle">
@@ -1358,11 +1371,11 @@ export class FlowmeCardEditor extends LitElement {
               .checked=${anim.flicker === true}
               @change=${(e: Event) => patch({ flicker: (e.target as HTMLInputElement).checked })}
             />
-            Flicker (random opacity variation)
+            ${t('editor.inspector.flicker')}
           </label>
 
           ${showPulseWidth ? html`
-            <label>Pulse width (px)
+            <label>${t('editor.inspector.pulseWidthPx')}
               <input type="number" min="1" max="20" step="0.5"
                 .value=${String(anim.pulse_width ?? 2)}
                 @change=${(e: Event) => {
@@ -1374,7 +1387,7 @@ export class FlowmeCardEditor extends LitElement {
           ` : nothing}
 
           ${showTrailLength ? html`
-            <label>Trail length
+            <label>${t('editor.inspector.trailLength')}
               <div class="inspector-slider-row">
                 <input type="range" min="0.5" max="6" step="0.25"
                   .value=${String(anim.trail_length ?? 2.0)}
@@ -1389,7 +1402,7 @@ export class FlowmeCardEditor extends LitElement {
           ` : nothing}
 
           ${showDashGap ? html`
-            <label>Dash gap ratio
+            <label>${t('editor.inspector.dashGapRatio')}
               <div class="inspector-slider-row">
                 <input type="range" min="0.1" max="3" step="0.1"
                   .value=${String(anim.dash_gap ?? 0.5)}
@@ -1409,7 +1422,7 @@ export class FlowmeCardEditor extends LitElement {
                 const prev = this.config;
                 const next = clearFlowAnimation(prev, flow.id);
                 this.pushPatch(prev, next, `reset animation for ${flow.id}`);
-              }}>Reset to defaults</button>`
+              }}>${t('editor.inspector.resetToDefaults')}</button>`
             : nothing}
         </div>
       </details>
@@ -1542,19 +1555,19 @@ export class FlowmeCardEditor extends LitElement {
     return html`
       <div class="waypoint-section">
         <h4 class="waypoint-section-header">
-          Waypoints
+          ${t('editor.inspector.waypoints')}
           <span class="waypoint-count">${flow.waypoints.length}</span>
         </h4>
 
         ${flow.waypoints.length === 0
-          ? html`<div class="waypoint-empty">No waypoints — click on the flow line to add one.</div>`
+          ? html`<div class="waypoint-empty">${t('editor.inspector.waypointEmpty')}</div>`
           : html`
             <ul class="waypoint-list">
               ${flow.waypoints.map((wp, index) => html`
                 <li class="waypoint-row">
-                  <span class="waypoint-index">#${index + 1}</span>
+                  <span class="waypoint-index">${t('editor.inspector.waypointSectionHash')}${index + 1}</span>
                   <label class="waypoint-coord">
-                    x%
+                    ${t('editor.inspector.waypointCoordX')}
                     <input type="number" min="0" max="100" step="0.5"
                       .value=${wp.x.toFixed(1)}
                       @change=${(e: Event) => {
@@ -1568,7 +1581,7 @@ export class FlowmeCardEditor extends LitElement {
                     />
                   </label>
                   <label class="waypoint-coord">
-                    y%
+                    ${t('editor.inspector.waypointCoordY')}
                     <input type="number" min="0" max="100" step="0.5"
                       .value=${wp.y.toFixed(1)}
                       @change=${(e: Event) => {
@@ -1581,7 +1594,7 @@ export class FlowmeCardEditor extends LitElement {
                       }}
                     />
                   </label>
-                  <button type="button" class="icon-btn" aria-label=${`Delete waypoint ${index + 1}`} title="Delete waypoint"
+                  <button type="button" class="icon-btn" aria-label=${t('editor.inspector.deleteWaypointAria', index)} title=${t('editor.inspector.deleteWaypoint')}
                     @click=${() => {
                       if (!this.config) return;
                       const prev = this.config;
@@ -1594,8 +1607,8 @@ export class FlowmeCardEditor extends LitElement {
             </ul>
           `}
 
-        <button type="button" class="ghost full-width" aria-label="Add waypoint on flow" @click=${addAtMidpoint}>
-          + Add waypoint
+        <button type="button" class="ghost full-width" aria-label=${t('editor.inspector.addWaypointOnFlowAria')} @click=${addAtMidpoint}>
+          ${t('editor.inspector.addWaypoint')}
         </button>
       </div>
     `;
@@ -1648,7 +1661,7 @@ export class FlowmeCardEditor extends LitElement {
     // override with ?open= across re-renders.
     return html`
       <div class="gradient-section">
-        <h4 class="gradient-section-header">Value gradient</h4>
+        <h4 class="gradient-section-header">${t('editor.inspector.valueGradient')}</h4>
 
         <label class="anim-toggle">
           <input type="checkbox"
@@ -1663,19 +1676,19 @@ export class FlowmeCardEditor extends LitElement {
               this.pushPatch(prev, next, `${checked ? 'enable' : 'disable'} gradient for ${flow.id}`);
             }}
           />
-          Enable value gradient
+          ${t('editor.inspector.enableGradient')}
         </label>
 
         ${vg ? html`
-          <label>Gradient entity
-            <input type="text" placeholder="sensor.my_temperature"
+          <label>${t('editor.inspector.gradientEntity')}
+            <input type="text" placeholder=${t('editor.inspector.gradientEntityPlaceholder')}
               .value=${vg.entity}
               @change=${(e: Event) => patch({ entity: (e.target as HTMLInputElement).value.trim() })}
             />
           </label>
 
           <div class="gradient-row">
-            <label>Low value
+            <label>${t('editor.inspector.lowValue')}
               <input type="number" step="any"
                 .value=${String(vg.low_value)}
                 @change=${(e: Event) => {
@@ -1684,7 +1697,7 @@ export class FlowmeCardEditor extends LitElement {
                 }}
               />
             </label>
-            <label>Low colour
+            <label>${t('editor.inspector.lowColour')}
               <div class="color-row">
                 <input type="color"
                   .value=${vg.low_color}
@@ -1696,7 +1709,7 @@ export class FlowmeCardEditor extends LitElement {
           </div>
 
           <div class="gradient-row">
-            <label>High value
+            <label>${t('editor.inspector.highValue')}
               <input type="number" step="any"
                 .value=${String(vg.high_value)}
                 @change=${(e: Event) => {
@@ -1705,7 +1718,7 @@ export class FlowmeCardEditor extends LitElement {
                 }}
               />
             </label>
-            <label>High colour
+            <label>${t('editor.inspector.highColour')}
               <div class="color-row">
                 <input type="color"
                   .value=${vg.high_color}
@@ -1716,16 +1729,16 @@ export class FlowmeCardEditor extends LitElement {
             </label>
           </div>
 
-          <label>Apply gradient to
+          <label>${t('editor.inspector.applyGradientTo')}
             <select
               .value=${vg.mode ?? 'both'}
               @change=${(e: Event) => {
                 patch({ mode: (e.target as HTMLSelectElement).value as ValueGradientConfig['mode'] });
               }}
             >
-              <option value="flow" ?selected=${vg.mode === 'flow'}>Particles only</option>
-              <option value="line" ?selected=${vg.mode === 'line'}>Line only</option>
-              <option value="both" ?selected=${(vg.mode ?? 'both') === 'both'}>Particles and line</option>
+              <option value="flow" ?selected=${vg.mode === 'flow'}>${t('editor.inspector.gradientModeFlow')}</option>
+              <option value="line" ?selected=${vg.mode === 'line'}>${t('editor.inspector.gradientModeLine')}</option>
+              <option value="both" ?selected=${(vg.mode ?? 'both') === 'both'}>${t('editor.inspector.gradientModeBoth')}</option>
             </select>
           </label>
 
@@ -1736,7 +1749,7 @@ export class FlowmeCardEditor extends LitElement {
             const prev = this.config;
             const next = clearValueGradient(prev, flow.id);
             this.pushPatch(prev, next, `disable gradient for ${flow.id}`);
-          }}>Remove gradient</button>
+          }}>${t('editor.inspector.removeGradient')}</button>
         ` : nothing}
       </div>
     `;
@@ -1748,10 +1761,10 @@ export class FlowmeCardEditor extends LitElement {
 
     return html`
       <details class="panel anim-global-panel" open>
-        <summary>Animation (global)</summary>
+        <summary>${t('editor.inspector.animationGlobalSummary')}</summary>
         <div class="panel-body">
           <label>
-            FPS cap
+            ${t('editor.inspector.fpsCap')}
             <div class="inspector-slider-row">
               <input type="range" min="10" max="60" step="5"
                 .value=${String(animCfg.fps ?? 60)}
@@ -1763,7 +1776,7 @@ export class FlowmeCardEditor extends LitElement {
                   this.pushPatch(prev, next, 'set animation fps');
                 }}
               />
-              <span>${animCfg.fps ?? 60} fps</span>
+              <span>${animCfg.fps ?? 60} ${t('editor.inspector.fpsSuffix')}</span>
             </div>
           </label>
           <label class="visibility-row">
@@ -1777,10 +1790,10 @@ export class FlowmeCardEditor extends LitElement {
                 this.pushPatch(prev, next, 'set smooth_speed');
               }}
             />
-            <span class="visibility-label">Smooth speed transitions</span>
-            <span class="visibility-val">${animCfg.smooth_speed !== false ? 'on' : 'off'}</span>
+            <span class="visibility-label">${t('editor.stateA.smoothSpeed')}</span>
+            <span class="visibility-val">${animCfg.smooth_speed !== false ? t('editor.inspector.on') : t('editor.inspector.off')}</span>
           </label>
-          <p class="hint-sub">Smooth speed: interpolates duration changes over 500ms instead of restarting abruptly.</p>
+          <p class="hint-sub">${t('editor.inspector.smoothSpeedHint')}</p>
         </div>
       </details>
     `;
@@ -1792,10 +1805,10 @@ export class FlowmeCardEditor extends LitElement {
     const opacity = overlay.opacity ?? 1;
     return html`
       <div class="inspector overlay-inspector">
-        <h3>Overlay: ${overlay.id}</h3>
+        <h3>${t('editor.inspector.overlayHeading', overlay.id)}</h3>
         <div class="row size-row">
           <label>
-            Width %
+            ${t('editor.inspector.width')}
             <input
               type="number"
               min="2"
@@ -1806,7 +1819,7 @@ export class FlowmeCardEditor extends LitElement {
             />
           </label>
           <label>
-            Height %
+            ${t('editor.inspector.height')}
             <input
               type="number"
               min="2"
@@ -1818,7 +1831,7 @@ export class FlowmeCardEditor extends LitElement {
           </label>
         </div>
         <label class="toggle-label">
-          Visible
+          ${t('editor.inspector.visible')}
           <input
             type="checkbox"
             .checked=${visible}
@@ -1832,7 +1845,7 @@ export class FlowmeCardEditor extends LitElement {
           />
         </label>
         <label>
-          Opacity
+          ${t('editor.inspector.opacity')}
           <input
             type="range"
             min="0"
@@ -1851,7 +1864,7 @@ export class FlowmeCardEditor extends LitElement {
           <span>${Math.round(opacity * 100)}%</span>
         </label>
         ${this.renderCardConfigEditor(overlay)}
-        <button class="danger" @click=${() => this.removeOverlay(overlay.id)}>Delete overlay</button>
+        <button class="danger" @click=${() => this.removeOverlay(overlay.id)}>${t('editor.inspector.deleteOverlay')}</button>
       </div>
     `;
   }
@@ -1862,11 +1875,11 @@ export class FlowmeCardEditor extends LitElement {
       JSON.stringify(overlay.card ?? { type: 'entity', entity: 'sensor.example_sensor' }, null, 2);
     return html`
       <label>
-        Card configuration (any valid HA card YAML)
+        ${t('editor.inspector.cardConfig')}
         <textarea
           rows="8"
           spellcheck="false"
-          placeholder="type: entity&#10;entity: sensor.my_sensor"
+          placeholder=${t('editor.inspector.cardConfigPlaceholder')}
           .value=${jsonValue}
           @input=${(e: Event) => {
             this.customConfigDraft = (e.target as HTMLTextAreaElement).value;
@@ -1878,14 +1891,13 @@ export class FlowmeCardEditor extends LitElement {
         ? html`<div class="custom-config-error">${this.customConfigError}</div>`
         : nothing}
       <p class="hint-sub">
-        Any installed HA card type is supported. Examples: entity, tile, gauge,
-        picture-entity, custom:mini-graph-card, …
+        ${t('editor.inspector.cardConfigHintExamples')}
       </p>
       <p class="hint-sub">
-        URLs must not use javascript:, vbscript:, data: or file: schemes.
+        ${t('editor.inspector.cardConfigHintUrls')}
       </p>
       <div class="row">
-        <button @click=${() => this.applyCustomConfig(overlay.id)}>Apply card config</button>
+        <button @click=${() => this.applyCustomConfig(overlay.id)}>${t('editor.inspector.applyCardConfig')}</button>
       </div>
     `;
   }
@@ -1955,21 +1967,20 @@ export class FlowmeCardEditor extends LitElement {
 
     return html`
       <details class="panel opacity-panel" open>
-        <summary>Opacity</summary>
+        <summary>${t('editor.inspector.opacitySummary')}</summary>
         <div class="panel-body">
           <p class="hint-sub">
-            Adjust opacity for each visual layer. 1.0 = fully opaque, 0.0 = invisible.
-            "Darken" is 0 by default (no darkening overlay).
+            ${t('editor.inspector.opacityHint')}
           </p>
-          ${opacitySlider('background', 'Background image')}
-          ${opacitySlider('darken', 'Background darkening (0=none, 1=black)', 0)}
-          ${opacitySlider('nodes', 'Nodes')}
-          ${opacitySlider('flows', 'Flow lines')}
-          ${opacitySlider('dots', 'Animated dots')}
-          ${opacitySlider('glow', 'Glow effect')}
-          ${opacitySlider('labels', 'Labels')}
-          ${opacitySlider('values', 'Values')}
-          ${opacitySlider('overlays', 'Overlays (all)')}
+          ${opacitySlider('background', t('editor.inspector.opacityBackground'))}
+          ${opacitySlider('darken', t('editor.inspector.opacityDarken'), 0)}
+          ${opacitySlider('nodes', t('editor.inspector.opacityNodes'))}
+          ${opacitySlider('flows', t('editor.inspector.opacityFlows'))}
+          ${opacitySlider('dots', t('editor.inspector.opacityDots'))}
+          ${opacitySlider('glow', t('editor.inspector.opacityGlow'))}
+          ${opacitySlider('labels', t('editor.inspector.opacityLabels'))}
+          ${opacitySlider('values', t('editor.inspector.opacityValues'))}
+          ${opacitySlider('overlays', t('editor.inspector.opacityOverlays'))}
         </div>
       </details>
     `;
@@ -2003,14 +2014,14 @@ export class FlowmeCardEditor extends LitElement {
               this.pushPatch(prev, next, `set domain_colors.${key}`);
             }}
           />
-          <span class="color-picker-value">${override ? override : `${defaultVal} (default)`}</span>
+          <span class="color-picker-value">${override ? override : t('editor.inspector.colourDefaultSuffix', defaultVal)}</span>
           ${override
             ? html`<button class="ghost small" @click=${() => {
                 if (!this.config) return;
                 const prev = this.config;
                 const next = setDomainColor(prev, key, undefined);
                 this.pushPatch(prev, next, `reset domain_colors.${key}`);
-              }}>Reset</button>`
+              }}>${t('editor.inspector.reset')}</button>`
             : nothing}
         </div>
       `;
@@ -2018,16 +2029,15 @@ export class FlowmeCardEditor extends LitElement {
 
     return html`
       <details class="panel domain-colors-panel">
-        <summary>Domain colours</summary>
+        <summary>${t('editor.inspector.domainColoursSummary')}</summary>
         <div class="panel-body">
           <p class="hint-sub">
-            Override the default colour for each energy domain type. Changes apply to all
-            flows of that domain unless a per-flow colour is set.
+            ${t('editor.inspector.domainColoursHint')}
           </p>
-          ${colorRow('solar', 'Solar')}
-          ${colorRow('grid', 'Grid')}
-          ${colorRow('battery', 'Battery')}
-          ${colorRow('load', 'Load')}
+          ${colorRow('solar', t('editor.stateA.solar'))}
+          ${colorRow('grid', t('editor.stateA.grid'))}
+          ${colorRow('battery', t('editor.stateA.battery'))}
+          ${colorRow('load', t('editor.stateA.load'))}
         </div>
       </details>
     `;
@@ -2053,24 +2063,24 @@ export class FlowmeCardEditor extends LitElement {
               this.pushPatch(prev, next, `set visibility.${key}`);
             }}
           />
-          <span class="visibility-val">${value ? 'visible' : 'hidden'}</span>
+          <span class="visibility-val">${value ? t('editor.inspector.visibilityVisible') : t('editor.inspector.visibilityHidden')}</span>
         </label>
       `;
     };
 
     return html`
       <details class="panel visibility-panel">
-        <summary>Visibility</summary>
+        <summary>${t('editor.inspector.visibilitySummary')}</summary>
         <div class="panel-body">
           <p class="hint-sub">
-            Binary show/hide for each rendering layer. Independent of opacity.
+            ${t('editor.inspector.visibilityHint')}
           </p>
-          ${toggle('nodes', 'Nodes')}
-          ${toggle('lines', 'Flow lines')}
-          ${toggle('dots', 'Animated dots')}
-          ${toggle('labels', 'Labels')}
-          ${toggle('values', 'Values')}
-          ${toggle('overlays', 'Overlays')}
+          ${toggle('nodes', t('editor.inspector.opacityNodes'))}
+          ${toggle('lines', t('editor.inspector.visibilityFlowLines'))}
+          ${toggle('dots', t('editor.inspector.visibilityAnimatedDots'))}
+          ${toggle('labels', t('editor.inspector.opacityLabels'))}
+          ${toggle('values', t('editor.inspector.opacityValues'))}
+          ${toggle('overlays', t('editor.toolbar.overlays'))}
         </div>
       </details>
     `;
@@ -2112,18 +2122,17 @@ export class FlowmeCardEditor extends LitElement {
 
     return html`
       <details class="panel defaults-panel" open>
-        <summary>Defaults</summary>
+        <summary>${t('editor.inspector.defaultsSummary')}</summary>
         <div class="panel-body">
           <p class="hint-sub">
-            Card-level rendering defaults. All fields are optional — omitting them
-            keeps the built-in values shown in parentheses.
+            ${t('editor.inspector.defaultsHint')}
           </p>
-          ${numInput('node_radius', 'Node radius (px)', { min: 4, max: 40, step: 1, defaultVal: 12 })}
-          ${numInput('dot_radius', 'Dot radius (px)', { min: 2, max: 20, step: 1, defaultVal: 5 })}
-          ${numInput('line_width', 'Line width (px)', { min: 1, max: 10, step: 1, defaultVal: 2 })}
-          ${numInput('burst_trigger_ratio', 'Burst trigger ratio (0–1)', { min: 0.1, max: 1, step: 0.05, defaultVal: 0.9 })}
-          ${numInput('burst_sustain_ms', 'Burst sustain (ms)', { min: 1000, max: 30000, step: 500, defaultVal: 5000 })}
-          ${numInput('burst_max_particles', 'Burst max particles', { min: 3, max: 50, step: 1, defaultVal: 20 })}
+          ${numInput('node_radius', t('editor.stateA.nodeRadius'), { min: 4, max: 40, step: 1, defaultVal: 12 })}
+          ${numInput('dot_radius', t('editor.stateA.dotRadius'), { min: 2, max: 20, step: 1, defaultVal: 5 })}
+          ${numInput('line_width', t('editor.stateA.lineWidth'), { min: 1, max: 10, step: 1, defaultVal: 2 })}
+          ${numInput('burst_trigger_ratio', t('editor.inspector.burstTriggerRatio'), { min: 0.1, max: 1, step: 0.05, defaultVal: 0.9 })}
+          ${numInput('burst_sustain_ms', t('editor.inspector.burstSustainMs'), { min: 1000, max: 30000, step: 500, defaultVal: 5000 })}
+          ${numInput('burst_max_particles', t('editor.inspector.burstMaxParticles'), { min: 3, max: 50, step: 1, defaultVal: 20 })}
         </div>
       </details>
     `;
@@ -2163,21 +2172,21 @@ export class FlowmeCardEditor extends LitElement {
     const anchorId = Array.from(ids)[0]!;
     return html`
       <div class="multiselect-toolbar">
-        <span class="multiselect-count">${count} nodes selected</span>
+        <span class="multiselect-count">${t('editor.inspector.multiselectCount', count)}</span>
         <button
           type="button"
           class="ms-btn"
-          aria-label="Suggest path between two selected nodes"
-          title=${count === 2 ? 'Suggest path between selected nodes' : 'Select exactly 2 nodes to suggest a path'}
+          aria-label=${t('editor.inspector.suggestPathBetweenAria')}
+          title=${count === 2 ? t('editor.inspector.suggestPathBetweenTitle') : t('editor.inspector.suggestPathPickTwoTitle')}
           ?disabled=${count !== 2 || this.suggestBusy}
           @click=${() => this.runSuggestPath()}
-        >Suggest path</button>
-        <button type="button" class="ms-btn" aria-label="Hide selected nodes" @click=${() => this.bulkHide(ids)}>Hide</button>
-        <button type="button" class="ms-btn" aria-label="Show selected nodes" @click=${() => this.bulkShow(ids)}>Show</button>
-        <button type="button" class="ms-btn" aria-label="Align selected nodes horizontally" @click=${() => this.bulkAlignH(ids, anchorId)}>Align H</button>
-        <button type="button" class="ms-btn" aria-label="Align selected nodes vertically" @click=${() => this.bulkAlignV(ids, anchorId)}>Align V</button>
-        <button type="button" class="ms-btn danger" aria-label="Delete selected nodes" @click=${() => this.bulkDelete(ids)}>Delete</button>
-        <button type="button" class="ms-btn ghost" aria-label="Clear multi-selection" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; }}>✕ Deselect</button>
+        >${t('editor.toolbar.suggestPath')}</button>
+        <button type="button" class="ms-btn" aria-label=${t('editor.toolbar.hideSelectedNodesAria')} @click=${() => this.bulkHide(ids)}>${t('editor.toolbar.hideSelected')}</button>
+        <button type="button" class="ms-btn" aria-label=${t('editor.toolbar.showSelectedNodesAria')} @click=${() => this.bulkShow(ids)}>${t('editor.toolbar.showSelected')}</button>
+        <button type="button" class="ms-btn" aria-label=${t('editor.toolbar.alignSelectedHorizontalAria')} @click=${() => this.bulkAlignH(ids, anchorId)}>${t('editor.toolbar.alignHorizontalShort')}</button>
+        <button type="button" class="ms-btn" aria-label=${t('editor.toolbar.alignSelectedVerticalAria')} @click=${() => this.bulkAlignV(ids, anchorId)}>${t('editor.toolbar.alignVerticalShort')}</button>
+        <button type="button" class="ms-btn danger" aria-label=${t('editor.toolbar.deleteSelectedNodesAria')} @click=${() => this.bulkDelete(ids)}>${t('editor.toolbar.deleteSelected')}</button>
+        <button type="button" class="ms-btn ghost" aria-label=${t('editor.toolbar.clearMultiSelectionAria')} @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; }}>${t('editor.toolbar.deselect')}</button>
       </div>
     `;
   }
@@ -2212,7 +2221,7 @@ export class FlowmeCardEditor extends LitElement {
 
   private bulkDelete(ids: Set<string>): void {
     if (!this.config) return;
-    if (!window.confirm(`Delete ${ids.size} nodes (and their flows)?`)) return;
+    if (!window.confirm(t('editor.inspector.deleteNodesConfirm', ids.size))) return;
     const prev = this.config;
     const next = bulkDeleteNodes(prev, ids);
     this.pushPatch(prev, next, `delete ${ids.size} nodes`);
@@ -2228,38 +2237,38 @@ export class FlowmeCardEditor extends LitElement {
       bg.weather_entity && this.hass ? this.hass.states[bg.weather_entity]?.state : undefined;
     return html`
       <details class="weather-panel" ?open=${stateEntries.length > 0 || !!bg.weather_entity}>
-        <summary>Backgrounds &amp; weather</summary>
+        <summary>${t('editor.inspector.weatherPanelSummary')}</summary>
         <div class="weather-body">
           <label>
-            Default image URL
+            ${t('editor.inspector.defaultImageUrl')}
             <input
               type="text"
               .value=${bg.default}
               @change=${this.onDefaultBgChange}
-              placeholder="/local/flowme/house.jpg"
+              placeholder=${t('editor.inspector.defaultBgPlaceholder')}
             />
             ${bg.default
-              ? html`<img class="weather-thumb" src=${bg.default} alt="default background" />`
+              ? html`<img class="weather-thumb" src=${bg.default} alt=${t('editor.inspector.defaultBgAlt')} />`
               : nothing}
           </label>
           <label>
-            Weather entity (optional)
+            ${t('editor.inspector.weatherEntityOptional')}
             ${this.renderEntityPicker(
               bg.weather_entity ?? '',
               (value) => this.setWeatherEntityValue(value),
-              { includeDomains: ['weather'], placeholder: 'weather.forecast_home' },
+              { includeDomains: ['weather'], placeholder: t('editor.inspector.weatherPlaceholder') },
             )}
           </label>
           ${liveWeatherState !== undefined
             ? html`<div class="weather-live-state">
-                Current state: <strong>${liveWeatherState}</strong>
+                ${t('editor.inspector.currentState')} <strong>${liveWeatherState}</strong>
                 ${bg.weather_states?.[liveWeatherState]
-                  ? html` → <span class="weather-match-ok">matched</span>`
-                  : html` → <span class="weather-match-miss">no mapping (using default)</span>`}
+                  ? html` → <span class="weather-match-ok">${t('editor.inspector.weatherMatched')}</span>`
+                  : html` → <span class="weather-match-miss">${t('editor.inspector.weatherNoMapping')}</span>`}
               </div>`
             : nothing}
           <label>
-            Sun entity (optional) — enables automatic night background variants
+            ${t('editor.inspector.sunEntityOptional')}
             ${this.renderEntityPicker(
               bg.sun_entity ?? '',
               (value) => {
@@ -2268,18 +2277,18 @@ export class FlowmeCardEditor extends LitElement {
                 const next = setSunEntity(prev, value || undefined);
                 this.pushPatch(prev, next, 'set sun entity');
               },
-              { includeDomains: ['sun'], placeholder: 'sun.sun' },
+              { includeDomains: ['sun'], placeholder: t('editor.inspector.sunPlaceholder') },
             )}
           </label>
           ${bg.sun_entity && this.hass?.states[bg.sun_entity]
             ? html`<div class="weather-live-state">
-                Sun: <strong>${this.hass.states[bg.sun_entity]?.state === 'above_horizon'
-                  ? '☀️ above horizon'
-                  : '🌙 below horizon'}</strong>
+                ${t('editor.inspector.sunStateLabel')} <strong>${this.hass.states[bg.sun_entity]?.state === 'above_horizon'
+                  ? t('editor.inspector.sunAbove')
+                  : t('editor.inspector.sunBelow')}</strong>
               </div>`
             : nothing}
           <label>
-            Fade transition (seconds)
+            ${t('editor.inspector.fadeTransitionSeconds')}
             <input
               type="number"
               min="0"
@@ -2298,8 +2307,8 @@ export class FlowmeCardEditor extends LitElement {
           </label>
           <div class="weather-states">
             <div class="weather-states-header">
-              <span>State</span>
-              <span>Image URL</span>
+              <span>${t('editor.inspector.weatherStateColumn')}</span>
+              <span>${t('editor.inspector.weatherImageUrlColumn')}</span>
               <span></span>
             </div>
             ${stateEntries.map(
@@ -2315,14 +2324,14 @@ export class FlowmeCardEditor extends LitElement {
                     type="text"
                     .value=${url}
                     @change=${(e: Event) => this.onWeatherStateUrlChange(key, e)}
-                    placeholder="/local/flowme/rainy.jpg"
+                    placeholder=${t('editor.inspector.weatherRowPlaceholder')}
                   />
                   <div class="weather-row-end">
                     ${url
                       ? html`<img class="weather-thumb" src=${url} alt=${key} />`
                       : nothing}
                     <button class="ghost" @click=${() => this.onWeatherStateRemove(key)}>
-                      Remove
+                      ${t('editor.inspector.remove')}
                     </button>
                   </div>
                 </div>
@@ -2333,17 +2342,16 @@ export class FlowmeCardEditor extends LitElement {
                 (s) => html`<option value=${s}></option>`,
               )}
             </datalist>
-            <button class="add-state" @click=${this.onWeatherStateAdd}>+ Add weather state</button>
+            <button class="add-state" @click=${this.onWeatherStateAdd}>${t('editor.inspector.addWeatherState')}</button>
           </div>
           <details class="hint-details">
-            <summary>Standard Met.no state list (for reference)</summary>
+            <summary>${t('editor.inspector.metNoReferenceSummary')}</summary>
             <div class="hint-states">
               ${FlowmeCardEditor.KNOWN_WEATHER_STATES.map(
                 (s) => html`<code>${s}</code>`,
               )}
               <p class="hint-sub">
-                Any state string is accepted — custom integrations can use any key.
-                State strings are matched exactly as Home Assistant provides them (lowercase, hyphenated).
+                ${t('editor.inspector.metNoHint')}
               </p>
             </div>
           </details>
@@ -2425,8 +2433,7 @@ export class FlowmeCardEditor extends LitElement {
         to: toNode.position,
       });
       if (!result.edgesUsable) {
-        this.errorMessage =
-          'Could not analyse the background image (likely a CORS issue). Serve it from the same origin as Home Assistant and try again.';
+        this.errorMessage = t('editor.inspector.suggestCorsError');
         this.suggestPreview = null;
         return;
       }
@@ -2441,8 +2448,10 @@ export class FlowmeCardEditor extends LitElement {
         elapsedMs: result.elapsedMs,
       };
     } catch (err) {
-      this.errorMessage =
-        'Auto-route failed: ' + (err instanceof Error ? err.message : String(err));
+      this.errorMessage = t(
+        'editor.inspector.suggestAutoRouteFailed',
+        err instanceof Error ? err.message : String(err),
+      );
       this.suggestPreview = null;
     } finally {
       this.suggestBusy = false;
@@ -2453,10 +2462,8 @@ export class FlowmeCardEditor extends LitElement {
     if (!this.config || !this.suggestPreview) return;
     const { fromNodeId, toNodeId, waypoints } = this.suggestPreview;
     const entity =
-      window.prompt(
-        'Entity for this flow (e.g. sensor.grid_power):',
-        'sensor.placeholder_entity',
-      ) ?? 'sensor.placeholder_entity';
+      window.prompt(t('editor.inspector.flowEntityPrompt'), t('editor.inspector.flowEntityDefault')) ??
+      t('editor.inspector.flowEntityDefault');
     const prev = this.config;
     // Check if a flow already exists between these two nodes.
     const existing = prev.flows.find(
@@ -2531,9 +2538,10 @@ export class FlowmeCardEditor extends LitElement {
     if (!this.suggestPreview) return nothing;
     return html`
       <div class="suggest-bar">
-        <span>Preview — ${this.suggestPreview.waypoints.length} waypoint(s)</span>
-        <button type="button" aria-label="Accept suggested path" @click=${this.acceptSuggestion}>Accept</button>
-        <button type="button" class="ghost" aria-label="Cancel suggested path" @click=${this.cancelSuggestion}>Cancel</button>
+        <span>${t('editor.suggestBar.message')}</span>
+        <span>${t('editor.inspector.suggestPreviewWaypoints', this.suggestPreview.waypoints.length)}</span>
+        <button type="button" aria-label=${t('editor.toolbar.acceptPath')} @click=${this.acceptSuggestion}>${t('editor.inspector.accept')}</button>
+        <button type="button" class="ghost" aria-label=${t('editor.toolbar.cancelPath')} @click=${this.cancelSuggestion}>${t('editor.toolbar.cancel')}</button>
       </div>
     `;
   }
@@ -2549,7 +2557,7 @@ export class FlowmeCardEditor extends LitElement {
       const pos = this.pointerToPercent(event);
       if (!pos) return;
       const prev = this.config;
-      const { config: next, node } = addNode(prev, pos, 'New node');
+      const { config: next, node } = addNode(prev, pos, t('editor.inspector.newNodeDefaultLabel'));
       this.pushPatch(prev, next, `add node ${node.id}`);
       this.pending = null;
       return;
@@ -2639,10 +2647,8 @@ export class FlowmeCardEditor extends LitElement {
       }
       if (this.pending.step === 'pick-to' && this.pending.fromId !== nodeId) {
         const entity =
-          window.prompt(
-            'Entity for this flow (e.g. sensor.grid_power):',
-            'sensor.placeholder_entity',
-          ) ?? 'sensor.placeholder_entity';
+          window.prompt(t('editor.inspector.flowEntityPrompt'), t('editor.inspector.flowEntityDefault')) ??
+          t('editor.inspector.flowEntityDefault');
         const prev = this.config;
         const { config: next, flow } = addFlow(prev, this.pending.fromId, nodeId, entity);
         this.pushPatch(prev, next, `add flow ${flow.id}`);
@@ -2670,7 +2676,7 @@ export class FlowmeCardEditor extends LitElement {
     const target = event.currentTarget as HTMLElement;
     const id = target.dataset['overlayId'];
     if (!id) return;
-    if (window.confirm(`Delete overlay ${id}?`)) {
+    if (window.confirm(t('editor.inspector.deleteOverlayConfirm', id))) {
       this.removeOverlay(id);
     }
   };
@@ -2703,7 +2709,7 @@ export class FlowmeCardEditor extends LitElement {
     const target = event.currentTarget as HTMLElement;
     const nodeId = target.dataset['nodeId'];
     if (!nodeId) return;
-    if (window.confirm(`Delete node ${nodeId}? This also removes any flows using it.`)) {
+    if (window.confirm(t('editor.inspector.deleteNodeContextConfirm', nodeId))) {
       this.removeNode(nodeId);
     }
   };
@@ -2986,7 +2992,7 @@ export class FlowmeCardEditor extends LitElement {
     try {
       parsed = JSON.parse(raw);
     } catch (err) {
-      this.customConfigError = 'Invalid JSON: ' + (err instanceof Error ? err.message : String(err));
+      this.customConfigError = t('editor.inspector.invalidCardJson', err instanceof Error ? err.message : String(err));
       return;
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {

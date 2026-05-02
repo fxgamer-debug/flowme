@@ -21,6 +21,7 @@ A generic Home Assistant custom Lovelace card that overlays **animated flow line
 - [Editor](#editor)
 - [Security model](#security-model)
 - [Troubleshooting](#troubleshooting)
+- [Translations](#translations)
 - [Development](#development)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -407,6 +408,20 @@ The underlying Lovelace card must already be installed (via HACS or manually) be
 
 **HACS says "incompatible with your Home Assistant version".**
 `hacs.json` declares `2024.1.0` as the minimum. Upgrade HA, or open an issue if you need older compatibility.
+
+## Translations
+
+FlowMe ships with English as the default language. To add a translation for your language:
+
+1. Copy `translations/en.json` from the FlowMe repository as a starting point.
+2. Translate all values (keep the keys unchanged).
+3. Save as your language code, for example `fr.json`, `de.json`, `ro.json`, or `nl.json`.
+4. Place the file at `/config/www/flowme/translations/fr.json` (adjust the language code as needed).
+5. FlowMe will automatically load it when Home Assistant is set to that language.
+
+Partial translations are supported — any missing key falls back to English automatically.
+
+To contribute your translation to the project, open a pull request adding your file to the `translations/` folder in the repository.
 
 ## Development
 
