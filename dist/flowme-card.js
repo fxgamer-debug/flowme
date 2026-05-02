@@ -3401,21 +3401,17 @@ let C = class extends q {
     }, this.onHandlePointerMove = (e) => {
       if (this.dragPointerId !== e.pointerId || !this.dragTarget || !this.config) return;
       const t = this.dragTarget;
-      if (this.dragShiftHeld = e.shiftKey, !this.dragMoved && this.dragStartPx) {
+      if (this.dragShiftHeld = e.shiftKey, t.kind === "overlay-resize") {
+        const n = this.imageNaturalW > 0 ? this.imageNaturalW : 1, o = this.imageNaturalH > 0 ? this.imageNaturalH : 1, r = (e.clientX - t.startPx.x) / this.scale, a = (e.clientY - t.startPx.y) / this.scale, l = r / n * 100, d = a / o * 100;
+        let c = t.startSize.width + l, p = t.startSize.height + d;
+        this.dragShiftHeld && (c = Math.round(c), p = Math.round(p)), this.dragMoved = !0, this.config = We(this.config, t.id, { width: c, height: p });
+        return;
+      }
+      if (!this.dragMoved && this.dragStartPx) {
         const n = e.clientX - this.dragStartPx.x, o = e.clientY - this.dragStartPx.y;
         (Math.abs(n) > 4 || Math.abs(o) > 4) && (this.dragMoved = !0);
       }
       if (!this.dragMoved) return;
-      if (t.kind === "overlay-resize") {
-        const n = this.canvasRef.value;
-        if (!n) return;
-        const o = n.getBoundingClientRect();
-        if (o.width === 0 || o.height === 0) return;
-        const r = o.width - 16, a = o.height - 8, l = (e.clientX - t.startPx.x) / this.scale / r * 100, d = (e.clientY - t.startPx.y) / this.scale / a * 100;
-        let c = t.startSize.width + l, p = t.startSize.height + d;
-        this.dragShiftHeld && (c = Math.round(c), p = Math.round(p)), this.config = We(this.config, t.id, { width: c, height: p });
-        return;
-      }
       const i = this.pointerToPercent(e);
       if (!i) return;
       const s = this.dragShiftHeld ? { x: N(xt(i.x)), y: N(xt(i.y)) } : i;
@@ -5907,14 +5903,19 @@ C.styles = oe`
     }
     .overlay-resize {
       position: absolute;
-      right: -5px;
-      bottom: -5px;
-      width: 14px;
-      height: 14px;
+      right: -8px;
+      bottom: -8px;
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      min-height: 20px;
       border-radius: 3px;
       background: var(--primary-color, #03a9f4);
       border: 2px solid rgba(255, 255, 255, 0.9);
       cursor: nwse-resize;
+      pointer-events: all;
+      touch-action: none;
+      box-sizing: border-box;
     }
     .overlay-inspector select,
     .overlay-inspector textarea {
@@ -6847,7 +6848,7 @@ var Zn = Object.defineProperty, Jn = Object.getOwnPropertyDescriptor, U = (e, t,
     (r = e[o]) && (n = (s ? r(t, i, n) : r(n)) || n);
   return s && n && Zn(t, i, n), n;
 };
-const Qn = "1.19", ii = 5e3;
+const Qn = "1.19.1", ii = 5e3;
 console.info(
   `%c flowme %c v${Qn} `,
   "color: white; background: #4ADE80; font-weight: 700;",

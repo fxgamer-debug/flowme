@@ -22,7 +22,7 @@ import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.19';
+const CARD_VERSION = '1.19.1';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console

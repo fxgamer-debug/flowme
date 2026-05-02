@@ -2,6 +2,21 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.19.1] — 2026-05-03
+
+### Fixed
+
+- **Overlay resize handle did nothing**: Resize used the same “4px drag” gate as nodes,
+  but overlay resize `pointerdown` never set `dragStartPx`, so `dragMoved` never became
+  true and the resize branch never ran. Resize handling now runs immediately for
+  `overlay-resize` drags (still one undo step on `pointerup`).
+- **Wrong resize coordinate basis**: Size deltas were converted using stage width/height.
+  Overlay percentages are relative to the background image (`imageNaturalW` /
+  `imageNaturalH`), matching `pointerToPercent`. Deltas now use
+  `(client − start) / scale` → card pixels, then `÷ imageNaturalW/H × 100`.
+- **Resize handle hit target**: Handle enlarged to 20×20px with explicit
+  `pointer-events: all` and `touch-action: none` for reliable grabs.
+
 ## [1.19] — Overlay interaction feedback
 
 ### Added

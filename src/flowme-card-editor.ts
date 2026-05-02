@@ -2737,6 +2737,28 @@ export class FlowmeCardEditor extends LitElement {
     const target = this.dragTarget;
     this.dragShiftHeld = event.shiftKey;
 
+    // Overlay resize: must run before the 4px drag threshold — resize pointerdown
+    // does not set dragStartPx (that path is only for node/waypoint/overlay move).
+    // Deltas are in image space (same basis as pointerToPercent): screen Δ / scale
+    // → card px, then ÷ imageNaturalW/H → percentage width/height.
+    if (target.kind === 'overlay-resize') {
+      const iw = this.imageNaturalW > 0 ? this.imageNaturalW : 1;
+      const ih = this.imageNaturalH > 0 ? this.imageNaturalH : 1;
+      const dxCard = (event.clientX - target.startPx.x) / this.scale;
+      const dyCard = (event.clientY - target.startPx.y) / this.scale;
+      const dxPct = (dxCard / iw) * 100;
+      const dyPct = (dyCard / ih) * 100;
+      let w = target.startSize.width + dxPct;
+      let h = target.startSize.height + dyPct;
+      if (this.dragShiftHeld) {
+        w = Math.round(w);
+        h = Math.round(h);
+      }
+      this.dragMoved = true;
+      this.config = setOverlaySize(this.config, target.id, { width: w, height: h });
+      return;
+    }
+
     // Mark as a real drag once the pointer moves > 4px in either axis
     if (!this.dragMoved && this.dragStartPx) {
       const dx = event.clientX - this.dragStartPx.x;
@@ -2744,27 +2766,6 @@ export class FlowmeCardEditor extends LitElement {
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) this.dragMoved = true;
     }
     if (!this.dragMoved) return; // don't start live-preview until it's a real drag
-
-    if (target.kind === 'overlay-resize') {
-      const canvas = this.canvasRef.value;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      // Delta in screen pixels → card-space pixels → percentage
-      // Stage inset: 8px left+right, 4px top+bottom
-      const stageW = rect.width - 16;
-      const stageH = rect.height - 8;
-      const dxPct = ((event.clientX - target.startPx.x) / this.scale / stageW) * 100;
-      const dyPct = ((event.clientY - target.startPx.y) / this.scale / stageH) * 100;
-      let w = target.startSize.width + dxPct;
-      let h = target.startSize.height + dyPct;
-      if (this.dragShiftHeld) {
-        w = Math.round(w);
-        h = Math.round(h);
-      }
-      this.config = setOverlaySize(this.config, target.id, { width: w, height: h });
-      return;
-    }
 
     const pos = this.pointerToPercent(event);
     if (!pos) return;
@@ -3630,14 +3631,19 @@ export class FlowmeCardEditor extends LitElement {
     }
     .overlay-resize {
       position: absolute;
-      right: -5px;
-      bottom: -5px;
-      width: 14px;
-      height: 14px;
+      right: -8px;
+      bottom: -8px;
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      min-height: 20px;
       border-radius: 3px;
       background: var(--primary-color, #03a9f4);
       border: 2px solid rgba(255, 255, 255, 0.9);
       cursor: nwse-resize;
+      pointer-events: all;
+      touch-action: none;
+      box-sizing: border-box;
     }
     .overlay-inspector select,
     .overlay-inspector textarea {
