@@ -152,6 +152,11 @@ export class FlowmeCardEditor extends LitElement {
   /** Pan offset at fit level (centres card horizontally when canvas is wider). */
   private fitPanX = 0;
   private fitPanY = 0;
+  /** Natural pixel dimensions of the loaded background image. */
+  private imageNaturalW = 1600;
+  private imageNaturalH = 1000;
+  /** URL for which naturalW/H have been loaded (avoids redundant loads). */
+  private _loadedImageUrl = '';
   /** True while spacebar is held (enables drag-to-pan). */
   private spaceHeld = false;
   /** Pointer id captured for middle-mouse or space+drag pan. */
@@ -204,47 +209,61 @@ export class FlowmeCardEditor extends LitElement {
     const canvasEl = this.canvasRef.value;
     if (!canvasEl) return;
     this._canvasResizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      // Use the canvas zone's actual dimensions (offsetWidth/Height) for accuracy.
-      const canvasEl = this.canvasRef.value;
-      const canvasW = canvasEl?.offsetWidth ?? entry.contentRect.width;
-      const canvasH = canvasEl?.offsetHeight ?? entry.contentRect.height;
-      if (canvasW === 0 || canvasH === 0) return;
-      const cfg = this.config;
-      const [rawW, rawH] = (cfg?.aspect_ratio ?? '16:10').split(':').map(Number);
-      const w = rawW || 16;
-      const h = rawH || 10;
-      // canvas-content is sized to fill the stage (inset: 4px 8px inside z-canvas).
-      // Stage width = canvasW - 16, stage height = canvasH - 8.
-      const stageW = canvasW - 16;
-      const stageH = canvasH - 8;
-      // The card's natural width at scale=1 when stage height is fixed:
-      const cardNaturalW = stageH * (w / h);
-      let newFitScale: number;
-      let newFitPanX: number;
-      const newFitPanY = 0;
-      if (cardNaturalW <= stageW) {
-        // Card fits within stage width at scale=1 → no scaling needed, centre horizontally.
-        newFitScale = 1;
-        newFitPanX = (stageW - cardNaturalW) / 2;
-      } else {
-        // Card is wider than stage → scale down so full card width fits.
-        newFitScale = stageW / cardNaturalW;
-        newFitPanX = 0;
-      }
-      const prevScale = this.fitScale;
-      this.fitScale = newFitScale;
-      this.fitPanX = newFitPanX;
-      this.fitPanY = newFitPanY;
-      // Reset to fit only if the user hasn't interacted (still at previous fit level).
-      if (this.scale === 1 || this.scale === prevScale) {
-        this.scale = newFitScale;
-        this.panX = newFitPanX;
-        this.panY = newFitPanY;
-      }
+      if (!entries[0]) return;
+      // Delegate all fit calculation to recalcFit which uses imageNaturalW/H.
+      this.recalcFit();
     });
     this._canvasResizeObserver.observe(canvasEl);
+  }
+
+  /**
+   * Load the background image to read its natural dimensions, then recalculate
+   * the fit scale/pan so the image fills the stage width correctly.
+   * Called whenever the background URL changes.
+   */
+  private loadBackgroundImage(url: string): void {
+    if (!url || url === this._loadedImageUrl) return;
+    this._loadedImageUrl = url;
+    const img = new Image();
+    img.onload = () => {
+      this.imageNaturalW = img.naturalWidth || 1600;
+      this.imageNaturalH = img.naturalHeight || 1000;
+      this.recalcFit();
+    };
+    img.onerror = () => {
+      // Keep previous/default dimensions on error
+      this.recalcFit();
+    };
+    img.src = url;
+  }
+
+  /**
+   * Recalculate fitScale / fitPanX / fitPanY based on current stage size and
+   * image natural dimensions. Resets live pan/zoom to fit if the user has not
+   * interacted (still at the previous fit level).
+   */
+  private recalcFit(): void {
+    const canvasEl = this.canvasRef.value;
+    if (!canvasEl) return;
+    const stageW = canvasEl.offsetWidth - 16;
+    const stageH = canvasEl.offsetHeight - 8;
+    if (stageW <= 0 || stageH <= 0) return;
+    // Scale so image fills stage width exactly
+    const newFitScale = stageW / this.imageNaturalW;
+    const scaledH = this.imageNaturalH * newFitScale;
+    // Centre vertically: shift up so the middle of the image sits in the centre
+    const newFitPanX = 0;
+    const newFitPanY = -(scaledH - stageH) / 2;
+    const prevScale = this.fitScale;
+    this.fitScale = newFitScale;
+    this.fitPanX = newFitPanX;
+    this.fitPanY = newFitPanY;
+    // Reset to fit only if user hasn't moved away from the previous fit level
+    if (this.scale === 1 || this.scale === prevScale) {
+      this.scale = newFitScale;
+      this.panX = newFitPanX;
+      this.panY = newFitPanY;
+    }
   }
 
   setConfig(config: unknown): void {
@@ -262,6 +281,10 @@ export class FlowmeCardEditor extends LitElement {
         this.undoStack.clear();
       }
       this.errorMessage = '';
+      // Load image dimensions whenever the background URL changes so recalcFit
+      // can use the correct aspect ratio.
+      const bgUrl = this.config?.background?.default;
+      if (bgUrl) this.loadBackgroundImage(bgUrl);
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);
     }
@@ -278,13 +301,6 @@ export class FlowmeCardEditor extends LitElement {
     }
 
     const bgUrl = this.config.background.default;
-    // Background image is rendered directly on the stage via CSS background-image.
-    // We synchronise background-position and background-size to mirror the canvas-content
-    // transform (translate + scale with origin 0 0), so the image tracks zoom/pan exactly
-    // without touching canvas-content dimensions or coordinate math.
-    const stageBgStyle = bgUrl
-      ? `background-image: url('${bgUrl}'); background-size: ${this.scale * 100}%; background-position: ${this.panX}px ${this.panY}px; background-repeat: no-repeat;`
-      : '';
     const multiSelect = this.selectedNodeIds.size >= 2;
 
     // Derive selector dropdown values from canvas selection so they stay in sync.
@@ -318,19 +334,18 @@ export class FlowmeCardEditor extends LitElement {
               : this.pending?.kind === 'add-overlay' ? 'mode-add-overlay'
               : ''
             }`}
-            style=${stageBgStyle}
             @click=${this.onStageClick}
             @contextmenu=${this.onStageContextMenu}
             ${ref(this.stageRef)}
           >
-            <!-- canvas-content: zoom/pan transform applied here.
-                 Coordinate math unchanged — canvas-content still fills the stage (inset:0).
-                 Background is rendered on the stage element itself and tracks the transform
-                 via background-position/background-size so it never clips. -->
+            <!-- canvas-content: unified scene layer for background + all content.
+                 Sized to image natural dimensions so percentages map to image pixels.
+                 Transform pans/zooms the whole scene as one unit. -->
             <div
               class="canvas-content"
-              style=${`transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
+              style=${`width: ${this.imageNaturalW}px; height: ${this.imageNaturalH}px; transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
             >
+              ${bgUrl ? html`<div class="background" style="background-image: url('${bgUrl}');"></div>` : nothing}
               <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
                 ${this.config.flows.map((f) => this.renderFlowConnector(f))}
               </svg>
@@ -3000,6 +3015,23 @@ export class FlowmeCardEditor extends LitElement {
 
   // -- zoom / pan --
 
+  /**
+   * Clamp panX/panY so the background image always covers the full stage — no
+   * black borders in any direction. Must be called after every pan or zoom change.
+   */
+  private clampPan(): void {
+    const canvas = this.canvasRef.value;
+    if (!canvas) return;
+    const stageW = canvas.offsetWidth - 16;
+    const stageH = canvas.offsetHeight - 8;
+    const scaledW = this.imageNaturalW * this.scale;
+    const scaledH = this.imageNaturalH * this.scale;
+    // Image must cover the viewport: max pan is 0 (left/top edge), min pan keeps
+    // the right/bottom edge at the stage right/bottom edge.
+    this.panX = Math.min(0, Math.max(stageW - scaledW, this.panX));
+    this.panY = Math.min(0, Math.max(stageH - scaledH, this.panY));
+  }
+
   private adjustZoom(factor: number, originX?: number, originY?: number): void {
     const canvas = this.canvasRef.value;
     const ox = originX ?? (canvas ? canvas.offsetWidth / 2 : 0);
@@ -3010,6 +3042,7 @@ export class FlowmeCardEditor extends LitElement {
     this.panX = ox - (ox - this.panX) * (newScale / this.scale);
     this.panY = oy - (oy - this.panY) * (newScale / this.scale);
     this.scale = newScale;
+    this.clampPan();
   }
 
   private resetZoom(): void {
@@ -3070,6 +3103,7 @@ export class FlowmeCardEditor extends LitElement {
     if (this.panPointerId !== e.pointerId) return;
     this.panX += e.movementX;
     this.panY += e.movementY;
+    this.clampPan();
   };
 
   private onCanvasPointerUp = (e: PointerEvent): void => {
@@ -3122,16 +3156,19 @@ export class FlowmeCardEditor extends LitElement {
     const canvas = this.canvasRef.value;
     if (!canvas) return null;
     const canvasRect = canvas.getBoundingClientRect();
-    // Unscaled stage dimensions
-    const stageW = canvasRect.width - 16;   // 8px left + 8px right inset
-    const stageH = canvasRect.height - 8;   // 4px top + 4px bottom inset
-    if (stageW <= 0 || stageH <= 0) return null;
-    // Pointer offset from the stage top-left corner (screen space)
+    if (canvasRect.width <= 0 || canvasRect.height <= 0) return null;
+    // Pointer offset from the stage top-left corner (screen space).
+    // Stage is inset 4px top, 8px left within the canvas element.
     const fromStageLeft = event.clientX - (canvasRect.left + 8);
     const fromStageTop  = event.clientY - (canvasRect.top  + 4);
-    // Reverse translate then scale:  cardPos = (screenOffset - pan) / (stageSize * scale)
-    const x = clampPercent(((fromStageLeft - this.panX) / (stageW * this.scale)) * 100);
-    const y = clampPercent(((fromStageTop  - this.panY) / (stageH * this.scale)) * 100);
+    // canvas-content origin is at stage top-left; its CSS size is imageNaturalW × imageNaturalH.
+    // After transform: screenOffset = pan + cardPx * scale
+    // Inverting:       cardPx = (screenOffset - pan) / scale
+    // Percentage:      x% = cardPx / imageNaturalW * 100
+    const cardX = (fromStageLeft - this.panX) / this.scale;
+    const cardY = (fromStageTop  - this.panY) / this.scale;
+    const x = clampPercent((cardX / this.imageNaturalW) * 100);
+    const y = clampPercent((cardY / this.imageNaturalH) * 100);
     return { x, y };
   }
 
@@ -3394,17 +3431,26 @@ export class FlowmeCardEditor extends LitElement {
     .stage.mode-pan {
       cursor: grab;
     }
-    /* canvas-content: receives the CSS transform for zoom/pan */
+    /* canvas-content: unified scene layer sized to image natural dimensions.
+       Width/height are set via inline style (imageNaturalW × imageNaturalH px).
+       Transform pans/zooms the whole scene as one unit. */
     .canvas-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+    /* Background image fills canvas-content exactly — no distortion since
+       canvas-content is sized to match the image's natural dimensions. */
+    .background {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
-      transform-origin: 0 0;
-      will-change: transform;
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
     }
-    /* .background rule removed: background image is now rendered directly on .stage
-       via inline background-image/size/position that tracks the canvas-content transform. */
     .connectors {
       position: absolute;
       inset: 0;

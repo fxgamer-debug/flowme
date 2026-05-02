@@ -2,6 +2,30 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.18.8] — 2026-05-02
+
+### Fixed
+
+- **Background image and content unified as one panning layer**: Previously the
+  background image was rendered as a CSS `background-image` on the `.stage` element
+  and synchronised to the `canvas-content` transform via `background-size` /
+  `background-position`. This approach could not preserve correct pan limits and led
+  to black borders. The new approach:
+  - `canvas-content` is sized to the background image's natural pixel dimensions
+    (`imageNaturalW × imageNaturalH`). The image is loaded via `new Image()` in
+    `loadBackgroundImage()` to read `naturalWidth` / `naturalHeight`.
+  - A `.background` div inside `canvas-content` fills it at `background-size: 100% 100%`
+    — no distortion since the container exactly matches the image dimensions.
+  - All nodes, flows, waypoints, and overlays live inside the same `canvas-content`
+    layer, so background and content move as one unified scene.
+  - `fitScale` is now `stageW / imageNaturalW` (fill stage width exactly). `fitPanY`
+    centres the image vertically so the middle of the image is visible at fit level.
+  - Pan is clamped (`clampPan`) after every zoom or drag so the image always covers
+    the full stage — no black borders in any direction at any zoom level.
+  - `pointerToPercent` uses `imageNaturalW/H` for correct coordinate mapping.
+  - When the background image changes (weather swap etc.) `loadBackgroundImage` reloads
+    dimensions and `recalcFit` recomputes fit for the new image.
+
 ## [1.18.7] — 2026-05-01
 
 ### Fixed
