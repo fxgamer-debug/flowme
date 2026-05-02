@@ -505,3 +505,12 @@ export function interpolateGradientColor(value: number, config: ValueGradientCon
   const l = lerp(l1, l2, t);
   return hslToHex(h, s, l);
 }
+
+/** True when the user prefers minimal motion (OS / browser setting). */
+export function prefersReducedMotion(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}

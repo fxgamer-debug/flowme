@@ -133,6 +133,11 @@ export class FlowmeCustomOverlay extends LitElement {
         transform 0.3s ease-out,
         opacity 0.3s ease-out;
     }
+    @media (prefers-reduced-motion: reduce) {
+      :host(.overlay-interactive)::after {
+        display: none !important;
+      }
+    }
     .mount {
       width: 100%;
       height: 100%;

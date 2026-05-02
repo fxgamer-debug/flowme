@@ -12,6 +12,11 @@ export interface FlowRenderer {
    * Optional — renderers that don't support gradients can omit this method.
    */
   setGradientColor?(flowId: string, color: string | null): void;
+  /**
+   * Screen reader label for the flow’s animated visualization (SVG group or
+   * Houdini layer). Optional — omit when not updating accessibility metadata.
+   */
+  setFlowAriaLabel?(flowId: string, label: string): void;
   /** Tear down DOM, observers, timers. */
   destroy(): void;
 }

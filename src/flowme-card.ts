@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 
 import type {
+  FlowConfig,
   FlowmeConfig,
   HomeAssistant,
   NodeConfig,
@@ -22,7 +23,7 @@ import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.19.1';
+const CARD_VERSION = '1.20';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -229,6 +230,7 @@ export class FlowmeCard extends LitElement {
           // After init, push current hass values (including gradient colours)
           // so flows render immediately without waiting for the next hass change.
           if (this.hass) this.pushAllValuesToRenderer();
+          else this.syncRendererAriaLabels();
         })
         .catch((err) => {
           dlog('renderer init failed — falling back to SVG renderer', err);
@@ -236,15 +238,19 @@ export class FlowmeCard extends LitElement {
           this.renderer = new SvgRenderer();
           this.rendererReadyFor = activeConfig;
           void this.renderer.init(mount, activeConfig)
-            .then(() => { if (this.hass) this.pushAllValuesToRenderer(); })
+            .then(() => {
+              if (this.hass) this.pushAllValuesToRenderer();
+              else this.syncRendererAriaLabels();
+            })
             .catch((err2) => {
               console.error('[flowme] SVG renderer init also failed', err2);
             });
         });
     }
 
-    if (changed.has('hass') && this.renderer && this.hass) {
-      this.pushAllValuesToRenderer();
+    if (changed.has('hass') && this.renderer) {
+      if (this.hass) this.pushAllValuesToRenderer();
+      else this.syncRendererAriaLabels();
     }
 
     if (changed.has('config') || changed.has('hass')) {
@@ -259,7 +265,11 @@ export class FlowmeCard extends LitElement {
    * to become visible.
    */
   private pushAllValuesToRenderer(): void {
-    if (!this.config || !this.renderer || !this.hass) return;
+    if (!this.config || !this.renderer) return;
+    if (!this.hass) {
+      this.syncRendererAriaLabels();
+      return;
+    }
     dlog('pushAllValuesToRenderer → flows:', this.config.flows.length, 'renderer:', this.renderer.constructor.name);
     for (const flow of this.config.flows) {
       const state = this.hass.states[flow.entity];
@@ -320,6 +330,49 @@ export class FlowmeCard extends LitElement {
         }
       }
     }
+    this.syncRendererAriaLabels();
+  }
+
+  /** Push screen-reader labels onto flow renderer groups (SVG or Houdini). */
+  private syncRendererAriaLabels(): void {
+    if (!this.config || !this.renderer?.setFlowAriaLabel) return;
+    for (const flow of this.config.flows) {
+      this.renderer.setFlowAriaLabel(flow.id, this.formatFlowAriaLabel(flow));
+    }
+  }
+
+  private describeFlowReading(flow: FlowConfig): string {
+    if (!this.hass || !this.config) return 'no connection';
+    const state = this.hass.states[flow.entity];
+    const profile = getProfile(flow.domain ?? this.config.domain);
+    if (!state) return 'entity not found';
+    if (state.state === 'unavailable' || state.state === 'unknown') return state.state;
+    const rawParsed = parseSensorValue(state.state);
+    const sensorUnit = (state.attributes?.['unit_of_measurement'] as string | undefined) ?? '';
+    const scaled = scaleSensorValue(rawParsed, sensorUnit, profile.unit_scale);
+    if (sensorUnit) {
+      return `${this.formatSensorNumber(scaled.value)} ${sensorUnit}`;
+    }
+    return profile.describe(scaled.value);
+  }
+
+  private formatFlowAriaLabel(flow: FlowConfig): string {
+    return `${flow.id}: ${this.describeFlowReading(flow)}`;
+  }
+
+  private formatNodeAriaLabel(node: NodeConfig): string {
+    const title = node.label ?? node.id;
+    if (!this.hass || !node.entity || !this.config) return title;
+    const state = this.hass.states[node.entity];
+    const profile = getProfile(this.config.domain);
+    if (!state) return `${title}: entity not found`;
+    if (state.state === 'unavailable' || state.state === 'unknown') return `${title}: ${state.state}`;
+    const rawNum = parseSensorValue(state.state);
+    const sensorUnit = (state.attributes?.['unit_of_measurement'] as string | undefined) ?? '';
+    if (sensorUnit) {
+      return `${title}: ${this.formatSensorNumber(rawNum)} ${sensorUnit}`;
+    }
+    return `${title}: ${profile.describe(rawNum)}`;
   }
 
   getCardSize(): number {
@@ -394,7 +447,7 @@ export class FlowmeCard extends LitElement {
   override render(): TemplateResult {
     if (this.errorMessage) {
       return html`
-        <ha-card>
+        <ha-card role="region" aria-label="FlowMe energy flow visualisation">
           <div class="error">
             <strong>flowme: invalid configuration</strong>
             <pre>${this.errorMessage}</pre>
@@ -404,7 +457,7 @@ export class FlowmeCard extends LitElement {
     }
     const config = this.config;
     if (!config) {
-      return html`<ha-card><div class="placeholder">flowme loading…</div></ha-card>`;
+      return html`<ha-card role="region" aria-label="FlowMe energy flow visualisation"><div class="placeholder">flowme loading…</div></ha-card>`;
     }
 
     const aspect = parseAspectRatio(config.aspect_ratio) ?? 16 / 10;
@@ -415,7 +468,7 @@ export class FlowmeCard extends LitElement {
     const visibilityVars = buildVisibilityVars(config.visibility);
 
     return html`
-      <ha-card>
+      <ha-card role="region" aria-label="FlowMe energy flow visualisation">
         <div
           class="stage"
           style=${`padding-top: ${paddingTop};${opacityVars}${visibilityVars}`}
@@ -603,10 +656,12 @@ export class FlowmeCard extends LitElement {
       <div
         class="node"
         data-node-id=${node.id}
+        role="img"
+        aria-label=${this.formatNodeAriaLabel(node)}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%; --flowme-dot-size: ${size}px;${node.opacity !== undefined ? ` opacity: ${node.opacity};` : ''}${nodeHidden ? ' display: none;' : ''}`}
       >
         <span
-          class="node-dot"
+          class="node-dot node-circle"
           style=${`background: ${fill}; width: ${size}px; height: ${size}px;`}
         ></span>
         ${showLabel ? html`<span class="node-label">${node.label}</span>` : null}
@@ -855,6 +910,54 @@ export class FlowmeCard extends LitElement {
     .placeholder {
       padding: 16px;
       opacity: 0.6;
+    }
+
+    ha-card:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+
+    @media (prefers-contrast: more) {
+      .renderer-mount svg use.flow-line {
+        stroke-width: 3px !important;
+      }
+      .renderer-mount svg g[data-flow-id] * {
+        filter: none !important;
+      }
+      .overlay.overlay-wrapper {
+        outline: 2px solid var(--primary-text-color);
+        outline-offset: 1px;
+      }
+      .node-label,
+      .node-value {
+        text-shadow: none;
+        color: var(--primary-text-color);
+      }
+      .node-dot.node-circle {
+        box-shadow: none;
+        outline: 2px solid var(--primary-text-color);
+        outline-offset: 1px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .renderer-mount svg animateMotion,
+      .renderer-mount svg animate {
+        animation-play-state: paused !important;
+      }
+      .flow-houdini {
+        animation: none !important;
+      }
+      .background {
+        transition: none !important;
+      }
+      .overlay.overlay-interactive::after {
+        display: none !important;
+      }
+      .fm-toast {
+        transition: none !important;
+      }
     }
   `;
 }

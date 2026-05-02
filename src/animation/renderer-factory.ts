@@ -2,6 +2,7 @@ import type { FlowRenderer, FlowRendererKind } from './types.js';
 import { SvgRenderer } from './svg-renderer.js';
 import { HoudiniRenderer } from './houdini-renderer.js';
 import { dlog } from '../debug-log.js';
+import { prefersReducedMotion } from '../utils.js';
 
 /**
  * Pick the best renderer available.
@@ -22,14 +23,20 @@ export function createRenderer(): FlowRenderer {
   const override = readRendererOverride();
   const kind: FlowRendererKind = override ?? 'svg';
   const houdiniAvailable = hasHoudiniSupport();
+  const reducedMotion = prefersReducedMotion();
 
   dlog(
     'renderer selected:',
-    kind === 'houdini' ? 'HoudiniRenderer' : 'SvgRenderer',
+    reducedMotion || kind !== 'houdini' ? 'SvgRenderer' : 'HoudiniRenderer',
     '| override=', override ?? '(none)',
     '| Houdini available:', houdiniAvailable,
+    '| reduced motion:', reducedMotion,
     '| paintWorklet in CSS?', typeof CSS !== 'undefined' && 'paintWorklet' in CSS,
   );
+
+  if (reducedMotion) {
+    return new SvgRenderer();
+  }
 
   if (kind === 'houdini') {
     if (!houdiniAvailable) {

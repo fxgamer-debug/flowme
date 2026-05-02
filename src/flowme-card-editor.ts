@@ -320,6 +320,8 @@ export class FlowmeCardEditor extends LitElement {
         <!-- ZONE 1 — Canvas -->
         <div
           class="z-canvas"
+          role="application"
+          aria-label="FlowMe visual editor canvas"
           ${ref(this.canvasRef)}
           @wheel=${this.onCanvasWheel}
           @pointerdown=${this.onCanvasPointerDown}
@@ -367,13 +369,17 @@ export class FlowmeCardEditor extends LitElement {
           <div class="tb-col-undo">
             <div class="tb-icon-row">
               <button
+                type="button"
                 class="tb-icon-btn"
+                aria-label="Undo"
                 ?disabled=${!this.canUndo}
                 title=${this.undoLabel ? `Undo: ${this.undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)'}
                 @click=${() => this.undoStack.undo()}
               >↩</button>
               <button
+                type="button"
                 class="tb-icon-btn"
+                aria-label="Redo"
                 ?disabled=${!this.canRedo}
                 title=${this.redoLabel ? `Redo: ${this.redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)'}
                 @click=${() => this.undoStack.redo()}
@@ -381,19 +387,25 @@ export class FlowmeCardEditor extends LitElement {
             </div>
             <div class="tb-icon-row">
               <button
+                type="button"
                 class="tb-icon-btn"
+                aria-label="Zoom out"
                 ?disabled=${this.scale <= this.fitScale}
                 title="Zoom out"
                 @click=${() => this.adjustZoom(0.8)}
               >−</button>
               <button
+                type="button"
                 class="tb-icon-btn"
+                aria-label="Zoom in"
                 ?disabled=${this.scale >= 5}
                 title="Zoom in"
                 @click=${() => this.adjustZoom(1.25)}
               >+</button>
               <button
+                type="button"
                 class="tb-icon-btn"
+                aria-label="Fit to canvas"
                 title="Fit to canvas"
                 @click=${() => this.resetZoom()}
               >⊡</button>
@@ -406,19 +418,28 @@ export class FlowmeCardEditor extends LitElement {
               ${multiSelect
                 ? this.renderMultiSelectToolbar()
                 : html`
-                  <button class="tb-btn"
+                  <button
+                    type="button"
+                    class="tb-btn"
+                    aria-label="Add node — then click canvas to place"
                     title="Add node — then click canvas to place"
                     @click=${() => {
                       this.pending = { kind: 'add-node' };
                     }}
                   >+ Node</button>
-                  <button class="tb-btn"
+                  <button
+                    type="button"
+                    class="tb-btn"
+                    aria-label="Add flow between two nodes"
                     title="Add flow between two nodes"
                     @click=${() => {
                       this.pending = { kind: 'add-flow', step: 'pick-from' };
                     }}
                   >+ Flow</button>
-                  <button class="tb-btn"
+                  <button
+                    type="button"
+                    class="tb-btn"
+                    aria-label="Add overlay card"
                     title="Add overlay card"
                     @click=${() => {
                       this.pending = { kind: 'add-overlay', overlayType: 'custom' };
@@ -428,14 +449,18 @@ export class FlowmeCardEditor extends LitElement {
             </div>
             <div class="tb-row tb-row-save">
               <button
+                type="button"
                 class="tb-btn tb-btn-save"
+                aria-label="Save configuration to Home Assistant"
                 title="Apply current configuration to the card"
                 @click=${() => {
                   if (this.config) this.commitToHa(this.config);
                 }}
               >💾 Save</button>
               <button
+                type="button"
                 class="tb-btn tb-btn-cancel"
+                aria-label="Discard editor changes"
                 title="Discard all changes since the editor opened"
                 ?disabled=${!this.savedConfig}
                 @click=${() => {
@@ -451,6 +476,7 @@ export class FlowmeCardEditor extends LitElement {
           <div class="tb-col-selector">
             <select
               class="tb-select"
+              aria-label="Select element type"
               .value=${derivedType}
               @change=${(e: Event) => {
                 this.selectorType = (e.target as HTMLSelectElement).value as typeof this.selectorType;
@@ -468,6 +494,7 @@ export class FlowmeCardEditor extends LitElement {
             </select>
             <select
               class="tb-select"
+              aria-label="Select element"
               ?disabled=${!derivedType}
               .value=${derivedElement}
               @change=${(e: Event) => {
@@ -574,6 +601,9 @@ export class FlowmeCardEditor extends LitElement {
       (wp, index) => html`
         <div
           class="waypoint"
+          role="button"
+          tabindex="0"
+          aria-label=${`Waypoint ${index + 1} of flow ${flow.id}`}
           data-flow-id=${flow.id}
           data-waypoint-index=${index}
           style=${`left: ${wp.x}%; top: ${wp.y}%;`}
@@ -594,7 +624,11 @@ export class FlowmeCardEditor extends LitElement {
     const h = overlay.size?.height ?? 8;
     return html`
       <div
-        class=${`overlay-handle ${selected ? 'selected' : ''} overlay-${overlay.type}`}
+        class=${`overlay-handle overlay-wrapper ${selected ? 'selected' : ''} overlay-${overlay.type}`}
+        role="button"
+        tabindex="0"
+        aria-label=${`Overlay ${overlay.id}`}
+        aria-selected=${selected ? 'true' : 'false'}
         data-overlay-id=${overlay.id}
         style=${`left: ${overlay.position.x}%; top: ${overlay.position.y}%; width: ${w}%; height: ${h}%;`}
         @pointerdown=${this.onHandlePointerDown}
@@ -632,6 +666,10 @@ export class FlowmeCardEditor extends LitElement {
     return html`
       <div
         class=${`handle ${isSingleSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${isInSelection ? 'in-selection' : ''} ${isHidden ? 'handle-hidden' : ''}`}
+        role="button"
+        tabindex="0"
+        aria-label=${`${node.label ?? node.id} at ${node.position.x.toFixed(1)}%, ${node.position.y.toFixed(1)}%`}
+        aria-selected=${isInSelection ? 'true' : 'false'}
         data-node-id=${node.id}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
         @pointerdown=${this.onHandlePointerDown}
@@ -647,7 +685,9 @@ export class FlowmeCardEditor extends LitElement {
           ? html`<span class="suggest-badge">${selectionIndex + 1}</span>`
           : nothing}
         <button
+          type="button"
           class="eye-toggle"
+          aria-label=${isHidden ? 'Show node' : 'Hide node'}
           title=${isHidden ? 'Show node' : 'Hide node'}
           @click=${(e: Event) => {
             e.stopPropagation();
@@ -741,7 +781,7 @@ export class FlowmeCardEditor extends LitElement {
 
       return html`
         <div class="inspector">
-          <h4>Node: ${node.id}</h4>
+          <h3>Node: ${node.id}</h3>
 
           <!-- Row 1: Label | Entity -->
           <div class="node-row">
@@ -891,18 +931,21 @@ export class FlowmeCardEditor extends LitElement {
       if (!flow) return nothing;
       return html`
         <div class="inspector">
-          <h4>Flow: ${flow.id}</h4>
-          <div class="row">
-            <span>${flow.from_node} → ${flow.to_node}</span>
-          </div>
-          <label>
-            Entity
-            ${this.renderEntityPicker(
-              flow.entity,
-              (value) => this.setFlowEntity(flow.id, value),
-              { includeDomains: ['sensor', 'input_number', 'number'] },
-            )}
-          </label>
+          <h3>Flow: ${flow.id}</h3>
+          <fieldset class="inspector-fieldset">
+            <legend class="inspector-legend">Route and sensor</legend>
+            <div class="row">
+              <span>${flow.from_node} → ${flow.to_node}</span>
+            </div>
+            <label>
+              Entity
+              ${this.renderEntityPicker(
+                flow.entity,
+                (value) => this.setFlowEntity(flow.id, value),
+                { includeDomains: ['sensor', 'input_number', 'number'] },
+              )}
+            </label>
+          </fieldset>
           ${this.renderWaypointList(flow)}
           <label>
             Line style
@@ -1498,17 +1541,17 @@ export class FlowmeCardEditor extends LitElement {
 
     return html`
       <div class="waypoint-section">
-        <div class="waypoint-section-header">
+        <h4 class="waypoint-section-header">
           Waypoints
           <span class="waypoint-count">${flow.waypoints.length}</span>
-        </div>
+        </h4>
 
         ${flow.waypoints.length === 0
           ? html`<div class="waypoint-empty">No waypoints — click on the flow line to add one.</div>`
           : html`
-            <div class="waypoint-list">
+            <ul class="waypoint-list">
               ${flow.waypoints.map((wp, index) => html`
-                <div class="waypoint-row">
+                <li class="waypoint-row">
                   <span class="waypoint-index">#${index + 1}</span>
                   <label class="waypoint-coord">
                     x%
@@ -1538,7 +1581,7 @@ export class FlowmeCardEditor extends LitElement {
                       }}
                     />
                   </label>
-                  <button class="icon-btn" title="Delete waypoint"
+                  <button type="button" class="icon-btn" aria-label=${`Delete waypoint ${index + 1}`} title="Delete waypoint"
                     @click=${() => {
                       if (!this.config) return;
                       const prev = this.config;
@@ -1546,12 +1589,12 @@ export class FlowmeCardEditor extends LitElement {
                       this.pushPatch(prev, next, `delete waypoint ${index} of ${flow.id}`);
                     }}
                   >×</button>
-                </div>
+                </li>
               `)}
-            </div>
+            </ul>
           `}
 
-        <button class="ghost full-width" @click=${addAtMidpoint}>
+        <button type="button" class="ghost full-width" aria-label="Add waypoint on flow" @click=${addAtMidpoint}>
           + Add waypoint
         </button>
       </div>
@@ -1605,7 +1648,7 @@ export class FlowmeCardEditor extends LitElement {
     // override with ?open= across re-renders.
     return html`
       <div class="gradient-section">
-        <div class="gradient-section-header">Value gradient</div>
+        <h4 class="gradient-section-header">Value gradient</h4>
 
         <label class="anim-toggle">
           <input type="checkbox"
@@ -1749,7 +1792,7 @@ export class FlowmeCardEditor extends LitElement {
     const opacity = overlay.opacity ?? 1;
     return html`
       <div class="inspector overlay-inspector">
-        <h4>Overlay: ${overlay.id}</h4>
+        <h3>Overlay: ${overlay.id}</h3>
         <div class="row size-row">
           <label>
             Width %
@@ -2122,17 +2165,19 @@ export class FlowmeCardEditor extends LitElement {
       <div class="multiselect-toolbar">
         <span class="multiselect-count">${count} nodes selected</span>
         <button
+          type="button"
           class="ms-btn"
+          aria-label="Suggest path between two selected nodes"
           title=${count === 2 ? 'Suggest path between selected nodes' : 'Select exactly 2 nodes to suggest a path'}
           ?disabled=${count !== 2 || this.suggestBusy}
           @click=${() => this.runSuggestPath()}
         >Suggest path</button>
-        <button class="ms-btn" @click=${() => this.bulkHide(ids)}>Hide</button>
-        <button class="ms-btn" @click=${() => this.bulkShow(ids)}>Show</button>
-        <button class="ms-btn" @click=${() => this.bulkAlignH(ids, anchorId)}>Align H</button>
-        <button class="ms-btn" @click=${() => this.bulkAlignV(ids, anchorId)}>Align V</button>
-        <button class="ms-btn danger" @click=${() => this.bulkDelete(ids)}>Delete</button>
-        <button class="ms-btn ghost" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; }}>✕ Deselect</button>
+        <button type="button" class="ms-btn" aria-label="Hide selected nodes" @click=${() => this.bulkHide(ids)}>Hide</button>
+        <button type="button" class="ms-btn" aria-label="Show selected nodes" @click=${() => this.bulkShow(ids)}>Show</button>
+        <button type="button" class="ms-btn" aria-label="Align selected nodes horizontally" @click=${() => this.bulkAlignH(ids, anchorId)}>Align H</button>
+        <button type="button" class="ms-btn" aria-label="Align selected nodes vertically" @click=${() => this.bulkAlignV(ids, anchorId)}>Align V</button>
+        <button type="button" class="ms-btn danger" aria-label="Delete selected nodes" @click=${() => this.bulkDelete(ids)}>Delete</button>
+        <button type="button" class="ms-btn ghost" aria-label="Clear multi-selection" @click=${() => { this.selectedNodeIds = new Set(); this.selectedNodeId = null; }}>✕ Deselect</button>
       </div>
     `;
   }
@@ -2487,8 +2532,8 @@ export class FlowmeCardEditor extends LitElement {
     return html`
       <div class="suggest-bar">
         <span>Preview — ${this.suggestPreview.waypoints.length} waypoint(s)</span>
-        <button @click=${this.acceptSuggestion}>Accept</button>
-        <button class="ghost" @click=${this.cancelSuggestion}>Cancel</button>
+        <button type="button" aria-label="Accept suggested path" @click=${this.acceptSuggestion}>Accept</button>
+        <button type="button" class="ghost" aria-label="Cancel suggested path" @click=${this.cancelSuggestion}>Cancel</button>
       </div>
     `;
   }
@@ -3701,10 +3746,25 @@ export class FlowmeCardEditor extends LitElement {
       gap: 8px;
       font-size: 13px;
     }
+    .inspector h3,
     .inspector h4 {
       margin: 0;
       font-size: 13px;
       font-weight: 600;
+    }
+    .inspector-fieldset {
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .inspector-legend {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 0 4px;
     }
     .inspector label {
       display: flex;
@@ -4392,6 +4452,7 @@ export class FlowmeCardEditor extends LitElement {
       gap: 6px;
     }
     .waypoint-section-header {
+      margin: 0;
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
@@ -4418,6 +4479,9 @@ export class FlowmeCardEditor extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
     }
     .waypoint-row {
       display: flex;
@@ -4463,12 +4527,12 @@ export class FlowmeCardEditor extends LitElement {
       gap: 8px;
     }
     .gradient-section-header {
+      margin: 0 0 2px;
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       opacity: 0.7;
-      margin-bottom: 2px;
     }
     .gradient-preview-bar {
       height: 20px;
@@ -4500,6 +4564,35 @@ export class FlowmeCardEditor extends LitElement {
       height: 28px;
       padding: 2px;
       cursor: pointer;
+    }
+
+    /* Keyboard focus rings (keyboard only) */
+    .tb-icon-btn:focus-visible,
+    .tb-btn:focus-visible,
+    .tb-select:focus-visible,
+    .ms-btn:focus-visible,
+    .handle:focus-visible,
+    .waypoint:focus-visible,
+    .overlay-handle:focus-visible,
+    .overlay-resize:focus-visible,
+    .inspector button:focus-visible,
+    .inspector input:focus-visible,
+    .inspector select:focus-visible,
+    .inspector textarea:focus-visible,
+    .eye-toggle:focus-visible,
+    .icon-btn:focus-visible,
+    .suggest-bar button:focus-visible,
+    .anim-details summary:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+
+    @media (prefers-contrast: more) {
+      .overlay-handle.overlay-wrapper {
+        outline: 2px solid var(--primary-text-color);
+        outline-offset: 1px;
+      }
     }
   `;
 }

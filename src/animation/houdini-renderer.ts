@@ -111,6 +111,7 @@ export class HoudiniRenderer implements FlowRenderer {
     await loadWorkletOnce();
 
     const wrapper = document.createElement('div');
+    wrapper.className = 'flow-houdini flow-houdini-root';
     wrapper.style.position = 'absolute';
     wrapper.style.inset = '0';
     wrapper.style.pointerEvents = 'none';
@@ -119,6 +120,7 @@ export class HoudiniRenderer implements FlowRenderer {
 
     for (const flow of config.flows) {
       const el = document.createElement('div');
+      el.className = 'flow-houdini';
       el.dataset['flowId'] = flow.id;
       el.style.position = 'absolute';
       el.style.inset = '0';
@@ -139,6 +141,13 @@ export class HoudiniRenderer implements FlowRenderer {
     if (!this.flowsById.has(flowId)) return;
     this.latestValues.set(flowId, value);
     this.applyUpdate();
+  }
+
+  setFlowAriaLabel(flowId: string, label: string): void {
+    const div = this.flowDivs.get(flowId);
+    if (!div) return;
+    div.el.setAttribute('role', 'img');
+    div.el.setAttribute('aria-label', label);
   }
 
   destroy(): void {

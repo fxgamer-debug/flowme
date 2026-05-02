@@ -2,6 +2,36 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.20] — Accessibility audit
+
+### Added
+
+- **ARIA for dashboard card**: `ha-card` uses `role="region"` and
+  `aria-label="FlowMe energy flow visualisation"`. Each flow’s SVG group (or Houdini
+  layer) gets `role="img"` and a live label `flow id: formatted value + unit`. Node
+  wrappers use `role="img"` with the same style of reading text. Renderer exposes
+  `setFlowAriaLabel` on SVG and Houdini implementations.
+- **Editor canvas**: `role="application"` and `aria-label="FlowMe visual editor canvas"`.
+  Node, waypoint, and overlay handles expose `role="button"`, `aria-selected`, and
+  descriptive `aria-label`s. Toolbar icon actions and suggest-path Accept/Cancel have
+  explicit `aria-label`s; element `<select>`s are labelled.
+- **Focus visibility**: `:focus-visible` rings on toolbar buttons, canvas handles,
+  inspector controls, suggest bar, and animation `<summary>` rows (editor); overlay
+  toast / card region where relevant (card).
+- **`prefers-reduced-motion`**: `createRenderer()` forces SVG (skips Houdini worklet).
+  `SvgRenderer` treats all flows as `animation_style: none` when reduced motion is on.
+  CSS pauses SVG `animate` / `animateMotion`, disables Houdini keyframes, background
+  transitions, overlay ripples (card + `flowme-custom-overlay`), and toast motion.
+- **`prefers-contrast: more`**: Thicker flow outline strokes, no SVG glow filters,
+  stronger overlay and node-dot outlines, higher-contrast node label/value text (card);
+  overlay handles outlined in the editor.
+
+### Changed
+
+- **Inspector semantics**: Node / flow / overlay titles use `<h3>`; waypoint and value-gradient
+  section titles use `<h4>`. Flow inspector wraps route + entity in `<fieldset>` /
+  `<legend>`. Waypoint rows use `<ul>` / `<li>`.
+
 ## [1.19.1] — 2026-05-03
 
 ### Fixed

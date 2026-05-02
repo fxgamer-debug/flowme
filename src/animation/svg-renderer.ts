@@ -11,6 +11,7 @@ import {
   polylineToSvgPathStyled,
   pointAtProgress,
   pathLengthPercent,
+  prefersReducedMotion,
   resolveSpeedCurveParams,
   sigmoidSpeedCurve,
   type ResolvedSpeedCurveParams,
@@ -127,11 +128,14 @@ export class SvgRenderer implements FlowRenderer {
   private randomOffsetsLastUpdate = new Map<string, number>();
   // SPACING-1: wave_lateral — per-flow JS-driven position state
   private lateralPhase = new Map<string, number>();
+  /** When true, all flows render as static lines (OS reduced-motion preference). */
+  private prefersReducedMotionFlag = false;
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
     this.container = container;
     this.config = config;
+    this.prefersReducedMotionFlag = prefersReducedMotion();
     this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
 
     const svg = document.createElementNS(SVG_NS, 'svg');
@@ -241,7 +245,15 @@ export class SvgRenderer implements FlowRenderer {
   }
 
   private animStyle(flow: FlowConfig): AnimStyle {
+    if (this.prefersReducedMotionFlag) return 'none';
     return flow.animation?.animation_style ?? 'dots';
+  }
+
+  setFlowAriaLabel(flowId: string, label: string): void {
+    const dom = this.flowNodes.get(flowId);
+    if (!dom?.group) return;
+    dom.group.setAttribute('role', 'img');
+    dom.group.setAttribute('aria-label', label);
   }
 
   private buildSkeleton(): void {
@@ -269,12 +281,14 @@ export class SvgRenderer implements FlowRenderer {
       defs.appendChild(path);
 
       const group = document.createElementNS(SVG_NS, 'g');
+      group.classList.add('flowme-flow-group');
       group.setAttribute('data-flow-id', flow.id);
       if (flow.opacity !== undefined) group.setAttribute('opacity', String(flow.opacity));
       if (flow.visible === false) group.style.display = 'none';
 
       const strokeWidth = this.config?.defaults?.line_width ?? STROKE_WIDTH;
       const outline = document.createElementNS(SVG_NS, 'use');
+      outline.classList.add('flow-line');
       outline.setAttributeNS(XLINK_NS, 'href', `#${pathId}`);
       outline.setAttribute('href', `#${pathId}`);
       outline.setAttribute('stroke', this.primaryColor(flow));
@@ -329,7 +343,7 @@ export class SvgRenderer implements FlowRenderer {
     if (!flow || !dom) return;
 
     const anim = flow.animation ?? {};
-    const style: AnimStyle = anim.animation_style ?? 'dots';
+    const style: AnimStyle = this.animStyle(flow);
 
     // Rebuild DOM if style changed since last render
     if (dom.style !== style) {
@@ -583,7 +597,7 @@ export class SvgRenderer implements FlowRenderer {
     const configured = Math.min(burstMax, Math.max(1, Math.round(base * burstMultiplier)));
 
     // P3-4: adaptive particle count — reduce when over frame budget
-    const style = anim.animation_style ?? 'dots';
+    const style = this.animStyle(flow);
     if (style === 'dots' || style === 'trail') {
       const current = this.adaptiveCount.get(flow.id) ?? configured;
       const avgMs = this.avgFrameMs();
