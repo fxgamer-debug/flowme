@@ -186,9 +186,7 @@ export type LineStyle = (typeof LINE_STYLES)[number];
 
 // ── Animation v1.0.12 ──────────────────────────────────────────────────────
 
-export const ANIMATION_STYLES = [
-  'dots', 'dash', 'pulse', 'arrow', 'trail', 'fluid', 'spark', 'none',
-] as const;
+export const ANIMATION_STYLES = ['dots', 'dash', 'arrow', 'trail', 'fluid', 'none'] as const;
 export type AnimationStyle = (typeof ANIMATION_STYLES)[number];
 
 export const PARTICLE_SHAPES = ['circle', 'square', 'arrow', 'teardrop', 'diamond', 'custom_svg'] as const;
@@ -229,7 +227,7 @@ export interface ValueGradientConfig {
 export interface FlowAnimationConfig {
   /** Visual style for the flow animation. Default: 'dots'. */
   animation_style?: AnimationStyle;
-  /** Shape of individual particles. Ignored for dash/pulse/fluid. Default: 'circle'. */
+  /** Shape of individual particles. Ignored for dash/fluid. Default: 'circle'. */
   particle_shape?: ParticleShape;
   /** Direction behaviour. Default: 'auto' (positive→forward, negative→reverse). */
   direction?: FlowDirection;
@@ -253,8 +251,6 @@ export interface FlowAnimationConfig {
    * Adds realism to electrical/energy flows. Default: false.
    */
   flicker?: boolean;
-  /** pulse style only — ring stroke thickness in px. Default: 2. */
-  pulse_width?: number;
   /** trail style only — tail length as multiplier of particle_size. Default: 2.0. */
   trail_length?: number;
   /** dash style only — ratio of gap length to dash length. Default: 0.5. */

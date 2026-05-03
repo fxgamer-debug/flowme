@@ -82,7 +82,7 @@ export const DEMO_CONFIG: FlowmeConfig = {
       to_node: 'battery',
       entity: 'sensor.battery_power',
       waypoints: [{ x: 20, y: 65 }],
-      animation: { animation_style: 'spark', direction: 'auto', flicker: true },
+      animation: { animation_style: 'dots', direction: 'auto', flicker: true },
     },
   ],
 

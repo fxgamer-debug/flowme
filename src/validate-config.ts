@@ -361,10 +361,17 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
   const out: FlowAnimationConfig = {};
 
   if (o['animation_style'] !== undefined) {
-    if (!ANIMATION_STYLES.includes(o['animation_style'] as never)) {
+    let st = o['animation_style'];
+    if (st === 'pulse' || st === 'spark') {
+      console.warn(
+        `[flowme] ${path}.animation_style '${String(st)}' was removed in v1.23.6 — using 'dots'`,
+      );
+      st = 'dots';
+    }
+    if (!ANIMATION_STYLES.includes(st as never)) {
       fail(`${path}.animation_style`, t('validation.mustBeOneOf', ANIMATION_STYLES.join(', ')));
     }
-    out.animation_style = o['animation_style'] as FlowAnimationConfig['animation_style'];
+    out.animation_style = st as FlowAnimationConfig['animation_style'];
   }
   if (o['particle_shape'] !== undefined) {
     if (!PARTICLE_SHAPES.includes(o['particle_shape'] as never)) {
@@ -432,8 +439,6 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
   if (sh !== undefined) out.shimmer = sh;
   const fl = readBool('flicker');
   if (fl !== undefined) out.flicker = fl;
-  const pw = readPositiveFloat('pulse_width');
-  if (pw !== undefined) out.pulse_width = pw;
   const tl = readPositiveFloat('trail_length');
   if (tl !== undefined) out.trail_length = tl;
   if (o['dash_gap'] !== undefined) {

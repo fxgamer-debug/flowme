@@ -1747,9 +1747,8 @@ export class FlowmeCardEditor extends LitElement {
     };
 
     // Styles that don't use discrete particles (shape picker irrelevant)
-    const noShapeStyles = new Set(['dash', 'pulse', 'fluid', 'none']);
+    const noShapeStyles = new Set(['dash', 'fluid', 'none']);
     const showShape = !noShapeStyles.has(style);
-    const showPulseWidth = style === 'pulse';
     const showTrailLength = style === 'trail';
     const showDashGap = style === 'dash';
 
@@ -1966,18 +1965,6 @@ export class FlowmeCardEditor extends LitElement {
             ${t('editor.inspector.flicker')}
           </label>
 
-          ${showPulseWidth ? html`
-            <label>${t('editor.inspector.pulseWidthPx')}
-              <input type="number" min="1" max="20" step="0.5"
-                .value=${String(anim.pulse_width ?? 2)}
-                @change=${(e: Event) => {
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  if (Number.isFinite(v)) patch({ pulse_width: v });
-                }}
-              />
-            </label>
-          ` : nothing}
-
           ${showTrailLength ? html`
             <label>${t('editor.inspector.trailLength')}
               <div class="inspector-slider-row">
@@ -2058,23 +2045,6 @@ export class FlowmeCardEditor extends LitElement {
         </line>
       `;
     }
-    if (style === 'pulse') {
-      const positions = [40, 90, 140];
-      return html`
-        ${positions.map(
-          (cx, i) => html`
-            <circle cx=${cx} cy="20" r="0" fill="none"
-              stroke=${color} stroke-width=${anim.pulse_width ?? 2}>
-              <animate attributeName="r" values="0;12;0" dur="1.2s" repeatCount="indefinite"
-                begin="${(i * 0.4).toFixed(1)}s"/>
-              <animate attributeName="opacity" values="0;0.9;0" dur="1.2s" repeatCount="indefinite"
-                begin="${(i * 0.4).toFixed(1)}s"/>
-            </circle>
-          `,
-        )}
-      `;
-    }
-
     // wave_lateral — particles moving along a wavy path
     if (anim.particle_spacing === 'wave_lateral') {
       const waveCx = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * 180 + 10);
@@ -2095,7 +2065,7 @@ export class FlowmeCardEditor extends LitElement {
       `;
     }
 
-    // dots / arrow / trail / spark — show moving particles
+    // dots / arrow / trail — show moving particles
     const positions = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * 180 + 10);
     return html`
       <line x1="10" y1="20" x2="190" y2="20" stroke=${color} stroke-width="1.5" stroke-opacity="0.25"/>

@@ -203,7 +203,6 @@ export const STRINGS = {
       glowIntensity: 'Glow intensity',
       shimmerThreshold: 'Shimmer at threshold',
       flicker: 'Flicker (random opacity variation)',
-      pulseWidthPx: 'Pulse width (px)',
       trailLength: 'Trail length',
       dashGapRatio: 'Dash gap ratio',
       clusterSize: 'Cluster size',

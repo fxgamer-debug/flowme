@@ -2,6 +2,20 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.6] — Animation styles trimmed, direction + fluid + trail fixes
+
+### Removed
+
+- **animation_style `pulse` and `spark`**: dropped from renderer, editor, and types. Legacy YAML values are migrated to `dots` with a console warning. **`pulse` node_effect**, **`pulse` particle_spacing**, and **`ripple` node effect** are unchanged.
+
+### Fixed
+
+- **Chevron / arrow**: Size uses `(dot_radius × particle_size) / 10` as the path unit so height matches the dots circle diameter.
+- **Flow direction**: `forward` / `reverse` / `auto` (sensor sign only when `auto`) / `both` (dual paths). Reverse motion uses path `[to, …waypoints reversed…, from]` — no `keyPoints` reversal.
+- **Teardrop / diamond**: Centralised `particleMotionRotateAttr` + `particleTangentRotationDegrees` for SMIL and JS-driven spacing.
+- **Fluid**: Gradient motion from path endpoints with normalised chord direction; translate keyed off path geometry (synced travel direction). Initial gradient phase shifted (`from` negative offset) plus stroke fade-in.
+- **Trail**: Tail `begin` offsets always lag the head (positive delay along path).
+
 ## [1.23.5] — Trail rotate fix (CI)
 
 ### Fixed

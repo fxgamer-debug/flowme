@@ -219,7 +219,12 @@ export class HoudiniRenderer implements FlowRenderer {
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
     const durMs = Math.max(50, sigmoidSpeedCurve(magnitude, params) * speedMultiplier);
-    const direction = value < 0 !== (flow.reverse === true) ? -1 : 1;
+    const dirCfg = flow.animation?.direction ?? 'auto';
+    let direction: number;
+    if (dirCfg === 'forward') direction = 1;
+    else if (dirCfg === 'reverse') direction = -1;
+    else if (dirCfg === 'both') direction = 1;
+    else direction = value >= 0 ? 1 : -1;
     const domain = flow.domain ?? this.config?.domain;
     const flowIndex = this.config?.flows.findIndex((f) => f.id === flow.id) ?? -1;
     const color = resolveFlowColor(
