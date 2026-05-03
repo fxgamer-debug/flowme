@@ -10,6 +10,11 @@ import { resolve } from 'node:path';
 // imports src/dev/demo-app.ts. No lib mode is used in dev — the full module
 // graph is served with hot reload via native ESM.
 export default defineConfig({
+  // Relative worker URLs so `flowme-card.js` + `assets/*.worker*.js` load from the same folder on HA (/local/…).
+  base: './',
+  worker: {
+    format: 'es',
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

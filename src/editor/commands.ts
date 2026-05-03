@@ -1,6 +1,5 @@
 import type {
   AnimationConfig,
-  DomainColors,
   FlowAnimationConfig,
   FlowConfig,
   FlowmeConfig,
@@ -573,7 +572,7 @@ export function setVisibility<K extends keyof VisibilityConfig>(
 
 export function setDomainColor(
   config: FlowmeConfig,
-  key: keyof DomainColors,
+  key: string,
   color: string | undefined,
 ): FlowmeConfig {
   const next = cloneConfig(config);

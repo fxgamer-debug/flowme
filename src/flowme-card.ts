@@ -24,7 +24,7 @@ import { dlog, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.21';
+const CARD_VERSION = '1.22';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -700,10 +700,11 @@ export class FlowmeCard extends LitElement {
     const domainColors = this.config.domain_colors;
     let firstColor: string | undefined;
     const seenKeys = new Set<string>();
-    for (const flow of this.config.flows) {
+    for (let fi = 0; fi < this.config.flows.length; fi++) {
+      const flow = this.config.flows[fi]!;
       if (flow.from_node !== nodeId && flow.to_node !== nodeId) continue;
       const profile = getProfile(flow.domain ?? cardDomain);
-      const color = resolveFlowColor(flow, profile, flow.domain ?? cardDomain, 1, domainColors);
+      const color = resolveFlowColor(flow, profile, flow.domain ?? cardDomain, 1, domainColors, fi);
       const key = color.toLowerCase();
       if (!seenKeys.has(key)) {
         seenKeys.add(key);

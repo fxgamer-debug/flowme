@@ -9,6 +9,7 @@
       "addFlow": "+ Flow",
       "addOverlay": "+ Overlay",
       "suggestPath": "Suggest path",
+      "suggestPathFinding": "Finding path…",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "fitCanvas": "Fit to canvas"
@@ -29,6 +30,44 @@
     },
     "suggestBar": {
       "message": "Suggested path ready — accept or cancel"
+    },
+    "domainRoles": {
+      "energy": {
+        "solar": "Solar",
+        "grid": "Grid",
+        "battery": "Battery",
+        "load": "Load"
+      },
+      "water": {
+        "supply": "Supply",
+        "drain": "Drain",
+        "storage": "Storage",
+        "transfer": "Transfer"
+      },
+      "network": {
+        "upload": "Upload",
+        "download": "Download",
+        "local": "Local",
+        "external": "External"
+      },
+      "hvac": {
+        "supply": "Supply air",
+        "return": "Return air",
+        "fresh": "Fresh air",
+        "exhaust": "Exhaust"
+      },
+      "gas": {
+        "inlet": "Inlet",
+        "outlet": "Outlet",
+        "bypass": "Bypass",
+        "vent": "Vent"
+      },
+      "generic": {
+        "flow1": "Flow 1",
+        "flow2": "Flow 2",
+        "flow3": "Flow 3",
+        "flow4": "Flow 4"
+      }
     }
   },
   "card": {

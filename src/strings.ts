@@ -49,6 +49,7 @@ export const STRINGS = {
       save: 'Save',
       cancel: 'Cancel',
       suggestPath: 'Suggest path',
+      suggestPathFinding: 'Finding path…',
       hide: 'Hide',
       acceptPath: 'Accept suggested path',
       cancelPath: 'Cancel suggested path',
@@ -217,7 +218,7 @@ export const STRINGS = {
       opacityOverlays: 'Overlays (all)',
       domainColoursSummary: 'Domain colours',
       domainColoursHint:
-        'Override the default colour for each energy domain type. Changes apply to all flows of that domain unless a per-flow colour is set.',
+        'Override default colours for each role in the selected domain. Changes apply to all flows unless a per-flow colour is set.',
       colourDefaultSuffix: (hex: string) => `${hex} (default)`,
       reset: 'Reset',
       visibilitySummary: 'Visibility',
@@ -303,6 +304,44 @@ export const STRINGS = {
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',
+    },
+    domainRoles: {
+      energy: {
+        solar: 'Solar',
+        grid: 'Grid',
+        battery: 'Battery',
+        load: 'Load',
+      },
+      water: {
+        supply: 'Supply',
+        drain: 'Drain',
+        storage: 'Storage',
+        transfer: 'Transfer',
+      },
+      network: {
+        upload: 'Upload',
+        download: 'Download',
+        local: 'Local',
+        external: 'External',
+      },
+      hvac: {
+        supply: 'Supply air',
+        return: 'Return air',
+        fresh: 'Fresh air',
+        exhaust: 'Exhaust',
+      },
+      gas: {
+        inlet: 'Inlet',
+        outlet: 'Outlet',
+        bypass: 'Bypass',
+        vent: 'Vent',
+      },
+      generic: {
+        flow1: 'Flow 1',
+        flow2: 'Flow 2',
+        flow3: 'Flow 3',
+        flow4: 'Flow 4',
+      },
     },
     errors: {
       invalidCardConfig: 'Invalid card config',

@@ -1,4 +1,5 @@
 import type { DomainColors, FlowConfig, FlowDomain, FlowProfile } from '../types.js';
+import { resolveDomainFlowDefaultColour } from './domain-colour-profiles.js';
 import { energyProfile } from './energy.js';
 import { waterProfile } from './water.js';
 import { networkProfile } from './network.js';
@@ -29,36 +30,15 @@ export function getProfile(domain: FlowDomain | undefined): FlowProfile {
 export const NEUTRAL_NODE_COLOR = '#CCCCCC';
 
 /**
- * Per-domain default colour for a flow whose id matches a well-known
- * residential pattern. Lets users skip per-flow `color:` config when
- * they follow conventional naming. Only triggered for the *energy*
- * domain — other domains keep their profile defaults.
- *
- * Patterns are word-boundary aware so `solar1`, `solar_string_1`,
- * `pv_string_2`, `grid_power`, `battery_soc` and `house_load` all
- * match. Returns `undefined` when nothing matches, letting the
- * caller fall through to the profile default.
- *
- * `domainColors` (v1.0.8+) is the card-level `domain_colors:` block
- * which lets users override the built-in hex values without having to
- * set `color:` on every individual flow. When provided it takes
- * precedence over the built-in defaults.
+ * Per-domain default colour from flow id patterns and optional `domain_colors:` overrides.
+ * @see resolveDomainFlowDefaultColour
  */
 export function defaultDomainFlowColor(
   domain: FlowDomain | undefined,
   flowId: string,
   domainColors?: DomainColors,
 ): string | undefined {
-  if (domain !== 'energy') return undefined;
-  const id = flowId.toLowerCase();
-  // Order matters: more specific patterns first.
-  if (/(?:^|[^a-z])(solar|pv)(?:[^a-z]|$)/.test(id)) return domainColors?.solar ?? '#FFD700';
-  if (/(?:^|[^a-z])grid(?:[^a-z]|$)/.test(id)) return domainColors?.grid ?? '#1EB4FF';
-  if (/(?:^|[^a-z])(battery|batt)(?:[^a-z]|$)/.test(id)) return domainColors?.battery ?? '#32DC50';
-  if (/(?:^|[^a-z])(load|consumption|consume|house)(?:[^a-z]|$)/.test(id)) {
-    return domainColors?.load ?? '#FF8C1E';
-  }
-  return undefined;
+  return resolveDomainFlowDefaultColour(domain, flowId, domainColors, undefined);
 }
 
 /**
@@ -83,8 +63,10 @@ export function resolveFlowColor(
   domain: FlowDomain | undefined,
   direction: number,
   domainColors?: DomainColors,
+  flowIndex?: number,
 ): string {
-  const universal = flow.color ?? defaultDomainFlowColor(domain, flow.id, domainColors);
+  const universal =
+    flow.color ?? resolveDomainFlowDefaultColour(domain, flow.id, domainColors, flowIndex);
   if (direction >= 0) {
     return flow.color_positive ?? universal ?? profile.default_color_positive;
   }

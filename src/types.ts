@@ -314,17 +314,11 @@ export interface FlowmeDefaults {
 }
 
 /**
- * Domain-level colour overrides (v1.0.8+). These override the id-pattern
- * defaults applied by `defaultDomainFlowColor` for the energy domain. All
- * fields optional — omit to keep the built-in defaults
- * (#FFD700 / #1EB4FF / #32DC50 / #FF8C1E).
+ * Domain-level colour overrides (v1.0.8+). Keys are **role keys** for the
+ * active domain (see `DOMAIN_COLOUR_PROFILES`); values are CSS `#hex` colours.
+ * All entries optional — omit to keep profile defaults.
  */
-export interface DomainColors {
-  solar?: string;
-  grid?: string;
-  battery?: string;
-  load?: string;
-}
+export type DomainColors = Record<string, string>;
 
 /**
  * Card-level opacity overrides (v1.0.10+). All fields are optional — when
@@ -405,9 +399,8 @@ export interface FlowmeConfig {
   /** Card-level rendering defaults (v1.0.8+). All fields optional. */
   defaults?: FlowmeDefaults;
   /**
-   * Energy-domain colour overrides (v1.0.8+). Override the built-in
-   * id-pattern defaults (solar/grid/battery/load) without having to set
-   * `color:` on every individual flow.
+   * Domain colour overrides (v1.0.8+). Keys match the configured domain's
+   * role keys (e.g. energy: solar/grid/battery/load; water: supply/drain/…).
    */
   domain_colors?: DomainColors;
   /**

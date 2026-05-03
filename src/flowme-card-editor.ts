@@ -72,8 +72,11 @@ import {
   patchValueGradient,
   clearValueGradient,
 } from './editor/commands.js';
-import { suggestPath } from './pathfinding/index.js';
+import { loadDownscaledRgbaForPathfinding, suggestPath } from './pathfinding/index.js';
+import { DEFAULT_CELL_SIZE } from './pathfinding/grid-builder.js';
 import type { Point } from './pathfinding/types.js';
+import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
+import { setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 
 type DragTarget =
@@ -140,6 +143,9 @@ export class FlowmeCardEditor extends LitElement {
   @state() private redoLabel = '';
   @state() private suggestPreview: SuggestPreview | null = null;
   @state() private suggestBusy = false;
+  private _pathWorker?: Worker;
+  private _pathWorkerPending = false;
+  private _pathPendingSelection: { fromId: string; toId: string } | null = null;
   /** Right-column toolbar selector: which type is shown in the element dropdown. */
   @state() private selectorType: 'nodes' | 'flows' | 'overlays' | '' = '';
   /** Config snapshot captured when the editor first opens (external setConfig).
@@ -193,6 +199,8 @@ export class FlowmeCardEditor extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._pathWorker?.terminate();
+    this._pathWorker = undefined;
     this.unsubscribe?.();
     window.removeEventListener('keydown', this.onKeyDown);
     document.removeEventListener('keydown', this.onKeyDown, true);
@@ -283,6 +291,7 @@ export class FlowmeCardEditor extends LitElement {
   setConfig(config: unknown): void {
     try {
       this.config = validateConfig(config);
+      setDebugEnabled(this.config.debug ?? false);
       // Only clear undo when HA pushes a genuinely external config change.
       // When we dispatch config-changed ourselves, _ownCommit is true.
       // Reset the flag here (not in commitToHa) so it stays true whether
@@ -943,6 +952,7 @@ export class FlowmeCardEditor extends LitElement {
     if (this.selectedFlowId) {
       const flow = this.config.flows.find((f) => f.id === this.selectedFlowId);
       if (!flow) return nothing;
+      const flowIndex = this.config.flows.findIndex((f) => f.id === flow.id);
       return html`
         <div class="inspector">
           <h3>${t('editor.inspector.flowHeading', flow.id)}</h3>
@@ -983,7 +993,14 @@ export class FlowmeCardEditor extends LitElement {
             <div class="color-row">
               ${(() => {
                 const profile = getProfile(flow.domain ?? this.config.domain);
-                const effective = resolveFlowColor(flow, profile, flow.domain ?? this.config.domain, 1, this.config.domain_colors);
+                const effective = resolveFlowColor(
+                  flow,
+                  profile,
+                  flow.domain ?? this.config.domain,
+                  1,
+                  this.config.domain_colors,
+                  flowIndex >= 0 ? flowIndex : 0,
+                );
                 return html`
                   <input
                     type="color"
@@ -1989,42 +2006,14 @@ export class FlowmeCardEditor extends LitElement {
   private renderDomainColorsPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const dc: DomainColors = this.config.domain_colors ?? {};
+    const domain = this.config.domain ?? 'energy';
+    const profile =
+      DOMAIN_COLOUR_PROFILES[domain] ?? DOMAIN_COLOUR_PROFILES.generic!;
 
-    const DOMAIN_DEFAULTS: DomainColors = {
-      solar: '#FFD700',
-      grid: '#1EB4FF',
-      battery: '#32DC50',
-      load: '#FF8C1E',
-    };
-
-    const colorRow = (key: keyof DomainColors, label: string) => {
-      const override = dc[key];
-      const defaultVal = DOMAIN_DEFAULTS[key]!;
-      return html`
-        <div class="color-picker-row">
-          <span class="color-picker-label">${label}</span>
-          <input
-            type="color"
-            .value=${override ?? defaultVal}
-            @change=${(e: Event) => {
-              if (!this.config) return;
-              const val = (e.target as HTMLInputElement).value;
-              const prev = this.config;
-              const next = setDomainColor(prev, key, val);
-              this.pushPatch(prev, next, `set domain_colors.${key}`);
-            }}
-          />
-          <span class="color-picker-value">${override ? override : t('editor.inspector.colourDefaultSuffix', defaultVal)}</span>
-          ${override
-            ? html`<button class="ghost small" @click=${() => {
-                if (!this.config) return;
-                const prev = this.config;
-                const next = setDomainColor(prev, key, undefined);
-                this.pushPatch(prev, next, `reset domain_colors.${key}`);
-              }}>${t('editor.inspector.reset')}</button>`
-            : nothing}
-        </div>
-      `;
+    const labelForRole = (roleKey: string, fallbackLabel: string): string => {
+      const path = `editor.domainRoles.${domain}.${roleKey}`;
+      const s = t(path);
+      return s !== path ? s : fallbackLabel;
     };
 
     return html`
@@ -2034,10 +2023,36 @@ export class FlowmeCardEditor extends LitElement {
           <p class="hint-sub">
             ${t('editor.inspector.domainColoursHint')}
           </p>
-          ${colorRow('solar', t('editor.stateA.solar'))}
-          ${colorRow('grid', t('editor.stateA.grid'))}
-          ${colorRow('battery', t('editor.stateA.battery'))}
-          ${colorRow('load', t('editor.stateA.load'))}
+          ${profile.roles.map((role) => {
+            const override = dc[role.key];
+            const defaultVal = role.default;
+            const label = labelForRole(role.key, role.label);
+            return html`
+              <div class="color-picker-row">
+                <span class="color-picker-label">${label}</span>
+                <input
+                  type="color"
+                  .value=${override ?? defaultVal}
+                  @change=${(e: Event) => {
+                    if (!this.config) return;
+                    const val = (e.target as HTMLInputElement).value;
+                    const prev = this.config;
+                    const next = setDomainColor(prev, role.key, val);
+                    this.pushPatch(prev, next, `set domain_colors.${role.key}`);
+                  }}
+                />
+                <span class="color-picker-value">${override ? override : t('editor.inspector.colourDefaultSuffix', defaultVal)}</span>
+                ${override
+                  ? html`<button class="ghost small" @click=${() => {
+                      if (!this.config) return;
+                      const prev = this.config;
+                      const next = setDomainColor(prev, role.key, undefined);
+                      this.pushPatch(prev, next, `reset domain_colors.${role.key}`);
+                    }}>${t('editor.inspector.reset')}</button>`
+                  : nothing}
+              </div>
+            `;
+          })}
         </div>
       </details>
     `;
@@ -2175,12 +2190,14 @@ export class FlowmeCardEditor extends LitElement {
         <span class="multiselect-count">${t('editor.inspector.multiselectCount', count)}</span>
         <button
           type="button"
-          class="ms-btn"
+          class="ms-btn ${this.suggestBusy ? 'suggest-path-busy' : ''}"
           aria-label=${t('editor.inspector.suggestPathBetweenAria')}
           title=${count === 2 ? t('editor.inspector.suggestPathBetweenTitle') : t('editor.inspector.suggestPathPickTwoTitle')}
           ?disabled=${count !== 2 || this.suggestBusy}
-          @click=${() => this.runSuggestPath()}
-        >${t('editor.toolbar.suggestPath')}</button>
+          @click=${() => void this.runSuggestPath()}
+        >${this.suggestBusy
+          ? html`${t('editor.toolbar.suggestPathFinding')}<span class="suggest-path-spinner" aria-hidden="true"></span>`
+          : t('editor.toolbar.suggestPath')}</button>
         <button type="button" class="ms-btn" aria-label=${t('editor.toolbar.hideSelectedNodesAria')} @click=${() => this.bulkHide(ids)}>${t('editor.toolbar.hideSelected')}</button>
         <button type="button" class="ms-btn" aria-label=${t('editor.toolbar.showSelectedNodesAria')} @click=${() => this.bulkShow(ids)}>${t('editor.toolbar.showSelected')}</button>
         <button type="button" class="ms-btn" aria-label=${t('editor.toolbar.alignSelectedHorizontalAria')} @click=${() => this.bulkAlignH(ids, anchorId)}>${t('editor.toolbar.alignHorizontalShort')}</button>
@@ -2414,39 +2431,91 @@ export class FlowmeCardEditor extends LitElement {
 
   // -- suggest path --
 
-  private async runSuggestPath(): Promise<void> {
-    if (!this.config || this.selectedNodeIds.size !== 2) {
+  private initPathWorker(): void {
+    if (this._pathWorker || typeof Worker === 'undefined') return;
+    try {
+      this._pathWorker = new Worker(new URL('./pathfinding/pathfinding.worker.ts', import.meta.url), {
+        type: 'module',
+      });
+    } catch {
+      this._pathWorker = undefined;
       return;
     }
-    const [fromId, toId] = Array.from(this.selectedNodeIds) as [string, string];
+    this._pathWorker.onmessage = (e: MessageEvent) => {
+      this._pathWorkerPending = false;
+      this.suggestBusy = false;
+      const sel = this._pathPendingSelection;
+      this._pathPendingSelection = null;
+      if (!sel || !this.config) return;
+      const data = e.data as {
+        waypoints?: Point[];
+        edgesUsable?: boolean;
+        elapsedMs?: number;
+        error?: string;
+      };
+      if (data.error) {
+        if (this.config.debug) console.error('[FlowMe] pathfinding worker error:', data.error);
+        void this.runPathfindingMainThread(sel.fromId, sel.toId);
+        return;
+      }
+      this.applySuggestPathWorkerResult(
+        {
+          waypoints: data.waypoints ?? [],
+          edgesUsable: data.edgesUsable ?? false,
+          elapsedMs: data.elapsedMs ?? 0,
+        },
+        sel.fromId,
+        sel.toId,
+      );
+    };
+    this._pathWorker.onerror = (err: ErrorEvent) => {
+      this._pathWorkerPending = false;
+      this.suggestBusy = false;
+      const sel = this._pathPendingSelection;
+      this._pathPendingSelection = null;
+      if (this.config?.debug) console.error('[FlowMe] pathfinding worker error:', err);
+      if (sel) void this.runPathfindingMainThread(sel.fromId, sel.toId);
+    };
+  }
+
+  private applySuggestPathWorkerResult(
+    result: { waypoints: Point[]; edgesUsable: boolean; elapsedMs: number },
+    fromId: string,
+    toId: string,
+  ): void {
+    if (!result.edgesUsable) {
+      this.errorMessage = t('editor.inspector.suggestCorsError');
+      this.suggestPreview = null;
+      return;
+    }
+    this.suggestPreview = {
+      fromNodeId: fromId,
+      toNodeId: toId,
+      waypoints: result.waypoints,
+      edgesUsable: result.edgesUsable,
+      elapsedMs: result.elapsedMs,
+    };
+  }
+
+  private async runPathfindingMainThread(fromId: string, toId: string): Promise<void> {
+    if (!this.config) return;
     const fromNode = this.config.nodes.find((n) => n.id === fromId);
     const toNode = this.config.nodes.find((n) => n.id === toId);
-    if (!fromNode || !toNode) {
-      return;
-    }
+    if (!fromNode || !toNode) return;
 
     this.suggestBusy = true;
     try {
-      const result = await suggestPath({
+      const pathResult = await suggestPath({
         imageUrl: this.config.background.default,
         from: fromNode.position,
         to: toNode.position,
       });
-      if (!result.edgesUsable) {
+      if (!pathResult.edgesUsable) {
         this.errorMessage = t('editor.inspector.suggestCorsError');
         this.suggestPreview = null;
         return;
       }
-      if (result.waypoints.length === 0) {
-        // Still create the preview so the user can accept (creates a straight-line flow)
-      }
-      this.suggestPreview = {
-        fromNodeId: fromId,
-        toNodeId: toId,
-        waypoints: result.waypoints,
-        edgesUsable: result.edgesUsable,
-        elapsedMs: result.elapsedMs,
-      };
+      this.applySuggestPathWorkerResult(pathResult, fromId, toId);
     } catch (err) {
       this.errorMessage = t(
         'editor.inspector.suggestAutoRouteFailed',
@@ -2456,6 +2525,56 @@ export class FlowmeCardEditor extends LitElement {
     } finally {
       this.suggestBusy = false;
     }
+  }
+
+  private async runSuggestPath(): Promise<void> {
+    if (!this.config || this.selectedNodeIds.size !== 2) {
+      return;
+    }
+    if (this._pathWorkerPending) return;
+    const [fromId, toId] = Array.from(this.selectedNodeIds) as [string, string];
+    const fromNode = this.config.nodes.find((n) => n.id === fromId);
+    const toNode = this.config.nodes.find((n) => n.id === toId);
+    if (!fromNode || !toNode) {
+      return;
+    }
+
+    const imageUrl = this.config.background?.default ?? '';
+
+    if (typeof Worker === 'undefined') {
+      await this.runPathfindingMainThread(fromId, toId);
+      return;
+    }
+
+    this.initPathWorker();
+    if (!this._pathWorker) {
+      await this.runPathfindingMainThread(fromId, toId);
+      return;
+    }
+
+    this.suggestBusy = true;
+    const pack = await loadDownscaledRgbaForPathfinding(imageUrl);
+    if (!pack) {
+      this.suggestBusy = false;
+      this.errorMessage = t('editor.inspector.suggestCorsError');
+      this.suggestPreview = null;
+      return;
+    }
+
+    this._pathWorkerPending = true;
+    this._pathPendingSelection = { fromId, toId };
+    const copy = new Uint8ClampedArray(pack.rgba);
+    this._pathWorker.postMessage(
+      {
+        rgba: copy.buffer,
+        width: pack.width,
+        height: pack.height,
+        fromPos: fromNode.position,
+        toPos: toNode.position,
+        cellSize: DEFAULT_CELL_SIZE,
+      },
+      [copy.buffer],
+    );
   }
 
   private acceptSuggestion = (): void => {
@@ -3234,6 +3353,7 @@ export class FlowmeCardEditor extends LitElement {
       this.undoStack.push({ prev: validatedPrev, next: validatedNext, description });
       this.commitToHa(validatedNext);
       this.config = validatedNext;
+      setDebugEnabled(validatedNext.debug ?? false);
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);
       this.config = prev;
@@ -3580,6 +3700,25 @@ export class FlowmeCardEditor extends LitElement {
     }
     .ms-btn:hover { background: rgba(255,255,255,0.15); }
     .ms-btn:disabled { opacity: 0.4; cursor: default; }
+    .ms-btn.suggest-path-busy {
+      white-space: nowrap;
+    }
+    .suggest-path-spinner {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-left: 6px;
+      vertical-align: -2px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: rgba(255, 255, 255, 0.92);
+      border-radius: 50%;
+      animation: flowme-suggest-spin 0.65s linear infinite;
+    }
+    @keyframes flowme-suggest-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
     .ms-btn.danger { border-color: rgba(239,68,68,0.5); color: #fca5a5; }
     .ms-btn.danger:hover { background: rgba(239,68,68,0.2); }
     .ms-btn.ghost { opacity: 0.7; }

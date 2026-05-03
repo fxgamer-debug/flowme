@@ -415,7 +415,15 @@ export class SvgRenderer implements FlowRenderer {
     this.lastDirection.set(flowId, intendedDirection);
 
     const domain = flow.domain ?? this.config?.domain;
-    const baseColor = resolveFlowColor(flow, profile, domain, direction, this.config?.domain_colors);
+    const flowIndex = this.config?.flows.findIndex((f) => f.id === flowId) ?? -1;
+    const baseColor = resolveFlowColor(
+      flow,
+      profile,
+      domain,
+      direction,
+      this.config?.domain_colors,
+      flowIndex >= 0 ? flowIndex : 0,
+    );
 
     // GRADIENT-1: gradient color overrides base color per the mode setting
     const gradientColor = this.gradientColors.get(flowId);
@@ -1522,6 +1530,7 @@ export class SvgRenderer implements FlowRenderer {
   private primaryColor(flow: FlowConfig): string {
     const profile = this.profileFor(flow);
     const domain = flow.domain ?? this.config?.domain;
-    return resolveFlowColor(flow, profile, domain, 1, this.config?.domain_colors);
+    const flowIndex = this.config?.flows.findIndex((f) => f.id === flow.id) ?? -1;
+    return resolveFlowColor(flow, profile, domain, 1, this.config?.domain_colors, flowIndex >= 0 ? flowIndex : 0);
   }
 }

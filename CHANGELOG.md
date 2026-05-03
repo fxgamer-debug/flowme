@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.22] — Web Worker pathfinding and domain colours
+
+### Added
+
+- **Web Worker pathfinding**: Sobel edge detection and A\* run off the main thread (`src/pathfinding/pathfinding.worker.ts`) when suggesting a path in the editor; falls back to the main-thread pipeline when workers are unavailable or fail. The production build emits `dist/assets/pathfinding.worker-*.js` alongside `dist/flowme-card.js` — ship the whole `dist/` tree (or npm package `files`) so the worker URL resolves next to the card script (`vite.base: ./`).
+- **Per-domain colour profiles**: `domain_colors` keys follow domain-specific roles (energy, water, network, HVAC, gas, generic). Pattern matching resolves flow colours per domain; the editor colour panel lists the correct roles for the configured domain.
+
+### Changed
+
+- **Suggest Path**: Shows “Finding path…” with a spinner while the worker runs.
+
 ## [1.21] — i18n
 
 ### Added

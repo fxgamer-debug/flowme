@@ -1,8 +1,7 @@
-import { findPath, type Cell } from './astar.js';
 import { buildCostGrid, DEFAULT_CELL_SIZE } from './grid-builder.js';
-import { buildEdgeMap } from './sobel.js';
-import { simplifyCollinear } from './simplify.js';
-import type { CostGrid, PathRequest, PathResult, Point } from './types.js';
+import { buildEdgeMap, readDownscaledPixels } from './sobel.js';
+import { waypointsForGrid } from './compute-waypoints.js';
+import type { CostGrid, PathRequest, PathResult } from './types.js';
 
 /**
  * High-level auto-routing façade. Given a background image URL and two
@@ -13,10 +12,7 @@ import type { CostGrid, PathRequest, PathResult, Point } from './types.js';
  * (keyed by the URL string), so repeat calls from the editor are near-free.
  * A* itself re-runs every time because endpoints change.
  *
- * The Web Worker path mentioned in the spec is deferred — measured pipeline
- * cost for 480×270 inputs is <30 ms on typical hardware, well inside the
- * 100 ms main-thread budget. The pipeline stages are already pure functions
- * so they can be lifted into a worker later without changes.
+ * Heavy stages also run in a Web Worker from the card editor (`pathfinding.worker.ts`).
  */
 const gridCache = new Map<string, Promise<CostGrid | null>>();
 
@@ -49,30 +45,29 @@ export async function suggestPath(
     };
   }
 
-  const start = pointToCell(request.from, grid);
-  const end = pointToCell(request.to, grid);
-  const rawPath = findPath(grid, start, end);
-  if (!rawPath || rawPath.length < 2) {
-    return {
-      waypoints: [],
-      cached: wasCached,
-      edgesUsable: true,
-      elapsedMs: performance.now() - startedAt,
-    };
-  }
-
-  const simplified = simplifyCollinear(rawPath);
-  // strip the first and last cells (those correspond to endpoints already
-  // represented by the from/to nodes) and convert back to percentage space
-  const interior = simplified.slice(1, -1);
-  const waypoints = interior.map((cell) => cellToPoint(cell, grid!));
+  const { waypoints, edgesUsable } = waypointsForGrid(grid, request.from, request.to);
 
   return {
     waypoints,
     cached: wasCached,
-    edgesUsable: true,
+    edgesUsable,
     elapsedMs: performance.now() - startedAt,
   };
+}
+
+/**
+ * Load and downscale the background the same way as `buildEdgeMap`, returning raw RGBA for workers.
+ */
+export async function loadDownscaledRgbaForPathfinding(
+  imageUrl: string,
+): Promise<{ rgba: Uint8ClampedArray; width: number; height: number } | null> {
+  if (!imageUrl) return null;
+  try {
+    const img = await loadImage(imageUrl);
+    return readDownscaledPixels(img, img.naturalWidth, img.naturalHeight);
+  } catch {
+    return null;
+  }
 }
 
 export function clearPathCache(url?: string): void {
@@ -126,25 +121,6 @@ function microYield(): Promise<void> {
     if (typeof queueMicrotask === 'function') queueMicrotask(() => setTimeout(resolve, 0));
     else setTimeout(resolve, 0);
   });
-}
-
-function pointToCell(point: Point, grid: CostGrid): Cell {
-  const col = clampInt(Math.floor((point.x / 100) * grid.cols), 0, grid.cols - 1);
-  const row = clampInt(Math.floor((point.y / 100) * grid.rows), 0, grid.rows - 1);
-  return [col, row];
-}
-
-function cellToPoint(cell: Cell, grid: CostGrid): Point {
-  return {
-    x: ((cell[0] + 0.5) / grid.cols) * 100,
-    y: ((cell[1] + 0.5) / grid.rows) * 100,
-  };
-}
-
-function clampInt(value: number, min: number, max: number): number {
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
 }
 
 export type { PathResult, PathRequest } from './types.js';

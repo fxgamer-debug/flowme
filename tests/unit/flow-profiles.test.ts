@@ -417,6 +417,12 @@ describe('defaultDomainFlowColor (v1.0.7 energy id-pattern defaults)', () => {
     expect(defaultDomainFlowColor(undefined, 'solar1')).toBeUndefined();
   });
 
+  it('matches water / network domain patterns (v1.22)', () => {
+    expect(defaultDomainFlowColor('water', 'cold_supply')).toBe('#60CFFF');
+    expect(defaultDomainFlowColor('water', 'sewer_drain')).toBe('#0077AA');
+    expect(defaultDomainFlowColor('network', 'download_usage')).toBe('#1EB4FF');
+  });
+
   it('v1.0.8 domainColors parameter overrides built-in defaults', () => {
     const dc = { solar: '#111111', grid: '#222222', battery: '#333333', load: '#444444' };
     expect(defaultDomainFlowColor('energy', 'solar1', dc)).toBe('#111111');
