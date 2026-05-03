@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.3] — Animation polish and node-effect sizing
+
+### Fixed
+
+- **Chevron**: Restored pre-v1.23.2 proportions (`line_width×4` × `dot_radius×3`); rear notch centre at −0.6×width.
+- **Rotation**: Diamond uses `rotate="0"` (with teardrop); square / arrow / custom_svg use `rotate="auto"`.
+- **Fluid**: Stroke fade-in on first paint; group opacity for shimmer; gradient translate direction corrected.
+- **Spark**: Default implicit particle count 8; denser branches (0.008/frame), longer reach (15–50px), brighter branches and white core glow on mains.
+- **Node effects**: Radius derived from layout px→viewBox; pulse/ripple rings scaled correctly; glow/badge/alert target the real `.node-dot` via DOM hooks (badge = full-disc colour); editor unchanged (SVG-only).
+
 ## [1.23.2] — Animation and node-effect fixes
 
 ### Fixed

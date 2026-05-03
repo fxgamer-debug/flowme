@@ -23,10 +23,10 @@ import type { FlowmeCustomOverlay } from './overlays/custom-overlay.js';
 import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
-import { NodeEffectsLayerController } from './node-effects-layer.js';
+import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.2';
+const CARD_VERSION = '1.23.3';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -326,9 +326,51 @@ export class FlowmeCard extends LitElement {
     }
     const svg = this.nodeFxSvgRef.value;
     if (svg && this.config) {
-      this.nodeFx.sync(svg, this.config, this.hass, performance.now());
+      this.nodeFx.sync(svg, this.config, this.hass, performance.now(), this.nodeEffectHooks());
     }
     this.ensureNodeEffectsRaf();
+  }
+
+  private queryNodeDot(nodeId: string): HTMLElement | null {
+    const safe =
+      typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(nodeId)
+        : nodeId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return this.shadowRoot?.querySelector(`[data-node-id="${safe}"] .node-dot`) ?? null;
+  }
+
+  private clearNodeEffectDomStyles(): void {
+    this.shadowRoot?.querySelectorAll('.node-dot[data-flowme-fx]').forEach((raw) => {
+      const el = raw as HTMLElement;
+      const base = el.getAttribute('data-flowme-base-fill');
+      if (base) el.style.background = base;
+      el.style.filter = '';
+      el.style.transition = '';
+      el.removeAttribute('data-flowme-fx');
+    });
+  }
+
+  private nodeEffectHooks(): NodeEffectsSyncHooks {
+    return {
+      resetDomEffects: () => this.clearNodeEffectDomStyles(),
+      getLayoutMetrics: (svgEl) => {
+        const r = svgEl.getBoundingClientRect();
+        return { widthPx: Math.max(1, r.width), heightPx: Math.max(1, r.height) };
+      },
+      setNodeDotBackground: (nodeId, bg, opts) => {
+        const dot = this.queryNodeDot(nodeId);
+        if (!dot) return;
+        dot.setAttribute('data-flowme-fx', '1');
+        dot.style.transition = opts?.transitionMs ? `background-color ${opts.transitionMs}ms ease` : '';
+        dot.style.background = bg;
+      },
+      setNodeDotFilter: (nodeId, filter) => {
+        const dot = this.queryNodeDot(nodeId);
+        if (!dot) return;
+        dot.setAttribute('data-flowme-fx', '1');
+        dot.style.filter = filter ?? '';
+      },
+    };
   }
 
   private ensureNodeEffectsRaf(): void {
@@ -345,7 +387,7 @@ export class FlowmeCard extends LitElement {
       this._nodeFxRaf = requestAnimationFrame(tick);
       const el = this.nodeFxSvgRef.value;
       if (el && this.config) {
-        this.nodeFx.sync(el, this.config, this.hass, performance.now());
+        this.nodeFx.sync(el, this.config, this.hass, performance.now(), this.nodeEffectHooks());
       }
     };
     this._nodeFxRaf = requestAnimationFrame(tick);
@@ -764,6 +806,7 @@ export class FlowmeCard extends LitElement {
         <span class="node-dot-wrap">
           <span
             class="node-dot node-circle"
+            data-flowme-base-fill=${fill}
             style=${`background: ${fill}; width: ${size}px; height: ${size}px;`}
           ></span>
           ${node.node_effect

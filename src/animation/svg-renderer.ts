@@ -53,14 +53,26 @@ const BURST_MAX_PARTICLES = 20;
 const SHIMMER_SPEED_FACTOR = 0.2;
 const SHIMMER_OPACITY = 0.3;
 
-/** Classic road chevron (local coords, tip toward +X). `r` = resolved particle radius. */
-function boldChevronPath(r: number): string {
-  const w = r * 3;
-  const h = r * 2;
-  const notch = w * 0.4;
-  const hw = w / 2;
+/**
+ * Bold road chevron (local coords, tip toward +X). Same geometry as pre-v1.23.2,
+ * with rear centre at −0.6×w (40% V-notch depth vs flat back at −w).
+ * `w` ≈ line_width×4, `h` ≈ dot_radius×3.
+ */
+function boldChevronPath(w: number, h: number): string {
   const hh = h / 2;
-  return `M ${hw},0 L ${-hw + notch},${-hh} L ${-hw},${-hh} L ${-notch},0 L ${-hw},${hh} L ${-hw + notch},${hh} Z`;
+  const tip = w * 0.52;
+  const nd = h * 0.4;
+  return [
+    `M ${tip} 0`,
+    `L ${w * 0.06} ${hh}`,
+    `L ${-w * 0.36} ${hh}`,
+    `L ${-w * 0.48} ${nd * 0.4}`,
+    `L ${-w * 0.6} 0`,
+    `L ${-w * 0.48} ${-nd * 0.4}`,
+    `L ${-w * 0.36} ${-hh}`,
+    `L ${w * 0.06} ${-hh}`,
+    'Z',
+  ].join(' ');
 }
 
 function teardropShapePath(r: number): string {
@@ -149,6 +161,8 @@ interface FlowDomNodes {
   }>;
   /** fluid: linear gradient element */
   fluidGradient?: SVGLinearGradientElement;
+  /** fluid: one-time stroke fade-in applied */
+  fluidFadeApplied?: boolean;
   /** "both" direction uses a second set of particles going the other way */
   particlesBack?: ParticleDom[];
 }
@@ -601,9 +615,14 @@ export class SvgRenderer implements FlowRenderer {
     const op = String(opacity);
     for (const p of dom.particles) p.shape.setAttribute('opacity', op);
     if (dom.particlesBack) for (const p of dom.particlesBack) p.shape.setAttribute('opacity', op);
-    if (dom.lineStroke) dom.lineStroke.setAttribute('opacity', opacity > 0 ? '0.9' : '0');
+    if (dom.fluidGradient) {
+      dom.group.setAttribute('opacity', opacity <= 0 ? '0' : op);
+      if (opacity <= 0) dom.lineStroke?.setAttribute('opacity', '0');
+    } else {
+      dom.group.removeAttribute('opacity');
+      if (dom.lineStroke) dom.lineStroke.setAttribute('opacity', opacity > 0 ? '0.9' : '0');
+    }
     if (dom.pulseCircles) for (const p of dom.pulseCircles) p.circle.setAttribute('opacity', op);
-    if (dom.fluidGradient) dom.fluidGradient.parentElement?.setAttribute('opacity', op);
   }
 
   /** Remove all style-specific DOM elements, ready to switch style */
@@ -613,6 +632,7 @@ export class SvgRenderer implements FlowRenderer {
       this.sparkMainsByFlow.delete(fid);
       this.sparkFlowPhysics.delete(fid);
     }
+    dom.group.removeAttribute('opacity');
     for (const p of dom.particles) p.shape.remove();
     dom.particles = [];
     if (dom.particlesBack) {
@@ -621,6 +641,7 @@ export class SvgRenderer implements FlowRenderer {
     }
     dom.lineStroke?.remove();
     dom.lineStroke = undefined;
+    dom.fluidFadeApplied = undefined;
     if (dom.pulseCircles) {
       for (const p of dom.pulseCircles) p.circle.remove();
       dom.pulseCircles = undefined;
@@ -705,14 +726,19 @@ export class SvgRenderer implements FlowRenderer {
     // When particle_count is explicitly set, skip adaptive logic
     if (anim.particle_count !== undefined) return anim.particle_count;
 
-    const base = Math.max(
-      1,
-      Math.round(profile.particle_count_curve ? profile.particle_count_curve(value) : DEFAULT_PARTICLE_COUNT),
-    );
+    const style = this.animStyle(flow);
+    const implicitDefault =
+      style === 'spark'
+        ? 8
+        : Math.max(
+            1,
+            Math.round(profile.particle_count_curve ? profile.particle_count_curve(value) : DEFAULT_PARTICLE_COUNT),
+          );
+
+    const base = Math.max(1, implicitDefault);
     const burstMax = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
     const configured = Math.min(burstMax, Math.max(1, Math.round(base * burstMultiplier)));
 
-    const style = this.animStyle(flow);
     if (style === 'dots' || style === 'trail') {
       return Math.min(this.adaptiveCount.get(flow.id) ?? configured, configured);
     }
@@ -1393,7 +1419,9 @@ export class SvgRenderer implements FlowRenderer {
     const size = this.containerSize();
     if (!from || !to) return;
 
+    let fluidStrokeNew = false;
     if (!dom.lineStroke) {
+      fluidStrokeNew = true;
       const stroke = document.createElementNS(SVG_NS, 'use');
       stroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
       stroke.setAttribute('href', `#${dom.pathId}`);
@@ -1470,12 +1498,13 @@ export class SvgRenderer implements FlowRenderer {
     anim.setAttribute('repeatCount', 'indefinite');
     const tx = ux * L;
     const ty = uy * L;
+    /** Visual forward motion: translate pattern opposite to previous bug (v1.23.3). */
     if (direction >= 0) {
       anim.setAttribute('from', `0 0`);
-      anim.setAttribute('to', `${-tx} ${-ty}`);
+      anim.setAttribute('to', `${tx} ${ty}`);
     } else {
       anim.setAttribute('from', `0 0`);
-      anim.setAttribute('to', `${tx} ${ty}`);
+      anim.setAttribute('to', `${-tx} ${-ty}`);
     }
     grad.appendChild(anim);
 
@@ -1486,6 +1515,17 @@ export class SvgRenderer implements FlowRenderer {
     dom.lineStroke.setAttribute('stroke-width', String(strokeWidth));
     dom.lineStroke.removeAttribute('stroke-dasharray');
     if (glowFilter) dom.lineStroke.setAttribute('filter', glowFilter);
+
+    if (fluidStrokeNew && !dom.fluidFadeApplied) {
+      dom.fluidFadeApplied = true;
+      dom.lineStroke.setAttribute('opacity', '0');
+      const opIn = document.createElementNS(SVG_NS, 'animate');
+      opIn.setAttribute('attributeName', 'opacity');
+      opIn.setAttribute('values', '0;0.95');
+      opIn.setAttribute('dur', '500ms');
+      opIn.setAttribute('fill', 'freeze');
+      dom.lineStroke.appendChild(opIn);
+    }
   }
 
   /**
@@ -1526,7 +1566,11 @@ export class SvgRenderer implements FlowRenderer {
 
         const { shape: geom } = this.buildParticleShapeOnly(dom, shapeKind, baseR, fillColor, flow);
         geom.setAttribute('data-spark-core', '1');
-        geom.removeAttribute('filter');
+        const glowBlur = (2.2 + (i % 7) * 0.45).toFixed(2);
+        geom.setAttribute(
+          'filter',
+          `drop-shadow(0 0 2px #FFFFFF) drop-shadow(0 0 ${glowBlur}px ${color})`,
+        );
         const baseOp = 0.4 + Math.random() * 0.6;
         geom.setAttribute('opacity', String(baseOp.toFixed(3)));
         group.appendChild(geom);
@@ -1562,9 +1606,10 @@ export class SvgRenderer implements FlowRenderer {
           const fillColor = mixHexColor(color, '#ffffff', 0.3);
           row.color = fillColor;
           row.shape.setAttribute('fill', fillColor);
+          const gb = (2.2 + (i % 7) * 0.45).toFixed(2);
           row.shape.setAttribute(
             'filter',
-            `drop-shadow(0 0 ${(2.5 + (i % 5) * 0.6).toFixed(1)}px ${color})`,
+            `drop-shadow(0 0 2px #FFFFFF) drop-shadow(0 0 ${gb}px ${color})`,
           );
         }
       }
@@ -1627,8 +1672,8 @@ export class SvgRenderer implements FlowRenderer {
         const op = Math.max(0.25, Math.min(1, m.baseOpacity * flick));
         m.shape.setAttribute('opacity', String(op.toFixed(3)));
 
-        if (Math.random() < 0.002) {
-          this.spawnSparkBranch(dom, plen, m.progress, pt.x, pt.y, physics.direction, physics.durMs);
+        if (Math.random() < 0.008) {
+          this.spawnSparkBranch(dom, plen, m.progress, pt.x, pt.y, physics.direction, physics.durMs, m.baseR);
         }
       }
     }
@@ -1642,6 +1687,7 @@ export class SvgRenderer implements FlowRenderer {
     cy: number,
     direction: number,
     durMs: number,
+    mainRadiusPx: number,
   ): void {
     const pool = this.sparkBranchPool.find((c) => parseFloat(c.getAttribute('opacity') ?? '1') < 0.05);
     if (!pool) return;
@@ -1661,14 +1707,14 @@ export class SvgRenderer implements FlowRenderer {
     const branchAng = tang + (Math.random() < 0.5 ? -1 : 1) * (spreadDeg * Math.PI) / 180;
     const mainPxPerMs = plen / Math.max(50, durMs);
     const speed = (0.4 + Math.random() * 0.4) * mainPxPerMs;
-    const maxDist = 10 + Math.random() * 20;
+    const maxDist = 15 + Math.random() * 35;
     const fadeType: 'return' | 'fadeout' = Math.random() < 0.5 ? 'return' : 'fadeout';
 
     pool.setAttribute('fill', '#ffffff');
     pool.setAttribute('cx', String(cx));
     pool.setAttribute('cy', String(cy));
-    pool.setAttribute('r', String(1.4));
-    pool.setAttribute('opacity', '0.95');
+    pool.setAttribute('r', String(Math.max(1.2, mainRadiusPx * 0.7)));
+    pool.setAttribute('opacity', '1');
 
     this.sparkBranchActive.push({
       el: pool,
@@ -1750,7 +1796,7 @@ export class SvgRenderer implements FlowRenderer {
 
     const tailMotions: SVGAnimateMotionElement[] = [];
     const tailGroups: SVGGElement[] = [];
-    const trailRot = kind === 'teardrop' ? '0' : 'auto';
+    const trailRot = kind === 'teardrop' || kind === 'diamond' ? '0' : 'auto';
 
     for (let k = 0; k < 4; k++) {
       const sg = document.createElementNS(SVG_NS, 'g');
@@ -1850,8 +1896,11 @@ export class SvgRenderer implements FlowRenderer {
         break;
       }
       case 'arrow': {
+        const lw = this.config?.defaults?.line_width ?? STROKE_WIDTH;
+        const chevW = lw * 4;
+        const chevH = r * 3;
         const pathEl = document.createElementNS(SVG_NS, 'path');
-        pathEl.setAttribute('d', boldChevronPath(r));
+        pathEl.setAttribute('d', boldChevronPath(chevW, chevH));
         pathEl.setAttribute('fill', color);
         pathEl.setAttribute('opacity', '0');
         pathEl.setAttribute('data-kind', 'arrow');
@@ -1940,7 +1989,10 @@ export class SvgRenderer implements FlowRenderer {
     const animateMotion = document.createElementNS(SVG_NS, 'animateMotion');
     animateMotion.setAttribute('repeatCount', 'indefinite');
     animateMotion.setAttribute('dur', '2s');
-    animateMotion.setAttribute('rotate', kind === 'teardrop' ? '0' : 'auto');
+    animateMotion.setAttribute(
+      'rotate',
+      kind === 'teardrop' || kind === 'diamond' ? '0' : 'auto',
+    );
     const mpath = document.createElementNS(SVG_NS, 'mpath');
     mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
     mpath.setAttribute('href', `#${dom.pathId}`);
