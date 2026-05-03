@@ -55,16 +55,28 @@ function nodeRadiusSvgUnits(nodeRpx: number, m: NodeEffectsLayoutMetrics): numbe
   return Math.min(nodeRpx * sx, nodeRpx * sy);
 }
 
-function pad2pxSvg(m: NodeEffectsLayoutMetrics): number {
-  const sx = 100 / m.widthPx;
-  const sy = 100 / m.heightPx;
-  return Math.min(2 * sx, 2 * sy);
+function strokeWidthSvgPx(px: number, m: NodeEffectsLayoutMetrics): number {
+  return Math.max(0.04, px * Math.min(100 / m.widthPx, 100 / m.heightPx));
+}
+
+function rippleOwnerAttr(nodeId: string): string {
+  return nodeId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 export class NodeEffectsLayerController {
   private lastDiagnosticLogMs = 0;
+  private rippleLastRaw = new Map<string, number>();
+  private ripplePendingTimeouts = new Map<string, ReturnType<typeof setTimeout>[]>();
+  private rippleBurstGen = new Map<string, number>();
 
-  reset(): void {}
+  reset(): void {
+    for (const pending of this.ripplePendingTimeouts.values()) {
+      for (const t of pending) window.clearTimeout(t);
+    }
+    this.ripplePendingTimeouts.clear();
+    this.rippleLastRaw.clear();
+    this.rippleBurstGen.clear();
+  }
 
   sync(
     svg: SVGSVGElement | null,
@@ -83,7 +95,32 @@ export class NodeEffectsLayerController {
       layer.classList.add('node-effects-layer');
       svg.appendChild(layer);
     }
-    while (layer.firstChild) layer.firstChild.remove();
+
+    let rippleHost = layer.querySelector(':scope > g.node-effects-ripples') as SVGGElement | null;
+    if (!rippleHost) {
+      rippleHost = document.createElementNS(SVG_NS, 'g');
+      rippleHost.classList.add('node-effects-ripples');
+      layer.insertBefore(rippleHost, layer.firstChild);
+    }
+
+    let syncHost = layer.querySelector(':scope > g.node-effects-sync') as SVGGElement | null;
+    if (!syncHost) {
+      syncHost = document.createElementNS(SVG_NS, 'g');
+      syncHost.classList.add('node-effects-sync');
+      layer.appendChild(syncHost);
+    }
+    while (syncHost.firstChild) syncHost.firstChild.remove();
+
+    const validIds = new Set(config.nodes.map((n) => n.id));
+    for (const id of [...this.rippleLastRaw.keys()]) {
+      if (!validIds.has(id)) {
+        this.cancelRippleBurst(id, rippleHost);
+        this.rippleLastRaw.delete(id);
+      }
+    }
+    for (const id of [...this.rippleBurstGen.keys()]) {
+      if (!validIds.has(id)) this.cancelRippleBurst(id, rippleHost);
+    }
 
     const m = hooks?.getLayoutMetrics?.(svg) ?? layoutMetrics(svg);
     const defaultRpx = config.defaults?.node_radius ?? 12;
@@ -127,15 +164,15 @@ export class NodeEffectsLayerController {
           this.appendBadge(g, fx, hass, node.entity, colour, node.id, cx, cy, nodeRpx, m, hooks);
           break;
         case 'ripple':
-          this.appendRipple(g, fx, hass, node.entity, colour, rSvg, cx, cy, m);
-          break;
+          this.updateRipple(rippleHost, node, fx, hass, colour, nodeRpx, cx, cy, m);
+          continue;
         case 'alert':
           this.appendAlert(g, fx, hass, node.entity, colour, node.id, cx, cy, rSvg, nowMs, hooks);
           break;
         default:
           break;
       }
-      if (g.childNodes.length > 0) layer.appendChild(g);
+      if (g.childNodes.length > 0) syncHost.appendChild(g);
     }
   }
 
@@ -152,9 +189,12 @@ export class NodeEffectsLayerController {
     const raw = parseReading(hass, entityId);
     const peak = fx.peak_value ?? 10000;
     const maxExtra = fx.glow_max_radius ?? 20;
+    const minI = Math.max(0, Math.min(1, fx.glow_min_intensity ?? 0.1));
     const c = fx.glow_color || colour;
-    const t = raw === null ? 0 : Math.max(0, Math.min(1, Math.abs(raw) / peak));
-    const blurPx = 4 + t * maxExtra;
+    const rawFactor = raw === null ? 0 : Math.abs(raw) / peak;
+    const factor = Math.max(minI, Math.min(1, rawFactor));
+    const blurPx = 4 + factor * maxExtra;
+    const opacity = 0.2 + factor * 0.6;
 
     if (hooks?.setNodeDotFilter) {
       hooks.setNodeDotFilter(node.id, `drop-shadow(0 0 ${blurPx.toFixed(1)}px ${c})`);
@@ -168,12 +208,135 @@ export class NodeEffectsLayerController {
     ring.setAttribute('fill', 'none');
     ring.setAttribute('stroke', c);
     ring.setAttribute('stroke-width', String(0.08));
-    ring.setAttribute('opacity', String(0.2 + t * 0.6));
+    ring.setAttribute('opacity', String(opacity));
     ring.setAttribute(
       'style',
       `filter: drop-shadow(0 0 ${blurPx.toFixed(1)}px ${c}); transition: filter 500ms ease, opacity 500ms ease`,
     );
     g.appendChild(ring);
+  }
+
+  private cancelRippleBurst(nodeId: string, rippleHost: SVGGElement | null): void {
+    const pending = this.ripplePendingTimeouts.get(nodeId);
+    if (pending) {
+      for (const t of pending) window.clearTimeout(t);
+      this.ripplePendingTimeouts.delete(nodeId);
+    }
+    if (rippleHost) {
+      const sel = `[data-ripple-owner="${rippleOwnerAttr(nodeId)}"]`;
+      rippleHost.querySelectorAll(sel).forEach((el) => el.remove());
+    }
+    this.rippleBurstGen.set(nodeId, (this.rippleBurstGen.get(nodeId) ?? 0) + 1);
+  }
+
+  private scheduleRippleBurst(
+    nodeId: string,
+    rippleHost: SVGGElement,
+    cx: number,
+    cy: number,
+    nodeRpx: number,
+    durMs: number,
+    strokeColor: string,
+    m: NodeEffectsLayoutMetrics,
+  ): void {
+    this.cancelRippleBurst(nodeId, rippleHost);
+    const gen = this.rippleBurstGen.get(nodeId)!;
+    const staggerMs = 300;
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    for (let i = 0; i < 3; i++) {
+      timeouts.push(
+        window.setTimeout(() => {
+          if (this.rippleBurstGen.get(nodeId) !== gen) return;
+          this.spawnRippleRing(rippleHost, nodeId, cx, cy, nodeRpx, durMs, strokeColor, m);
+        }, i * staggerMs),
+      );
+    }
+    this.ripplePendingTimeouts.set(nodeId, timeouts);
+  }
+
+  private spawnRippleRing(
+    rippleHost: SVGGElement,
+    nodeId: string,
+    cx: number,
+    cy: number,
+    nodeRpx: number,
+    durMs: number,
+    strokeColor: string,
+    m: NodeEffectsLayoutMetrics,
+  ): void {
+    const startR = nodeRadiusSvgUnits(nodeRpx + 2, m);
+    const endR = nodeRadiusSvgUnits(nodeRpx * 4, m);
+    const sw = strokeWidthSvgPx(2, m);
+
+    const wrap = document.createElementNS(SVG_NS, 'g');
+    wrap.setAttribute('data-ripple-owner', nodeId);
+
+    const ring = document.createElementNS(SVG_NS, 'circle');
+    ring.setAttribute('cx', String(cx));
+    ring.setAttribute('cy', String(cy));
+    ring.setAttribute('r', String(startR));
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', strokeColor);
+    ring.setAttribute('stroke-width', String(sw));
+    ring.setAttribute('opacity', '0.7');
+
+    const animR = document.createElementNS(SVG_NS, 'animate');
+    animR.setAttribute('attributeName', 'r');
+    animR.setAttribute('from', String(startR));
+    animR.setAttribute('to', String(endR));
+    animR.setAttribute('dur', `${durMs}ms`);
+    animR.setAttribute('fill', 'freeze');
+    animR.setAttribute('begin', 'indefinite');
+
+    const animO = document.createElementNS(SVG_NS, 'animate');
+    animO.setAttribute('attributeName', 'opacity');
+    animO.setAttribute('from', '0.7');
+    animO.setAttribute('to', '0');
+    animO.setAttribute('dur', `${durMs}ms`);
+    animO.setAttribute('fill', 'freeze');
+    animO.setAttribute('begin', 'indefinite');
+
+    ring.appendChild(animR);
+    ring.appendChild(animO);
+    wrap.appendChild(ring);
+    rippleHost.appendChild(wrap);
+
+    requestAnimationFrame(() => {
+      try {
+        animR.beginElement();
+        animO.beginElement();
+      } catch {
+        /* SVG may be detached */
+      }
+    });
+
+    window.setTimeout(() => wrap.remove(), durMs + 80);
+  }
+
+  private updateRipple(
+    rippleHost: SVGGElement,
+    node: NodeConfig,
+    fx: Extract<NodeEffectConfig, { type: 'ripple' }>,
+    hass: HomeAssistant | undefined,
+    colour: string,
+    nodeRpx: number,
+    cx: number,
+    cy: number,
+    m: NodeEffectsLayoutMetrics,
+  ): void {
+    const raw = parseReading(hass, node.entity);
+    const minV = fx.ripple_threshold ?? 0;
+    if (raw === null || Math.abs(raw) <= minV) {
+      this.cancelRippleBurst(node.id, rippleHost);
+      this.rippleLastRaw.delete(node.id);
+      return;
+    }
+    const prev = this.rippleLastRaw.get(node.id);
+    if (prev === raw) return;
+    this.rippleLastRaw.set(node.id, raw);
+    const dur = fx.ripple_duration ?? 2000;
+    const c = fx.ripple_color || colour;
+    this.scheduleRippleBurst(node.id, rippleHost, cx, cy, nodeRpx, dur, c, m);
   }
 
   private appendBadge(
@@ -220,52 +383,6 @@ export class NodeEffectsLayerController {
     badge.setAttribute('stroke', '#ffffff');
     badge.setAttribute('stroke-width', String(0.03));
     g.appendChild(badge);
-  }
-
-  private appendRipple(
-    g: SVGGElement,
-    fx: Extract<NodeEffectConfig, { type: 'ripple' }>,
-    hass: HomeAssistant | undefined,
-    entityId: string,
-    colour: string,
-    rSvg: number,
-    cx: number,
-    cy: number,
-    m: NodeEffectsLayoutMetrics,
-  ): void {
-    const raw = parseReading(hass, entityId);
-    const minV = fx.ripple_threshold ?? 0;
-    if (raw === null || Math.abs(raw) <= minV) return;
-
-    const dur = fx.ripple_duration ?? 2000;
-    const c = fx.ripple_color || colour;
-    const pad = pad2pxSvg(m);
-    const baseRN = rSvg + pad;
-    const maxRN = rSvg * 3;
-
-    const ring = document.createElementNS(SVG_NS, 'circle');
-    ring.setAttribute('cx', String(cx));
-    ring.setAttribute('cy', String(cy));
-    ring.setAttribute('r', String(baseRN));
-    ring.setAttribute('fill', 'none');
-    ring.setAttribute('stroke', c);
-    ring.setAttribute('stroke-width', String(0.1));
-
-    const animR = document.createElementNS(SVG_NS, 'animate');
-    animR.setAttribute('attributeName', 'r');
-    animR.setAttribute('values', `${baseRN};${maxRN};${baseRN}`);
-    animR.setAttribute('dur', `${dur}ms`);
-    animR.setAttribute('repeatCount', 'indefinite');
-    ring.appendChild(animR);
-
-    const animO = document.createElementNS(SVG_NS, 'animate');
-    animO.setAttribute('attributeName', 'opacity');
-    animO.setAttribute('values', '0.6;0;0.6');
-    animO.setAttribute('dur', `${dur}ms`);
-    animO.setAttribute('repeatCount', 'indefinite');
-    ring.appendChild(animO);
-
-    g.appendChild(ring);
   }
 
   private appendAlert(

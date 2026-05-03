@@ -2,6 +2,14 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.8] — Editor layout timing, glow floor, ripple bursts
+
+### Fixed
+
+- **Editor canvas**: `imageLayoutReady` waits until the first successful `recalcFit()` snaps `scale` / `pan` to the computed fit, so handles and flows are not drawn at `scale === 1` on the first paint after the background loads.
+- **Glow**: Optional `glow_min_intensity` (default **0.1**) clamps the intensity factor so very small readings vs `peak_value` still produce a visible glow.
+- **Ripple**: On each sensor change above threshold, emits **three** one-shot rings staggered by **300 ms**, expanding from **node radius + 2 px** to **4× radius** with opacity **0.7 → 0** over `ripple_duration`; rings use SMIL `beginElement` and are removed after each animation. Persistent `node-effects-ripples` layer survives per-frame sync clears.
+
 ## [1.23.7] — Node effect pulse removal, direction both, editor canvas guard
 
 ### Removed

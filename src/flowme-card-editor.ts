@@ -188,6 +188,8 @@ export class FlowmeCardEditor extends LitElement {
   /** Natural pixel dimensions of the loaded background image (0 until decode). */
   private imageNaturalW = 0;
   private imageNaturalH = 0;
+  /** True only after a successful recalcFit applied scale/pan (avoids first paint at scale=1). */
+  @state() private imageLayoutReady = false;
   /** One-shot diagnostics for editor layout timing. */
   private _editorFirstRenderLogged = false;
   /** URL for which naturalW/H have been loaded (avoids redundant loads). */
@@ -249,6 +251,7 @@ export class FlowmeCardEditor extends LitElement {
       this._editorFxRaf = null;
     }
     this.editorNodeFx.reset();
+    this.imageLayoutReady = false;
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -344,6 +347,7 @@ export class FlowmeCardEditor extends LitElement {
     this._loadedImageUrl = url;
     this.imageNaturalW = 0;
     this.imageNaturalH = 0;
+    this.imageLayoutReady = false;
     const img = new Image();
     img.onload = () => {
       this.imageNaturalW = img.naturalWidth || 1600;
@@ -353,6 +357,7 @@ export class FlowmeCardEditor extends LitElement {
     img.onerror = () => {
       this.imageNaturalW = 0;
       this.imageNaturalH = 0;
+      this.imageLayoutReady = false;
       this.recalcFit();
     };
     img.src = url;
@@ -380,8 +385,13 @@ export class FlowmeCardEditor extends LitElement {
     this.fitScale = newFitScale;
     this.fitPanX = newFitPanX;
     this.fitPanY = newFitPanY;
-    // Reset to fit only if user hasn't moved away from the previous fit level
-    if (this.scale === 1 || this.scale === prevScale) {
+    // First layout after image/stage are valid: always snap to fit so handles use correct scale/pan.
+    if (!this.imageLayoutReady) {
+      this.scale = newFitScale;
+      this.panX = newFitPanX;
+      this.panY = newFitPanY;
+      this.imageLayoutReady = true;
+    } else if (this.scale === 1 || this.scale === prevScale) {
       this.scale = newFitScale;
       this.panX = newFitPanX;
       this.panY = newFitPanY;
@@ -452,7 +462,8 @@ export class FlowmeCardEditor extends LitElement {
       );
     }
 
-    const imageReady = this.imageNaturalW > 0 && this.imageNaturalH > 0;
+    const imageReady =
+      this.imageLayoutReady && this.imageNaturalW > 0 && this.imageNaturalH > 0;
 
     return html`
       <div class="wrap">
@@ -1380,7 +1391,12 @@ export class FlowmeCardEditor extends LitElement {
   private defaultNodeEffect(type: NodeEffectType): NodeEffectConfig {
     switch (type) {
       case 'glow':
-        return { type: 'glow', glow_max_radius: 20, peak_value: 10000 };
+        return {
+          type: 'glow',
+          glow_max_radius: 20,
+          glow_min_intensity: 0.1,
+          peak_value: 10000,
+        };
       case 'badge':
         return { type: 'badge', badge_color_on: '#32DC50', badge_color_off: '#CC3333', threshold: null };
       case 'ripple':
@@ -1395,7 +1411,12 @@ export class FlowmeCardEditor extends LitElement {
           alert_hysteresis: 0.05,
         };
       default:
-        return { type: 'glow', glow_max_radius: 20, peak_value: 10000 };
+        return {
+          type: 'glow',
+          glow_max_radius: 20,
+          glow_min_intensity: 0.1,
+          peak_value: 10000,
+        };
     }
   }
 
@@ -1439,10 +1460,13 @@ export class FlowmeCardEditor extends LitElement {
       case 'ripple':
         return html`
           <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="50" cy="50" r="14" fill="none" stroke="${rc}" stroke-width="2">
-              <animate attributeName="r" values="14;38;14" dur="${fx.ripple_duration ?? 2000}ms" repeatCount="indefinite"/>
-              <animate attributeName="opacity" values="0.5;0;0.5" dur="${fx.ripple_duration ?? 2000}ms" repeatCount="indefinite"/>
-            </circle>
+            ${[0, 0.3, 0.6].map(
+              (delay) => html`
+                <circle cx="50" cy="50" r="14" fill="none" stroke="${rc}" stroke-width="2" opacity="0">
+                  <animate attributeName="opacity" values="0;0.7;0" keyTimes="0;0.05;1" dur="${fx.ripple_duration ?? 2000}ms" begin="${delay}s" fill="freeze"/>
+                  <animate attributeName="r" values="14;56" dur="${fx.ripple_duration ?? 2000}ms" begin="${delay}s" fill="freeze"/>
+                </circle>`,
+            )}
           </svg>`;
       case 'alert':
         return html`
@@ -1523,6 +1547,20 @@ export class FlowmeCardEditor extends LitElement {
                       );
                     }}
                   />
+                </label>
+                <label>${t('editor.nodeEffect.glowMinIntensity')}
+                  <input type="range" min="0" max="1" step="0.05"
+                    .value=${String(fx.glow_min_intensity ?? 0.1)}
+                    @input=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, glow_min_intensity: Math.max(0, Math.min(1, n)) } },
+                        `glow min intensity ${node.id}`,
+                      );
+                    }}
+                  />
+                  <span>${(fx.glow_min_intensity ?? 0.1).toFixed(2)}</span>
                 </label>
                 <label>${t('editor.nodeEffect.peakValue')}
                   <input type="number" min="0" step="any"

@@ -106,6 +106,9 @@ function validateNodeEffect(raw: unknown, path: string): NodeEffectConfig {
       type: 'glow',
       ...(typeof o['glow_color'] === 'string' ? { glow_color: o['glow_color'] as string } : {}),
       ...(typeof o['glow_max_radius'] === 'number' ? { glow_max_radius: o['glow_max_radius'] as number } : {}),
+      ...(typeof o['glow_min_intensity'] === 'number'
+        ? { glow_min_intensity: o['glow_min_intensity'] as number }
+        : {}),
       ...(typeof o['peak_value'] === 'number' ? { peak_value: o['peak_value'] as number } : {}),
     };
   }

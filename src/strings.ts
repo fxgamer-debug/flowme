@@ -86,6 +86,7 @@ export const STRINGS = {
       alert: 'Alert',
       glowColor: 'Glow colour',
       glowMaxRadius: 'Glow max radius (px)',
+      glowMinIntensity: 'Minimum glow intensity',
       peakValue: 'Peak sensor value',
       badgeColorOn: 'Badge on colour',
       badgeColorOff: 'Badge off colour',

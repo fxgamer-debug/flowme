@@ -28,6 +28,8 @@ export interface NodeEffectGlow {
   type: 'glow';
   glow_color?: string;
   glow_max_radius?: number;
+  /** Lower bound for intensity factor (0–1). Default 0.1 — glow stays faintly visible at very low sensor values. */
+  glow_min_intensity?: number;
   peak_value?: number;
 }
 
