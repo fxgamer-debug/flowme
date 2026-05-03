@@ -2,6 +2,7 @@ import type {
   AnimationConfig,
   FlowAnimationConfig,
   FlowConfig,
+  FlowDomain,
   FlowmeConfig,
   FlowmeDefaults,
   LineStyle,
@@ -584,6 +585,35 @@ export function setDomainColor(
   } else {
     next.domain_colors = { ...next.domain_colors, [key]: color };
   }
+  return next;
+}
+
+export function setCardDomain(config: FlowmeConfig, domain: FlowDomain): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.domain = domain;
+  return next;
+}
+
+export function renameFlowId(config: FlowmeConfig, oldId: string, newId: string): FlowmeConfig {
+  const trimmed = newId.trim();
+  if (!trimmed || trimmed === oldId) return config;
+  const idx = config.flows.findIndex((f) => f.id === oldId);
+  if (idx < 0) return config;
+  if (config.flows.some((f, i) => i !== idx && f.id === trimmed)) return config;
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => (f.id === oldId ? { ...f, id: trimmed } : f));
+  return next;
+}
+
+export function renameOverlayId(config: FlowmeConfig, oldId: string, newId: string): FlowmeConfig {
+  const trimmed = newId.trim();
+  if (!trimmed || trimmed === oldId) return config;
+  const overlays = config.overlays ?? [];
+  const idx = overlays.findIndex((o) => o.id === oldId);
+  if (idx < 0) return config;
+  if (overlays.some((o, i) => i !== idx && o.id === trimmed)) return config;
+  const next = cloneConfig(config);
+  next.overlays = overlays.map((o) => (o.id === oldId ? { ...o, id: trimmed } : o));
   return next;
 }
 

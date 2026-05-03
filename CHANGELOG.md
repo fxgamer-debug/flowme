@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.22.1] — Pathfinding worker inline, domain selector, rename UX
+
+### Fixed
+
+- **Suggest Path (HACS single-file)**: Pathfinding runs in a worker bundled **inline** in `flowme-card.js` (`?worker&inline`). No separate `dist/assets/pathfinding.worker-*.js` file is required; leftover worker maps under `dist/assets/` are removed after build. Falls back to main-thread pathfinding with **ungated** `console.error` / `console.log` diagnostics when the worker cannot start.
+
+### Added
+
+- **Diagram domain selector** in the editor State A panel (`domain:` energy/water/network/hvac/gas/generic), undoable via `pushPatch`.
+- **Rename UX**: Double-click a node label (or id placeholder) or overlay chip for inline rename; double-click the node dot or flow line selects the element and focuses the label/id field in the inspector; choosing an element from the toolbar dropdown auto-focuses that field.
+
 ## [1.22] — Web Worker pathfinding and domain colours
 
 ### Added

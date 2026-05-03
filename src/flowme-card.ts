@@ -24,7 +24,7 @@ import { dlog, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.22';
+const CARD_VERSION = '1.22.1';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console

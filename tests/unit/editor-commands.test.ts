@@ -26,7 +26,10 @@ import {
   setTransitionDuration,
   setWeatherStateImage,
   deleteWeatherState,
+  renameFlowId,
+  renameOverlayId,
   renameWeatherState,
+  setCardDomain,
 } from '../../src/editor/commands.js';
 import type { FlowmeConfig } from '../../src/types.js';
 
@@ -232,5 +235,40 @@ describe('background + weather commands', () => {
     cfg = deleteWeatherState(cfg, 'clear');
     cfg = deleteWeatherState(cfg, 'rainy');
     expect(cfg.background.weather_states).toBeUndefined();
+  });
+});
+
+describe('setCardDomain + rename ids (v1.22.1)', () => {
+  it('setCardDomain', () => {
+    const c = baseConfig();
+    const next = setCardDomain(c, 'water');
+    expect(next.domain).toBe('water');
+  });
+
+  it('renameFlowId', () => {
+    const c = baseConfig();
+    const next = renameFlowId(c, 'f1', 'grid_flow');
+    expect(next.flows[0]!.id).toBe('grid_flow');
+  });
+
+  it('renameFlowId rejects duplicate id', () => {
+    const c: FlowmeConfig = {
+      ...baseConfig(),
+      flows: [
+        { id: 'f1', from_node: 'a', to_node: 'b', entity: 'sensor.x', waypoints: [] },
+        { id: 'f2', from_node: 'b', to_node: 'a', entity: 'sensor.y', waypoints: [] },
+      ],
+    };
+    const next = renameFlowId(c, 'f1', 'f2');
+    expect(next).toBe(c);
+  });
+
+  it('renameOverlayId', () => {
+    const c: FlowmeConfig = {
+      ...baseConfig(),
+      overlays: [{ id: 'o1', type: 'custom', position: { x: 5, y: 5 }, card: { type: 'entity', entity: 'x' } }],
+    };
+    const next = renameOverlayId(c, 'o1', 'status_panel');
+    expect(next.overlays![0]!.id).toBe('status_panel');
   });
 });

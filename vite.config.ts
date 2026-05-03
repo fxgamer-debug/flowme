@@ -1,3 +1,4 @@
+import { existsSync, rmSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
@@ -10,8 +11,17 @@ import { resolve } from 'node:path';
 // imports src/dev/demo-app.ts. No lib mode is used in dev — the full module
 // graph is served with hot reload via native ESM.
 export default defineConfig({
-  // Relative worker URLs so `flowme-card.js` + `assets/*.worker*.js` load from the same folder on HA (/local/…).
+  // Relative URLs when resolving assets (worker is inlined — see strip plugin below).
   base: './',
+  plugins: [
+    {
+      name: 'strip-worker-asset-folder',
+      closeBundle() {
+        const assetsDir = resolve(__dirname, 'dist/assets');
+        if (existsSync(assetsDir)) rmSync(assetsDir, { recursive: true });
+      },
+    },
+  ],
   worker: {
     format: 'es',
   },

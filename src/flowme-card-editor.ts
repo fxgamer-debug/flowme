@@ -5,6 +5,7 @@ import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 import type {
   AnimationConfig,
   DomainColors,
+  FlowDomain,
   FlowmeConfig,
   FlowmeDefaults,
   FlowAnimationConfig,
@@ -18,7 +19,14 @@ import type {
   ValueGradientConfig,
   VisibilityConfig,
 } from './types.js';
-import { LINE_STYLES, ANIMATION_STYLES, PARTICLE_SHAPES, PARTICLE_SPACINGS, FLOW_DIRECTIONS } from './types.js';
+import {
+  FLOW_DOMAINS,
+  LINE_STYLES,
+  ANIMATION_STYLES,
+  PARTICLE_SHAPES,
+  PARTICLE_SPACINGS,
+  FLOW_DIRECTIONS,
+} from './types.js';
 import { validateConfig } from './validate-config.js';
 import { interpolateGradientColor, polylineToSvgPathStyled, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
 import { getProfile, resolveFlowColor } from './flow-profiles/index.js';
@@ -38,8 +46,11 @@ import {
   moveNode,
   moveOverlay,
   moveWaypoint,
+  renameFlowId,
+  renameOverlayId,
   renameWeatherState,
   setBackgroundDefault,
+  setCardDomain,
   setDefault,
   setDomainColor,
   setFlowColor,
@@ -47,6 +58,7 @@ import {
   setFlowOpacity,
   setFlowSpeedCurveOverride,
   setFlowVisible,
+  setNodeLabel,
   setNodeOpacity,
   setNodeVisible,
   setOpacity,
@@ -78,6 +90,8 @@ import type { Point } from './pathfinding/types.js';
 import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
 import { setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
+
+import PathfindingWorker from './pathfinding/pathfinding.worker.ts?worker&inline';
 
 type DragTarget =
   | { kind: 'node'; id: string }
@@ -137,7 +151,14 @@ export class FlowmeCardEditor extends LitElement {
   @state() private customConfigDraft = '';
   @state() private customConfigError = '';
   @state() private errorMessage = '';
+  /** Inline rename on canvas (node label / overlay chip). */
+  @state() private inlineRename: { kind: 'node' | 'overlay'; id: string; draft: string } | null = null;
   @state() private canUndo = false;
+
+  private readonly nodeLabelInputRef = createRef<HTMLInputElement>();
+  private readonly flowIdInputRef = createRef<HTMLInputElement>();
+  private readonly overlayIdInputRef = createRef<HTMLInputElement>();
+  private _pendingInspectorLabelFocus = false;
   @state() private canRedo = false;
   @state() private undoLabel = '';
   @state() private redoLabel = '';
@@ -224,6 +245,28 @@ export class FlowmeCardEditor extends LitElement {
         this._lastLanguage = lang;
         loadLanguage(lang);
       }
+    }
+  }
+
+  override updated(changed: PropertyValues): void {
+    super.updated(changed);
+    const pendingInspectorFocus = this._pendingInspectorLabelFocus;
+    if (pendingInspectorFocus) this._pendingInspectorLabelFocus = false;
+
+    if (changed.has('inlineRename') && this.inlineRename) {
+      void this.updateComplete.then(() => {
+        const el = this.shadowRoot?.querySelector<HTMLInputElement>('.inline-rename');
+        el?.focus();
+        el?.select();
+      });
+    }
+    if (pendingInspectorFocus) {
+      void this.updateComplete.then(() => {
+        const el =
+          this.nodeLabelInputRef.value ?? this.flowIdInputRef.value ?? this.overlayIdInputRef.value;
+        el?.focus();
+        el?.select();
+      });
     }
   }
 
@@ -539,6 +582,7 @@ export class FlowmeCardEditor extends LitElement {
                   this.selectedNodeIds = new Set();
                   this.selectedFlowId = null;
                 }
+                this._pendingInspectorLabelFocus = true;
               }}
             >
               <option value="">${derivedType ? t('editor.toolbar.selectElement') : t('editor.toolbar.selectElementDash')}</option>
@@ -601,6 +645,7 @@ export class FlowmeCardEditor extends LitElement {
           data-flow-id=${flow.id}
           data-segment-index=${i}
           @click=${this.onSegmentClick}
+          @dblclick=${this.onFlowPathDblClick}
         />
       `);
     }
@@ -614,6 +659,7 @@ export class FlowmeCardEditor extends LitElement {
           data-flow-id=${flow.id}
           style=${`stroke: ${flowColor};`}
           @click=${this.onSegmentClick}
+          @dblclick=${this.onFlowPathDblClick}
         />
       </g>
     `;
@@ -645,6 +691,7 @@ export class FlowmeCardEditor extends LitElement {
     const selected = overlay.id === this.selectedOverlayId;
     const w = overlay.size?.width ?? 14;
     const h = overlay.size?.height ?? 8;
+    const editing = this.inlineRename?.kind === 'overlay' && this.inlineRename.id === overlay.id;
     return html`
       <div
         class=${`overlay-handle overlay-wrapper ${selected ? 'selected' : ''} overlay-${overlay.type}`}
@@ -661,9 +708,34 @@ export class FlowmeCardEditor extends LitElement {
         @click=${this.onOverlayClick}
         @contextmenu=${this.onOverlayContextMenu}
       >
-        <div class="overlay-label-chip">
-          ${overlay.id}
-          <span class="overlay-type-badge">${overlay.type}</span>
+        <div class="overlay-label-chip" @dblclick=${(e: MouseEvent) => this.onOverlayChipDblClick(e, overlay)}>
+          ${editing
+            ? html`<input
+                class="inline-rename overlay-inline-rename"
+                type="text"
+                spellcheck="false"
+                .value=${this.inlineRename!.draft}
+                @input=${(e: Event) => {
+                  const ir = this.inlineRename;
+                  if (!ir || ir.kind !== 'overlay' || ir.id !== overlay.id) return;
+                  this.inlineRename = { ...ir, draft: (e.target as HTMLInputElement).value };
+                }}
+                @keydown=${(e: KeyboardEvent) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.inlineRename = null;
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.commitOverlayInlineRename(true);
+                  }
+                }}
+                @blur=${() => {
+                  if (this.inlineRename?.kind === 'overlay' && this.inlineRename.id === overlay.id) {
+                    this.commitOverlayInlineRename(true);
+                  }
+                }}
+              />`
+            : html`<span>${overlay.id}<span class="overlay-type-badge">${overlay.type}</span></span>`}
         </div>
         ${selected
           ? html`<div
@@ -686,6 +758,7 @@ export class FlowmeCardEditor extends LitElement {
     const isMultiSelected = isInSelection && this.selectedNodeIds.size > 1;
     const selectionIndex = isInSelection ? Array.from(this.selectedNodeIds).indexOf(node.id) : -1;
     const isHidden = node.visible === false;
+    const editing = this.inlineRename?.kind === 'node' && this.inlineRename.id === node.id;
     return html`
       <div
         class=${`handle ${isSingleSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${isInSelection ? 'in-selection' : ''} ${isHidden ? 'handle-hidden' : ''}`}
@@ -702,8 +775,43 @@ export class FlowmeCardEditor extends LitElement {
         @contextmenu=${this.onNodeContextMenu}
         @click=${this.onNodeClick}
       >
-        <span class="handle-dot"></span>
-        ${node.label ? html`<span class="handle-label">${node.label}</span>` : nothing}
+        <span
+          class="handle-dot"
+          @dblclick=${(e: MouseEvent) => this.onNodeDotDblClick(e, node)}
+        ></span>
+        ${editing
+          ? html`<input
+              class="inline-rename"
+              type="text"
+              spellcheck="false"
+              .value=${this.inlineRename!.draft}
+              @input=${(e: Event) => {
+                const ir = this.inlineRename;
+                if (!ir || ir.kind !== 'node' || ir.id !== node.id) return;
+                this.inlineRename = { ...ir, draft: (e.target as HTMLInputElement).value };
+              }}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  this.inlineRename = null;
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  this.commitNodeInlineRename(true);
+                }
+              }}
+              @blur=${() => {
+                if (this.inlineRename?.kind === 'node' && this.inlineRename.id === node.id) {
+                  this.commitNodeInlineRename(true);
+                }
+              }}
+            />`
+          : node.label
+            ? html`<span class="handle-label" @dblclick=${(e: MouseEvent) => this.onNodeLabelTextDblClick(e, node)}
+                >${node.label}</span
+              >`
+            : html`<span class="handle-id" @dblclick=${(e: MouseEvent) => this.onNodeLabelTextDblClick(e, node)}
+                >${node.id}</span
+              >`}
         ${isInSelection && this.selectedNodeIds.size >= 2
           ? html`<span class="suggest-badge">${selectionIndex + 1}</span>`
           : nothing}
@@ -812,6 +920,7 @@ export class FlowmeCardEditor extends LitElement {
               <span class="node-cell-label">${t('editor.inspector.label')}</span>
               <input
                 type="text"
+                ${ref(this.nodeLabelInputRef)}
                 .value=${node.label ?? ''}
                 @change=${(e: Event) => this.onNodeLabelChange(node.id, e)}
               />
@@ -955,6 +1064,16 @@ export class FlowmeCardEditor extends LitElement {
       const flowIndex = this.config.flows.findIndex((f) => f.id === flow.id);
       return html`
         <div class="inspector">
+          <label class="inspector-id-row">
+            <span class="node-cell-label">${t('editor.inspector.flowIdField')}</span>
+            <input
+              type="text"
+              spellcheck="false"
+              ${ref(this.flowIdInputRef)}
+              .value=${flow.id}
+              @change=${(e: Event) => this.onInspectorFlowIdChange(flow.id, e)}
+            />
+          </label>
           <h3>${t('editor.inspector.flowHeading', flow.id)}</h3>
           <fieldset class="inspector-fieldset">
             <legend class="inspector-legend">${t('editor.inspector.routeAndSensor')}</legend>
@@ -1822,6 +1941,16 @@ export class FlowmeCardEditor extends LitElement {
     const opacity = overlay.opacity ?? 1;
     return html`
       <div class="inspector overlay-inspector">
+        <label class="inspector-id-row">
+          <span class="node-cell-label">${t('editor.inspector.overlayIdField')}</span>
+          <input
+            type="text"
+            spellcheck="false"
+            ${ref(this.overlayIdInputRef)}
+            .value=${overlay.id}
+            @change=${(e: Event) => this.onInspectorOverlayIdChange(overlay.id, e)}
+          />
+        </label>
         <h3>${t('editor.inspector.overlayHeading', overlay.id)}</h3>
         <div class="row size-row">
           <label>
@@ -2168,6 +2297,7 @@ export class FlowmeCardEditor extends LitElement {
   private renderStateA(): TemplateResult {
     return html`
       <div class="z-context-body state-a">
+        ${this.renderDomainSelectorPanel()}
         ${this.renderWeatherPanel()}
         ${this.renderGlobalAnimationPanel()}
         ${this.renderOpacityPanel()}
@@ -2176,6 +2306,37 @@ export class FlowmeCardEditor extends LitElement {
         ${this.renderDefaultsPanel()}
       </div>
     `;
+  }
+
+  private renderDomainSelectorPanel(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    return html`
+      <details class="panel domain-settings-panel" open>
+        <summary>${t('editor.stateA.domainSummary')}</summary>
+        <div class="panel-body">
+          <label class="field-row domain-field">
+            <span class="field-label">${t('editor.stateA.domain')}</span>
+            <select
+              id="flowme-domain-select"
+              .value=${this.config.domain}
+              @change=${(e: Event) => {
+                if (!this.config) return;
+                const v = (e.target as HTMLSelectElement).value as FlowDomain;
+                const prev = this.config;
+                const next = setCardDomain(prev, v);
+                this.pushPatch(prev, next, `set domain ${v}`);
+              }}
+            >
+              ${FLOW_DOMAINS.map((d) => html`<option value=${d}>${this.domainOptionLabel(d)}</option>`)}
+            </select>
+          </label>
+        </div>
+      </details>
+    `;
+  }
+
+  private domainOptionLabel(d: FlowDomain): string {
+    return t(`editor.stateA.domainOption.${d}`);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -2434,10 +2595,9 @@ export class FlowmeCardEditor extends LitElement {
   private initPathWorker(): void {
     if (this._pathWorker || typeof Worker === 'undefined') return;
     try {
-      this._pathWorker = new Worker(new URL('./pathfinding/pathfinding.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-    } catch {
+      this._pathWorker = new PathfindingWorker();
+    } catch (e) {
+      console.error('[FlowMe] worker init failed:', e);
       this._pathWorker = undefined;
       return;
     }
@@ -2454,8 +2614,8 @@ export class FlowmeCardEditor extends LitElement {
         error?: string;
       };
       if (data.error) {
-        if (this.config.debug) console.error('[FlowMe] pathfinding worker error:', data.error);
-        void this.runPathfindingMainThread(sel.fromId, sel.toId);
+        console.error('[FlowMe] pathfinding worker error:', data.error);
+        void this.runPathfindingMainThread(sel.fromId, sel.toId, { logFallback: true });
         return;
       }
       this.applySuggestPathWorkerResult(
@@ -2473,8 +2633,8 @@ export class FlowmeCardEditor extends LitElement {
       this.suggestBusy = false;
       const sel = this._pathPendingSelection;
       this._pathPendingSelection = null;
-      if (this.config?.debug) console.error('[FlowMe] pathfinding worker error:', err);
-      if (sel) void this.runPathfindingMainThread(sel.fromId, sel.toId);
+      console.error('[FlowMe] pathfinding worker error:', err);
+      if (sel) void this.runPathfindingMainThread(sel.fromId, sel.toId, { logFallback: true });
     };
   }
 
@@ -2497,8 +2657,17 @@ export class FlowmeCardEditor extends LitElement {
     };
   }
 
-  private async runPathfindingMainThread(fromId: string, toId: string): Promise<void> {
+  private async runPathfindingMainThread(
+    fromId: string,
+    toId: string,
+    opts?: { logFallback?: boolean },
+  ): Promise<void> {
     if (!this.config) return;
+    if (opts?.logFallback) {
+      // Intentional: helps diagnose HACS single-file installs when the worker is unavailable.
+      // eslint-disable-next-line no-console -- user-visible diagnostic (see v1.22.1 CHANGELOG)
+      console.log('[FlowMe] falling back to main thread pathfinding');
+    }
     const fromNode = this.config.nodes.find((n) => n.id === fromId);
     const toNode = this.config.nodes.find((n) => n.id === toId);
     if (!fromNode || !toNode) return;
@@ -2542,13 +2711,13 @@ export class FlowmeCardEditor extends LitElement {
     const imageUrl = this.config.background?.default ?? '';
 
     if (typeof Worker === 'undefined') {
-      await this.runPathfindingMainThread(fromId, toId);
+      await this.runPathfindingMainThread(fromId, toId, { logFallback: true });
       return;
     }
 
     this.initPathWorker();
     if (!this._pathWorker) {
-      await this.runPathfindingMainThread(fromId, toId);
+      await this.runPathfindingMainThread(fromId, toId, { logFallback: true });
       return;
     }
 
@@ -2746,8 +2915,134 @@ export class FlowmeCardEditor extends LitElement {
     // Plain click (on either visible path or hit segment): select the flow
     this.selectedFlowId = flowId;
     this.selectedNodeId = null;
+    this.selectedNodeIds = new Set();
     this.selectedOverlayId = null;
   };
+
+  private onFlowPathDblClick = (event: MouseEvent): void => {
+    event.stopPropagation();
+    event.preventDefault();
+    if (!this.config) return;
+    const target = event.currentTarget as SVGElement;
+    const flowId = target.dataset['flowId'];
+    if (!flowId) return;
+    this.selectorType = 'flows';
+    this.selectedFlowId = flowId;
+    this.selectedNodeId = null;
+    this.selectedNodeIds = new Set();
+    this.selectedOverlayId = null;
+    this._pendingInspectorLabelFocus = true;
+  };
+
+  private onNodeDotDblClick(e: MouseEvent, node: NodeConfig): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.selectorType = 'nodes';
+    this.selectedNodeId = node.id;
+    this.selectedNodeIds = new Set([node.id]);
+    this.selectedFlowId = null;
+    this.selectedOverlayId = null;
+    this._pendingInspectorLabelFocus = true;
+  }
+
+  private onNodeLabelTextDblClick(e: MouseEvent, node: NodeConfig): void {
+    e.preventDefault();
+    e.stopPropagation();
+    if ((e.target as HTMLElement).closest('.eye-toggle')) return;
+    const draft = node.label ?? node.id;
+    this.inlineRename = { kind: 'node', id: node.id, draft };
+  }
+
+  private commitNodeInlineRename(apply: boolean): void {
+    const ir = this.inlineRename;
+    if (!ir || ir.kind !== 'node' || !this.config) return;
+    if (!apply) {
+      this.inlineRename = null;
+      return;
+    }
+    const node = this.config.nodes.find((n) => n.id === ir.id);
+    if (!node) {
+      this.inlineRename = null;
+      return;
+    }
+    const oldDisplay = node.label ?? node.id;
+    const newLabel = ir.draft.trim() ? ir.draft.trim() : undefined;
+    if ((node.label ?? undefined) === newLabel) {
+      this.inlineRename = null;
+      return;
+    }
+    const prev = this.config;
+    const next = setNodeLabel(prev, ir.id, newLabel);
+    this.inlineRename = null;
+    this.pushPatch(
+      prev,
+      next,
+      `Rename node ${oldDisplay} to ${newLabel ?? '(cleared)'}`,
+    );
+  }
+
+  private onOverlayChipDblClick(e: MouseEvent, overlay: OverlayConfig): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.inlineRename = { kind: 'overlay', id: overlay.id, draft: overlay.id };
+  }
+
+  private commitOverlayInlineRename(apply: boolean): void {
+    const ir = this.inlineRename;
+    if (!ir || ir.kind !== 'overlay' || !this.config) return;
+    if (!apply) {
+      this.inlineRename = null;
+      return;
+    }
+    const raw = ir.draft.trim();
+    if (!raw || raw === ir.id) {
+      this.inlineRename = null;
+      return;
+    }
+    const prev = this.config;
+    const next = renameOverlayId(prev, ir.id, raw);
+    if (next === prev) {
+      this.errorMessage = t('editor.errors.renameIdConflict');
+      this.inlineRename = null;
+      return;
+    }
+    this.inlineRename = null;
+    this.errorMessage = '';
+    this.pushPatch(prev, next, `Rename overlay ${ir.id} to ${raw}`);
+    this.selectedOverlayId = raw;
+  }
+
+  private onInspectorFlowIdChange(oldId: string, event: Event): void {
+    if (!this.config) return;
+    const input = event.target as HTMLInputElement;
+    const raw = input.value.trim();
+    const prev = this.config;
+    const next = renameFlowId(prev, oldId, raw);
+    if (next === prev) {
+      this.errorMessage = t('editor.errors.renameIdConflict');
+      input.value = oldId;
+      return;
+    }
+    this.errorMessage = '';
+    this.pushPatch(prev, next, `Rename flow ${oldId} to ${raw}`);
+    this.selectedFlowId = raw;
+  }
+
+  private onInspectorOverlayIdChange(oldId: string, event: Event): void {
+    if (!this.config) return;
+    const input = event.target as HTMLInputElement;
+    const raw = input.value.trim();
+    const prev = this.config;
+    const next = renameOverlayId(prev, oldId, raw);
+    if (next === prev) {
+      this.errorMessage = t('editor.errors.renameIdConflict');
+      input.value = oldId;
+      return;
+    }
+    this.errorMessage = '';
+    this.pushPatch(prev, next, `Rename overlay ${oldId} to ${raw}`);
+    this.selectedOverlayId = raw;
+  }
 
   private onNodeClick = (event: MouseEvent): void => {
     event.stopPropagation();
@@ -3054,11 +3349,11 @@ export class FlowmeCardEditor extends LitElement {
     if (!this.config) return;
     const value = (event.target as HTMLInputElement).value;
     const prev = this.config;
-    const next = {
-      ...prev,
-      nodes: prev.nodes.map((n) => (n.id === nodeId ? { ...n, label: value || undefined } : n)),
-    };
-    this.pushPatch(prev, next, `rename ${nodeId}`);
+    const node = prev.nodes.find((n) => n.id === nodeId);
+    const oldDisplay = node?.label ?? nodeId;
+    const next = setNodeLabel(prev, nodeId, value.trim() ? value.trim() : undefined);
+    const nextLabel = value.trim() ? value.trim() : undefined;
+    this.pushPatch(prev, next, `Rename node ${oldDisplay} to ${nextLabel ?? nodeId}`);
   }
 
   private setNodeEntity(nodeId: string, value: string): void {
@@ -3755,6 +4050,56 @@ export class FlowmeCardEditor extends LitElement {
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
       white-space: nowrap;
     }
+    .handle-id {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.8);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+      white-space: nowrap;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    input.inline-rename {
+      font-size: 11px;
+      color: #fff;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+      outline: none;
+      min-width: 60px;
+      max-width: 200px;
+      padding: 0 2px 1px;
+      border-radius: 0;
+      box-sizing: border-box;
+      font-family: inherit;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+    input.overlay-inline-rename {
+      font-size: 10px;
+      max-width: 140px;
+      pointer-events: auto;
+    }
+    .inspector-id-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .inspector-id-row input {
+      flex: 1;
+      min-width: 120px;
+    }
+    .field-row.domain-field,
+    .domain-field {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .field-label {
+      min-width: 5rem;
+    }
     .waypoint {
       position: absolute;
       transform: translate(-50%, -50%);
@@ -3809,7 +4154,8 @@ export class FlowmeCardEditor extends LitElement {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      pointer-events: none;
+      pointer-events: auto;
+      cursor: text;
     }
     .overlay-type-badge {
       background: rgba(255, 255, 255, 0.15);

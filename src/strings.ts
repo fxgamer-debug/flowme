@@ -98,6 +98,8 @@ export const STRINGS = {
       flow: 'Flow',
       overlay: 'Overlay',
       label: 'Label',
+      flowIdField: 'Flow id',
+      overlayIdField: 'Overlay id',
       entity: 'Entity',
       colour: 'Colour',
       visible: 'Visible',
@@ -281,6 +283,16 @@ export const STRINGS = {
       hideNode: 'Hide node',
     },
     stateA: {
+      domainSummary: 'Diagram domain',
+      domain: 'Domain',
+      domainOption: {
+        energy: 'Energy',
+        water: 'Water',
+        network: 'Network',
+        hvac: 'HVAC',
+        gas: 'Gas',
+        generic: 'Generic',
+      },
       background: 'Background',
       appearance: 'Appearance',
       defaults: 'Defaults',
@@ -347,6 +359,7 @@ export const STRINGS = {
       invalidCardConfig: 'Invalid card config',
       noFlowSelected: 'Select a flow to edit',
       noNodeSelected: 'Select a node to edit',
+      renameIdConflict: 'That id is already in use — choose a unique id.',
     },
   },
   aria: {

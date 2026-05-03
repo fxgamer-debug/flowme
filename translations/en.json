@@ -16,6 +16,8 @@
     },
     "inspector": {
       "label": "Label",
+      "flowIdField": "Flow id",
+      "overlayIdField": "Overlay id",
       "entity": "Entity",
       "visible": "Visible",
       "opacity": "Opacity",
@@ -27,6 +29,18 @@
       "waypoints": "Waypoints",
       "speedCurve": "Speed curve",
       "valueGradient": "Value gradient"
+    },
+    "stateA": {
+      "domainSummary": "Diagram domain",
+      "domain": "Domain",
+      "domainOption": {
+        "energy": "Energy",
+        "water": "Water",
+        "network": "Network",
+        "hvac": "HVAC",
+        "gas": "Gas",
+        "generic": "Generic"
+      }
     },
     "suggestBar": {
       "message": "Suggested path ready — accept or cancel"
@@ -68,6 +82,9 @@
         "flow3": "Flow 3",
         "flow4": "Flow 4"
       }
+    },
+    "errors": {
+      "renameIdConflict": "That id is already in use — choose a unique id."
     }
   },
   "card": {
