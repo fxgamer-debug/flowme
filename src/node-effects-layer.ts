@@ -41,6 +41,7 @@ type PulseState = {
 
 export class NodeEffectsLayerController {
   private pulseState = new Map<string, PulseState>();
+  private lastDiagnosticLogMs = 0;
 
   reset(): void {
     this.pulseState.clear();
@@ -65,6 +66,23 @@ export class NodeEffectsLayerController {
     while (layer.firstChild) layer.firstChild.remove();
 
     const defaultR = config.defaults?.node_radius ?? 12;
+
+    if (nowMs - this.lastDiagnosticLogMs > 4000) {
+      this.lastDiagnosticLogMs = nowMs;
+      for (const node of config.nodes) {
+        if (!node.node_effect?.type || !node.entity) continue;
+        const st = hass?.states[node.entity];
+        // eslint-disable-next-line no-console -- throttled diagnostic
+        console.log(
+          '[FlowMe] node effect update:',
+          node.id,
+          node.node_effect.type,
+          'entity state:',
+          st?.state ?? '(none)',
+          'controller exists: true',
+        );
+      }
+    }
 
     for (const node of config.nodes) {
       const fx = node.node_effect;
@@ -239,7 +257,7 @@ export class NodeEffectsLayerController {
     nodeRpx: number,
     cx: number,
     cy: number,
-    nowMs: number,
+    _nowMs: number,
   ): void {
     const raw = parseReading(hass, entityId);
     const minV = fx.ripple_threshold ?? 0;
@@ -247,20 +265,31 @@ export class NodeEffectsLayerController {
 
     const dur = fx.ripple_duration ?? 2000;
     const c = fx.ripple_color || colour;
-    const phase = (nowMs % dur) / dur;
     const maxRN = (nodeRpx * 3) / 100;
     const baseRN = nodeRpx / 100;
-    const r = baseRN + phase * (maxRN - baseRN);
-    const op = 0.5 * (1 - phase);
 
     const ring = document.createElementNS(SVG_NS, 'circle');
     ring.setAttribute('cx', String(cx));
     ring.setAttribute('cy', String(cy));
-    ring.setAttribute('r', String(r));
+    ring.setAttribute('r', String(baseRN));
     ring.setAttribute('fill', 'none');
     ring.setAttribute('stroke', c);
     ring.setAttribute('stroke-width', String(0.1));
-    ring.setAttribute('opacity', String(op));
+
+    const animR = document.createElementNS(SVG_NS, 'animate');
+    animR.setAttribute('attributeName', 'r');
+    animR.setAttribute('values', `${baseRN};${maxRN};${baseRN}`);
+    animR.setAttribute('dur', `${dur}ms`);
+    animR.setAttribute('repeatCount', 'indefinite');
+    ring.appendChild(animR);
+
+    const animO = document.createElementNS(SVG_NS, 'animate');
+    animO.setAttribute('attributeName', 'opacity');
+    animO.setAttribute('values', '0.5;0;0.5');
+    animO.setAttribute('dur', `${dur}ms`);
+    animO.setAttribute('repeatCount', 'indefinite');
+    ring.appendChild(animO);
+
     g.appendChild(ring);
   }
 
@@ -273,7 +302,7 @@ export class NodeEffectsLayerController {
     nodeRpx: number,
     cx: number,
     cy: number,
-    nowMs: number,
+    _nowMs: number,
   ): void {
     const raw = parseReading(hass, entityId);
     if (raw === null) return;
@@ -287,14 +316,22 @@ export class NodeEffectsLayerController {
     if (!active) return;
 
     const hz = fx.alert_frequency ?? 2;
-    const flash = (Math.floor(nowMs * (hz / 500)) % 2) === 0;
     const alertC = fx.alert_color ?? '#FF0000';
     const disc = document.createElementNS(SVG_NS, 'circle');
     disc.setAttribute('cx', String(cx));
     disc.setAttribute('cy', String(cy));
     disc.setAttribute('r', String(nodeRpx / 100));
-    disc.setAttribute('fill', flash ? alertC : colour);
+    disc.setAttribute('fill', colour);
     disc.setAttribute('opacity', '0.85');
+
+    const cycleMs = Math.max(100, Math.round(1000 / Math.max(0.25, hz)));
+    const anim = document.createElementNS(SVG_NS, 'animate');
+    anim.setAttribute('attributeName', 'fill');
+    anim.setAttribute('values', `${colour};${alertC};${colour}`);
+    anim.setAttribute('dur', `${cycleMs}ms`);
+    anim.setAttribute('repeatCount', 'indefinite');
+    disc.appendChild(anim);
+
     g.appendChild(disc);
   }
 }

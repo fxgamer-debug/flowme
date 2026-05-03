@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.1';
+const CARD_VERSION = '1.23.2';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -200,6 +200,8 @@ export class FlowmeCard extends LitElement {
   private readonly rendererMount: Ref<HTMLDivElement> = createRef();
   private readonly nodeFxSvgRef: Ref<SVGSVGElement> = createRef();
   private readonly nodeFx = new NodeEffectsLayerController();
+  /** Drives pulse/ripple/alert time-based visuals every frame (v1.23.2). */
+  private _nodeFxRaf: number | null = null;
   private rendererReadyFor?: FlowmeConfig;
 
   /**
@@ -257,6 +259,10 @@ export class FlowmeCard extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    if (this._nodeFxRaf !== null) {
+      cancelAnimationFrame(this._nodeFxRaf);
+      this._nodeFxRaf = null;
+    }
     this.bindHaConnection(undefined);
     this.nodeFx.reset();
     this.teardownRenderer();
@@ -322,6 +328,27 @@ export class FlowmeCard extends LitElement {
     if (svg && this.config) {
       this.nodeFx.sync(svg, this.config, this.hass, performance.now());
     }
+    this.ensureNodeEffectsRaf();
+  }
+
+  private ensureNodeEffectsRaf(): void {
+    const need = !!this.config?.nodes.some((n) => n.node_effect && n.visible !== false);
+    if (!need) {
+      if (this._nodeFxRaf !== null) {
+        cancelAnimationFrame(this._nodeFxRaf);
+        this._nodeFxRaf = null;
+      }
+      return;
+    }
+    if (this._nodeFxRaf !== null) return;
+    const tick = (): void => {
+      this._nodeFxRaf = requestAnimationFrame(tick);
+      const el = this.nodeFxSvgRef.value;
+      if (el && this.config) {
+        this.nodeFx.sync(el, this.config, this.hass, performance.now());
+      }
+    };
+    this._nodeFxRaf = requestAnimationFrame(tick);
   }
 
   /**

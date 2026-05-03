@@ -53,31 +53,37 @@ const BURST_MAX_PARTICLES = 20;
 const SHIMMER_SPEED_FACTOR = 0.2;
 const SHIMMER_OPACITY = 0.3;
 
-/** Bold road-marking chevron (local coords, tip toward +X). `w` ≈ line_width×4, `h` ≈ dot_radius×3 */
-function boldChevronPath(w: number, h: number): string {
+/** Classic road chevron (local coords, tip toward +X). `r` = resolved particle radius. */
+function boldChevronPath(r: number): string {
+  const w = r * 3;
+  const h = r * 2;
+  const notch = w * 0.4;
+  const hw = w / 2;
   const hh = h / 2;
-  const tip = w * 0.52;
-  const nd = h * 0.4;
-  return [
-    `M ${tip} 0`,
-    `L ${w * 0.06} ${hh}`,
-    `L ${-w * 0.36} ${hh}`,
-    `L ${-w * 0.48} ${nd * 0.4}`,
-    `L ${-w * 0.52} 0`,
-    `L ${-w * 0.48} ${-nd * 0.4}`,
-    `L ${-w * 0.36} ${-hh}`,
-    `L ${w * 0.06} ${-hh}`,
-    'Z',
-  ].join(' ');
+  return `M ${hw},0 L ${-hw + notch},${-hh} L ${-hw},${-hh} L ${-notch},0 L ${-hw},${hh} L ${-hw + notch},${hh} Z`;
 }
 
 function teardropShapePath(r: number): string {
   return [
-    `M 0,-${r * 2.5}`,
-    `C ${r * 1.2},-${r * 1.5} ${r * 1.2},${r * 0.5} 0,${r}`,
-    `C -${r * 1.2},${r * 0.5} -${r * 1.2},-${r * 1.5} 0,-${r * 2.5}`,
+    `M 0,${-r * 2.2}`,
+    `C ${r * 1.1},${-r * 1.2} ${r * 1.3},${-r * 0.2} ${r * 1.3},${r * 0.5}`,
+    `C ${r * 1.3},${r * 1.4} ${r * 0.7},${r * 2} 0,${r * 2}`,
+    `C ${-r * 0.7},${r * 2} ${-r * 1.3},${r * 1.4} ${-r * 1.3},${r * 0.5}`,
+    `C ${-r * 1.3},${-r * 0.2} ${-r * 1.1},${-r * 1.2} 0,${-r * 2.2}`,
     'Z',
   ].join(' ');
+}
+
+function mixHexColor(from: string, to: string, t: number): string {
+  const parse = (hex: string) => {
+    const h = hex.replace('#', '').padEnd(6, '0').slice(0, 6);
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  };
+  const a = parse(from);
+  const b = parse(to);
+  const u = (i: number) => Math.round(a[i]! + (b[i]! - a[i]!) * t);
+  const x = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${x(u(0))}${x(u(1))}${x(u(2))}`;
 }
 
 const TRAIL_TAIL_DIST_PX = [8, 16, 24, 32];
@@ -96,19 +102,32 @@ interface ParticleDom {
   trailMotions?: SVGAnimateMotionElement[];
 }
 
+interface SparkMainRow {
+  group: SVGGElement;
+  shape: SVGGraphicsElement;
+  /** 0…1 along path */
+  progress: number;
+  baseR: number;
+  baseOpacity: number;
+  color: string;
+  flowId: string;
+}
+
 interface SparkBranch {
   el: SVGCircleElement;
   flowId: string;
-  startMs: number;
-  durationMs: number;
   x: number;
   y: number;
   vx: number;
   vy: number;
-  /** return to path vs fade out */
-  phase: 'out' | 'return';
-  opacity: number;
-  returnTgt: { x: number; y: number } | null;
+  speed: number;
+  dist: number;
+  maxDist: number;
+  angle: number;
+  fadeType: 'return' | 'fadeout';
+  /** when return: steer toward path after half distance */
+  path: SVGPathElement;
+  plen: number;
 }
 
 interface FlowDomNodes {
@@ -180,10 +199,12 @@ export class SvgRenderer implements FlowRenderer {
   /** When true, all flows render as static lines (OS reduced-motion preference). */
   private prefersReducedMotionFlag = false;
 
-  /** Spark branch overlay + pool (max 20) */
-  private sparkBranchesRoot: SVGGElement | null = null;
+  /** Spark: rAF-driven mains + branch overlay (pool max 15) */
+  private sparkMainsByFlow = new Map<string, SparkMainRow[]>();
+  private sparkFlowPhysics = new Map<string, { durMs: number; direction: number }>();
   private sparkBranchPool: SVGCircleElement[] = [];
   private sparkBranchActive: SparkBranch[] = [];
+  private lastSparkFrameMs = 0;
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
@@ -257,7 +278,10 @@ export class SvgRenderer implements FlowRenderer {
         // wave_spacing / pulse: recompute begin= offsets from elapsed time
         this.updateTimeBasedSpacing(now);
       }
-      this.updateSparkBranches(now);
+      const deltaMs = this.lastSparkFrameMs ? now - this.lastSparkFrameMs : 1000 / 60;
+      this.lastSparkFrameMs = now;
+      this.updateSparkMains(deltaMs);
+      this.updateSparkBranches(deltaMs);
       this.rafHandle = requestAnimationFrame(loop);
     };
 
@@ -291,6 +315,10 @@ export class SvgRenderer implements FlowRenderer {
     this.randomOffsets.clear();
     this.randomOffsetsLastUpdate.clear();
     this.lateralPhase.clear();
+    this.sparkMainsByFlow.clear();
+    this.sparkFlowPhysics.clear();
+    this.sparkBranchActive = [];
+    this.lastSparkFrameMs = 0;
   }
 
   // ── internal ──────────────────────────────────────────────────────────────
@@ -580,6 +608,11 @@ export class SvgRenderer implements FlowRenderer {
 
   /** Remove all style-specific DOM elements, ready to switch style */
   private teardownStyle(dom: FlowDomNodes): void {
+    const fid = dom.group.getAttribute('data-flow-id');
+    if (fid) {
+      this.sparkMainsByFlow.delete(fid);
+      this.sparkFlowPhysics.delete(fid);
+    }
     for (const p of dom.particles) p.shape.remove();
     dom.particles = [];
     if (dom.particlesBack) {
@@ -1326,9 +1359,10 @@ export class SvgRenderer implements FlowRenderer {
 
       const tails = p.trailMotions;
       if (tails && tails.length === 4) {
+        const sign = direction >= 0 ? 1 : -1;
         for (let k = 0; k < 4; k++) {
           const dist = TRAIL_TAIL_DIST_PX[k]!;
-          const tb = headBegin - (dist / plen) * durS;
+          const tb = headBegin + sign * (dist / plen) * durS;
           tails[k] = installMotion(tails[k]!, tb);
         }
       }
@@ -1380,54 +1414,69 @@ export class SvgRenderer implements FlowRenderer {
     }
     dom.fluidGradient = grad;
 
-    const p0 = percentToPixel(from.position, size);
-    const p1 = percentToPixel(to.position, size);
+    const pathEl = dom.path;
+    let L = 100;
+    try {
+      L = Math.max(1, pathEl.getTotalLength());
+    } catch {
+      L = 100;
+    }
+    let pStart = percentToPixel(from.position, size);
+    let pEnd = percentToPixel(to.position, size);
+    try {
+      const a = pathEl.getPointAtLength(0);
+      const b = pathEl.getPointAtLength(L);
+      pStart = { x: a.x, y: a.y };
+      pEnd = { x: b.x, y: b.y };
+    } catch {
+      /* keep chord from nodes */
+    }
+    const ux = (pEnd.x - pStart.x) / L;
+    const uy = (pEnd.y - pStart.y) / L;
+
     grad.setAttribute('gradientUnits', 'userSpaceOnUse');
-    grad.setAttribute('x1', String(p0.x));
-    grad.setAttribute('y1', String(p0.y));
-    grad.setAttribute('x2', String(p1.x));
-    grad.setAttribute('y2', String(p1.y));
+    grad.setAttribute('x1', String(pStart.x));
+    grad.setAttribute('y1', String(pStart.y));
+    grad.setAttribute('x2', String(pStart.x + ux * 2 * L));
+    grad.setAttribute('y2', String(pStart.y + uy * 2 * L));
 
     while (grad.firstChild) grad.firstChild.remove();
 
-    const stops: Array<[string, string, string]> = [
-      ['0%', color, '0'],
-      ['30%', color, '0.3'],
-      ['50%', color, '1'],
-      ['70%', color, '0.3'],
-      ['100%', color, '0'],
+    const stops: Array<[string, string]> = [
+      ['0%', '0'],
+      ['12%', '0.3'],
+      ['25%', '1'],
+      ['37%', '0.3'],
+      ['50%', '0'],
+      ['62%', '0.3'],
+      ['75%', '1'],
+      ['87%', '0.3'],
+      ['100%', '0'],
     ];
-    for (const [off, col, op] of stops) {
+    for (const [off, op] of stops) {
       const s = document.createElementNS(SVG_NS, 'stop');
       s.setAttribute('offset', off);
-      s.setAttribute('stop-color', col);
+      s.setAttribute('stop-color', color);
       s.setAttribute('stop-opacity', op);
       grad.appendChild(s);
     }
-
-    const dx = p1.x - p0.x;
-    const dy = p1.y - p0.y;
-    const pl = Math.hypot(dx, dy) || 1;
-    const ux = dx / pl;
-    const uy = dy / pl;
-    const sweep = Math.max(pl * 0.55, 48);
-    const tx = ux * sweep;
-    const ty = uy * sweep;
 
     const anim = document.createElementNS(SVG_NS, 'animateTransform');
     anim.setAttribute('attributeName', 'gradientTransform');
     anim.setAttribute('type', 'translate');
     anim.setAttribute('additive', 'replace');
-    anim.setAttribute('dur', `${(durMs / 1000).toFixed(3)}s`);
+    anim.setAttribute('calcMode', 'linear');
+    anim.setAttribute('dur', `${Math.max(1, Math.round(durMs))}ms`);
     anim.setAttribute('repeatCount', 'indefinite');
+    const tx = ux * L;
+    const ty = uy * L;
     if (direction >= 0) {
-      anim.setAttribute('values', `${-tx},${-ty}; ${tx},${ty}; ${-tx},${-ty}`);
+      anim.setAttribute('from', `0 0`);
+      anim.setAttribute('to', `${-tx} ${-ty}`);
     } else {
-      anim.setAttribute('values', `${tx},${ty}; ${-tx},${-ty}; ${tx},${ty}`);
+      anim.setAttribute('from', `0 0`);
+      anim.setAttribute('to', `${tx} ${ty}`);
     }
-    anim.setAttribute('keyTimes', '0;0.5;1');
-    anim.setAttribute('calcMode', 'spline');
-    anim.setAttribute('keySplines', '0.42 0 0.58 1;0.42 0 0.58 1');
     grad.appendChild(anim);
 
     const strokeWidth = (this.config?.defaults?.line_width ?? STROKE_WIDTH) * 3;
@@ -1439,16 +1488,8 @@ export class SvgRenderer implements FlowRenderer {
     if (glowFilter) dom.lineStroke.setAttribute('filter', glowFilter);
   }
 
-  /** Stable pseudo-random in [0,1) for spark particles */
-  private sparkUnit(flowId: string, i: number, salt: number): number {
-    let h = salt;
-    const s = `${flowId}:${i}`;
-    for (let k = 0; k < s.length; k++) h = Math.imul(31, h) + s.charCodeAt(k);
-    return Math.abs(Math.sin(h)) % 1;
-  }
-
   /**
-   * spark — bright core, glow, stable random size/opacity; branches via sparkBranch pool.
+   * spark — rAF-driven motion, white-hot core, branches via pool (v1.23.2).
    */
   private applySpark(
     dom: FlowDomNodes,
@@ -1465,62 +1506,71 @@ export class SvgRenderer implements FlowRenderer {
       this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES,
       Math.round(baseCount * burstMultiplier),
     );
-    const shape = flow.animation?.particle_shape ?? 'circle';
-    const flicker = flow.animation?.flicker === true;
+    const shapeKind = flow.animation?.particle_shape ?? 'circle';
 
-    if (dom.particles.length !== desired) {
+    const rebuild =
+      dom.particles.length !== desired ||
+      dom.particles.some((p) => !p.shape.hasAttribute('data-spark-pack'));
+
+    if (rebuild) {
       for (const p of dom.particles) p.shape.remove();
       dom.particles = [];
+      const mains: SparkMainRow[] = [];
+      const uneven = flow.animation?.particle_spacing === 'random';
+
       for (let i = 0; i < desired; i++) {
-        const p = this.makeParticle(dom, shape, color, flow, profile);
-        p.shape.setAttribute('data-spark-core', '1');
-        const su = this.sparkUnit(flow.id, i, 1);
-        const scale = 0.5 + su * 1.0;
-        p.shape.setAttribute('transform', `scale(${scale.toFixed(3)})`);
-        p.shape.setAttribute('fill', '#ffffff');
-        p.shape.setAttribute(
-          'filter',
-          `drop-shadow(0 0 ${(3 + this.sparkUnit(flow.id, i, 2) * 4).toFixed(1)}px ${color})`,
-        );
-        dom.particles.push(p);
+        const baseR = (0.5 + Math.random()) * this.resolveParticleRadius(flow);
+        const fillColor = mixHexColor(color, '#ffffff', 0.3);
+        const group = document.createElementNS(SVG_NS, 'g');
+        group.setAttribute('data-spark-pack', '1');
+
+        const { shape: geom } = this.buildParticleShapeOnly(dom, shapeKind, baseR, fillColor, flow);
+        geom.setAttribute('data-spark-core', '1');
+        geom.removeAttribute('filter');
+        const baseOp = 0.4 + Math.random() * 0.6;
+        geom.setAttribute('opacity', String(baseOp.toFixed(3)));
+        group.appendChild(geom);
+
+        const stubMotion = document.createElementNS(SVG_NS, 'animateMotion');
+        stubMotion.setAttribute('dur', '99999s');
+        group.appendChild(stubMotion);
+
+        dom.group.appendChild(group);
+
+        let progress = i / Math.max(1, desired);
+        if (uneven) progress += (Math.random() - 0.5) * 0.12;
+        progress = ((progress % 1) + 1) % 1;
+
+        mains.push({
+          group,
+          shape: geom,
+          progress,
+          baseR,
+          baseOpacity: baseOp,
+          color: fillColor,
+          flowId: flow.id,
+        });
+
+        dom.particles.push({ shape: group, animateMotion: stubMotion });
+      }
+      this.sparkMainsByFlow.set(flow.id, mains);
+    } else {
+      const mains = this.sparkMainsByFlow.get(flow.id);
+      if (mains) {
+        for (let i = 0; i < mains.length; i++) {
+          const row = mains[i]!;
+          const fillColor = mixHexColor(color, '#ffffff', 0.3);
+          row.color = fillColor;
+          row.shape.setAttribute('fill', fillColor);
+          row.shape.setAttribute(
+            'filter',
+            `drop-shadow(0 0 ${(2.5 + (i % 5) * 0.6).toFixed(1)}px ${color})`,
+          );
+        }
       }
     }
 
-    const durStr = `${(durMs / 1000).toFixed(3)}s`;
-    const n = Math.max(1, dom.particles.length);
-    const uneven = flow.animation?.particle_spacing === 'random';
-    for (let i = 0; i < dom.particles.length; i++) {
-      const p = dom.particles[i]!;
-      const su = this.sparkUnit(flow.id, i, 3);
-      const baseOpacity = 0.4 + su * 0.6;
-      p.shape.setAttribute('opacity', String(baseOpacity.toFixed(3)));
-      this.updateParticleColor(p, color, flow, profile, flicker);
-      p.shape.setAttribute('fill', '#ffffff');
-      p.shape.setAttribute(
-        'filter',
-        `drop-shadow(0 0 ${(3 + this.sparkUnit(flow.id, i, 2) * 4).toFixed(1)}px ${color})`,
-      );
-
-      let beginOff = (-durMs * i) / (n * 1000);
-      if (uneven) beginOff += (this.sparkUnit(flow.id, i, 4) - 0.5) * (durMs / 1000) * 0.15;
-
-      const fresh = document.createElementNS(SVG_NS, 'animateMotion');
-      fresh.setAttribute('repeatCount', 'indefinite');
-      fresh.setAttribute('dur', durStr);
-      fresh.setAttribute('rotate', 'auto');
-      fresh.setAttribute('begin', `${beginOff.toFixed(4)}s`);
-      if (direction < 0) {
-        fresh.setAttribute('keyPoints', '1;0');
-        fresh.setAttribute('keyTimes', '0;1');
-      }
-      const mpath = document.createElementNS(SVG_NS, 'mpath');
-      mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
-      mpath.setAttribute('href', `#${dom.pathId}`);
-      fresh.appendChild(mpath);
-      p.animateMotion.replaceWith(fresh);
-      p.animateMotion = fresh;
-      p.shape.appendChild(fresh);
-    }
+    this.sparkFlowPhysics.set(flow.id, { durMs, direction });
     void value;
   }
 
@@ -1530,8 +1580,7 @@ export class SvgRenderer implements FlowRenderer {
     g.setAttribute('class', 'flowme-spark-branches');
     g.setAttribute('pointer-events', 'none');
     this.svg.appendChild(g);
-    this.sparkBranchesRoot = g;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 15; i++) {
       const c = document.createElementNS(SVG_NS, 'circle');
       c.setAttribute('r', '2');
       c.setAttribute('fill', '#ffffff');
@@ -1541,91 +1590,147 @@ export class SvgRenderer implements FlowRenderer {
     }
   }
 
-  private updateSparkBranches(nowMs: number): void {
-    const root = this.sparkBranchesRoot;
-    if (!root || !this.config) return;
+  private updateSparkMains(deltaMs: number): void {
+    if (!this.svg || !this.config) return;
 
-    const activeNext: SparkBranch[] = [];
+    for (const flow of this.config.flows) {
+      if (this.animStyle(flow) !== 'spark') continue;
+      const dom = this.flowNodes.get(flow.id);
+      const physics = this.sparkFlowPhysics.get(flow.id);
+      const mains = this.sparkMainsByFlow.get(flow.id);
+      if (!dom || !physics || !mains?.length) continue;
 
-    for (const br of this.sparkBranchActive) {
-      const age = nowMs - br.startMs;
-      const t = age / br.durationMs;
-      if (t >= 1) {
-        br.el.setAttribute('opacity', '0');
+      let plen = 100;
+      try {
+        plen = Math.max(1e-6, dom.path.getTotalLength());
+      } catch {
         continue;
       }
-      br.opacity = 1 - t;
-      const ret = br.returnTgt;
-      if (br.phase === 'return' && ret) {
-        br.x += (ret.x - br.x) * 0.12;
-        br.y += (ret.y - br.y) * 0.12;
-      } else {
-        br.x += br.vx * 0.35;
-        br.y += br.vy * 0.35;
+
+      const progPerMs = 1 / Math.max(50, physics.durMs);
+
+      for (const m of mains) {
+        m.progress += physics.direction * progPerMs * deltaMs;
+        while (m.progress > 1) m.progress -= 1;
+        while (m.progress < 0) m.progress += 1;
+
+        let pt: DOMPoint;
+        try {
+          pt = dom.path.getPointAtLength(m.progress * plen);
+        } catch {
+          continue;
+        }
+        m.group.setAttribute('transform', `translate(${pt.x.toFixed(2)},${pt.y.toFixed(2)})`);
+
+        const flick =
+          1 + Math.sin(performance.now() / 45 + m.progress * 12) * 0.15;
+        const op = Math.max(0.25, Math.min(1, m.baseOpacity * flick));
+        m.shape.setAttribute('opacity', String(op.toFixed(3)));
+
+        if (Math.random() < 0.002) {
+          this.spawnSparkBranch(dom, plen, m.progress, pt.x, pt.y, physics.direction, physics.durMs);
+        }
       }
-      br.el.setAttribute('cx', String(br.x));
-      br.el.setAttribute('cy', String(br.y));
-      br.el.setAttribute('opacity', String((0.35 + 0.65 * br.opacity).toFixed(3)));
-      activeNext.push(br);
     }
-    this.sparkBranchActive = activeNext;
+  }
 
-    if (Math.random() > 0.004) return;
-
-    const sparkFlows = this.config.flows.filter((f) => this.animStyle(f) === 'spark');
-    if (sparkFlows.length === 0) return;
-    const flow = sparkFlows[Math.floor(Math.random() * sparkFlows.length)]!;
-    const dom = this.flowNodes.get(flow.id);
-    if (!dom) return;
-
-    let plen = 100;
-    try {
-      plen = Math.max(10, dom.path.getTotalLength());
-    } catch {
-      return;
-    }
-    const pos = 0.15 + Math.random() * 0.7;
-    let pt: DOMPoint;
-    try {
-      pt = dom.path.getPointAtLength(pos * plen);
-    } catch {
-      return;
-    }
-    const delta = Math.max(2, plen * 0.02);
-    let ang = 0;
-    try {
-      const p2 = dom.path.getPointAtLength(Math.min(plen, pos * plen + delta));
-      ang = Math.atan2(p2.y - pt.y, p2.x - pt.x);
-    } catch {
-      ang = 0;
-    }
-    const spread = ((20 + Math.random() * 20) * Math.PI) / 180;
-    const branchAng = ang + (Math.random() < 0.5 ? -spread : spread);
-    const vx = Math.cos(branchAng) * 2.2;
-    const vy = Math.sin(branchAng) * 2.2;
-
+  private spawnSparkBranch(
+    dom: FlowDomNodes,
+    plen: number,
+    progress: number,
+    cx: number,
+    cy: number,
+    direction: number,
+    durMs: number,
+  ): void {
     const pool = this.sparkBranchPool.find((c) => parseFloat(c.getAttribute('opacity') ?? '1') < 0.05);
     if (!pool) return;
 
-    pool.setAttribute('opacity', '0.9');
-    pool.setAttribute('cx', String(pt.x));
-    pool.setAttribute('cy', String(pt.y));
-    pool.setAttribute('r', String(1.2 + Math.random() * 0.8));
+    const t0 = progress * plen;
+    const dlt = Math.max(2, plen * 0.02);
+    let pA: DOMPoint;
+    let pB: DOMPoint;
+    try {
+      pA = dom.path.getPointAtLength(Math.max(0, t0 - dlt * direction));
+      pB = dom.path.getPointAtLength(Math.min(plen, t0 + dlt * direction));
+    } catch {
+      return;
+    }
+    const tang = Math.atan2(pB.y - pA.y, pB.x - pA.x);
+    const spreadDeg = 20 + Math.random() * 20;
+    const branchAng = tang + (Math.random() < 0.5 ? -1 : 1) * (spreadDeg * Math.PI) / 180;
+    const mainPxPerMs = plen / Math.max(50, durMs);
+    const speed = (0.4 + Math.random() * 0.4) * mainPxPerMs;
+    const maxDist = 10 + Math.random() * 20;
+    const fadeType: 'return' | 'fadeout' = Math.random() < 0.5 ? 'return' : 'fadeout';
 
-    const returnPath = Math.random() < 0.5;
+    pool.setAttribute('fill', '#ffffff');
+    pool.setAttribute('cx', String(cx));
+    pool.setAttribute('cy', String(cy));
+    pool.setAttribute('r', String(1.4));
+    pool.setAttribute('opacity', '0.95');
+
     this.sparkBranchActive.push({
       el: pool,
-      flowId: flow.id,
-      startMs: nowMs,
-      durationMs: 200 + Math.random() * 200,
-      x: pt.x,
-      y: pt.y,
-      vx,
-      vy,
-      phase: returnPath ? 'return' : 'out',
-      opacity: 1,
-      returnTgt: returnPath ? { x: pt.x, y: pt.y } : null,
+      flowId: dom.group.getAttribute('data-flow-id') ?? '',
+      x: cx,
+      y: cy,
+      vx: Math.cos(branchAng),
+      vy: Math.sin(branchAng),
+      speed,
+      dist: 0,
+      maxDist,
+      angle: branchAng,
+      fadeType,
+      path: dom.path,
+      plen,
     });
+  }
+
+  private updateSparkBranches(deltaMs: number): void {
+    const activeNext: SparkBranch[] = [];
+
+    for (const br of this.sparkBranchActive) {
+      br.dist += br.speed * deltaMs;
+      const life = br.dist / Math.max(1e-6, br.maxDist);
+      if (life >= 1) {
+        br.el.setAttribute('opacity', '0');
+        continue;
+      }
+
+      if (br.fadeType === 'return' && life > 0.5) {
+        let bestX = br.x;
+        let bestY = br.y;
+        let bestD = Infinity;
+        const steps = 20;
+        for (let s = 0; s <= steps; s++) {
+          const len = (s / steps) * br.plen;
+          let pt: DOMPoint;
+          try {
+            pt = br.path.getPointAtLength(len);
+          } catch {
+            continue;
+          }
+          const d = (pt.x - br.x) ** 2 + (pt.y - br.y) ** 2;
+          if (d < bestD) {
+            bestD = d;
+            bestX = pt.x;
+            bestY = pt.y;
+          }
+        }
+        const want = Math.atan2(bestY - br.y, bestX - br.x);
+        br.angle += (want - br.angle) * 0.14;
+      }
+
+      br.x += Math.cos(br.angle) * br.speed * deltaMs;
+      br.y += Math.sin(br.angle) * br.speed * deltaMs;
+
+      br.el.setAttribute('cx', String(br.x));
+      br.el.setAttribute('cy', String(br.y));
+      br.el.setAttribute('opacity', String(Math.max(0, (1 - life) * 0.95).toFixed(3)));
+      activeNext.push(br);
+    }
+    this.sparkBranchActive = activeNext;
   }
 
   private makeTrailParticle(
@@ -1645,6 +1750,7 @@ export class SvgRenderer implements FlowRenderer {
 
     const tailMotions: SVGAnimateMotionElement[] = [];
     const tailGroups: SVGGElement[] = [];
+    const trailRot = kind === 'teardrop' ? '0' : 'auto';
 
     for (let k = 0; k < 4; k++) {
       const sg = document.createElementNS(SVG_NS, 'g');
@@ -1655,7 +1761,7 @@ export class SvgRenderer implements FlowRenderer {
       const motion = document.createElementNS(SVG_NS, 'animateMotion');
       motion.setAttribute('repeatCount', 'indefinite');
       motion.setAttribute('dur', '2s');
-      motion.setAttribute('rotate', 'auto');
+      motion.setAttribute('rotate', trailRot);
       const mpath = document.createElementNS(SVG_NS, 'mpath');
       mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
       mpath.setAttribute('href', `#${dom.pathId}`);
@@ -1680,7 +1786,7 @@ export class SvgRenderer implements FlowRenderer {
     const headMotion = document.createElementNS(SVG_NS, 'animateMotion');
     headMotion.setAttribute('repeatCount', 'indefinite');
     headMotion.setAttribute('dur', '2s');
-    headMotion.setAttribute('rotate', 'auto');
+    headMotion.setAttribute('rotate', trailRot);
     const hmp = document.createElementNS(SVG_NS, 'mpath');
     hmp.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
     hmp.setAttribute('href', `#${dom.pathId}`);
@@ -1744,11 +1850,8 @@ export class SvgRenderer implements FlowRenderer {
         break;
       }
       case 'arrow': {
-        const lw = this.config?.defaults?.line_width ?? STROKE_WIDTH;
-        const chevW = lw * 4;
-        const chevH = r * 3;
         const pathEl = document.createElementNS(SVG_NS, 'path');
-        pathEl.setAttribute('d', boldChevronPath(chevW, chevH));
+        pathEl.setAttribute('d', boldChevronPath(r));
         pathEl.setAttribute('fill', color);
         pathEl.setAttribute('opacity', '0');
         pathEl.setAttribute('data-kind', 'arrow');
@@ -1837,6 +1940,7 @@ export class SvgRenderer implements FlowRenderer {
     const animateMotion = document.createElementNS(SVG_NS, 'animateMotion');
     animateMotion.setAttribute('repeatCount', 'indefinite');
     animateMotion.setAttribute('dur', '2s');
+    animateMotion.setAttribute('rotate', kind === 'teardrop' ? '0' : 'auto');
     const mpath = document.createElementNS(SVG_NS, 'mpath');
     mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
     mpath.setAttribute('href', `#${dom.pathId}`);

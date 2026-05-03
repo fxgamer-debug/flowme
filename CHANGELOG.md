@@ -2,6 +2,18 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.2] — Animation and node-effect fixes
+
+### Fixed
+
+- **Arrow chevron**: V-notch back, dimensions from particle radius.
+- **Trail**: Tail segments follow **behind** the head in both flow directions.
+- **Fluid**: Gradient travels continuously along the path (seamless loop, no back-and-forth).
+- **Spark**: rAF-driven main particles (size, opacity, flicker), branch sparks with return/fade, pool of 15.
+- **Teardrop**: Updated path; no tangent rotation (vertical drop).
+- **Node effects**: Continuous rendering via `requestAnimationFrame`; ripple/alert use SVG `<animate>`; optional diagnostic `console.log` (throttled).
+- **Editor**: Node-effect inspector preview uses standalone animated SVG (no hass).
+
 ## [1.23.1] — Animation styles and node effects
 
 ### Added

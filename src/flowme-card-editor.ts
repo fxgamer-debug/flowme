@@ -200,9 +200,8 @@ export class FlowmeCardEditor extends LitElement {
   private readonly canvasRef: Ref<HTMLDivElement> = createRef();
   /** Node effects overlay (same viewBox as connectors). */
   private readonly editorFxSvgRef: Ref<SVGSVGElement> = createRef();
-  private readonly nodeEffectPreviewRef: Ref<SVGSVGElement> = createRef();
   private readonly editorNodeFx = new NodeEffectsLayerController();
-  private readonly previewNodeFx = new NodeEffectsLayerController();
+  private _editorFxRaf: number | null = null;
   private undoStack = new UndoStack((next) => this.applyConfig(next, /*commitToHa*/ false));
   private unsubscribe: (() => void) | null = null;
   /** True while we are in the middle of dispatching a config-changed event.
@@ -243,8 +242,11 @@ export class FlowmeCardEditor extends LitElement {
     this.panY = this.fitPanY;
     this.spaceHeld = false;
     this.panPointerId = null;
+    if (this._editorFxRaf !== null) {
+      cancelAnimationFrame(this._editorFxRaf);
+      this._editorFxRaf = null;
+    }
     this.editorNodeFx.reset();
-    this.previewNodeFx.reset();
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -285,8 +287,28 @@ export class FlowmeCardEditor extends LitElement {
         this.editorNodeFx.sync(fxSvg, this.config, this.hass, performance.now());
         this.editorNodeFx.prunePulseState(new Set(this.config.nodes.map((n) => n.id)));
       }
-      this.syncNodeEffectPreview();
+      this.ensureEditorNodeFxRaf();
     });
+  }
+
+  private ensureEditorNodeFxRaf(): void {
+    const need = !!this.config?.nodes.some((n) => n.node_effect && n.visible !== false);
+    if (!need) {
+      if (this._editorFxRaf !== null) {
+        cancelAnimationFrame(this._editorFxRaf);
+        this._editorFxRaf = null;
+      }
+      return;
+    }
+    if (this._editorFxRaf !== null) return;
+    const tick = (): void => {
+      this._editorFxRaf = requestAnimationFrame(tick);
+      const svg = this.editorFxSvgRef.value;
+      if (svg && this.config && this.hass) {
+        this.editorNodeFx.sync(svg, this.config, this.hass, performance.now());
+      }
+    };
+    this._editorFxRaf = requestAnimationFrame(tick);
   }
 
   override firstUpdated(): void {
@@ -1334,24 +1356,74 @@ export class FlowmeCardEditor extends LitElement {
     }
   }
 
-  private syncNodeEffectPreview(): void {
-    const svg = this.nodeEffectPreviewRef.value;
-    if (!svg) return;
-    if (!this.config || !this.hass || !this.selectedNodeId) {
-      svg.replaceChildren();
-      return;
+  /** Self-contained animated SVG (no hass) for the inspector preview box (v1.23.2). */
+  private renderNodeEffectPreviewAnim(node: NodeConfig): TemplateResult {
+    const accent = node.color ?? '#4ADE80';
+    const fx = node.node_effect;
+    if (!fx) {
+      return html`
+        <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="14" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+        </svg>`;
     }
-    const node = this.config.nodes.find((n) => n.id === this.selectedNodeId);
-    if (!node?.node_effect) {
-      svg.replaceChildren();
-      return;
+    const pc = fx.type === 'pulse' ? (fx.pulse_color || accent) : accent;
+    const gc = fx.type === 'glow' ? (fx.glow_color || accent) : accent;
+    const rc = fx.type === 'ripple' ? (fx.ripple_color || accent) : accent;
+    const alertC = fx.type === 'alert' ? (fx.alert_color ?? '#FF0000') : '#FF0000';
+    switch (fx.type) {
+      case 'pulse':
+        return html`
+          <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="12" fill="${accent}" opacity="0.9"/>
+            ${[0, 1, 2].map(
+              (i) => html`
+              <circle cx="50" cy="50" r="12" fill="none" stroke="${pc}" stroke-width="2" opacity="0">
+                <animate attributeName="r" values="12;44;12" dur="1.6s" repeatCount="indefinite" begin="${i * 0.45}s"/>
+                <animate attributeName="opacity" values="0.75;0;0.75" dur="1.6s" repeatCount="indefinite" begin="${i * 0.45}s"/>
+              </circle>`,
+            )}
+          </svg>`;
+      case 'glow': {
+        const fid = `fm-ed-glow-${node.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+        return html`
+          <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <filter id=${fid} x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+            <circle cx="50" cy="50" r="14" fill="${gc}" filter=${`url(#${fid})`} opacity="0.95">
+              <animate attributeName="opacity" values="0.55;1;0.55" dur="2s" repeatCount="indefinite"/>
+            </circle>
+          </svg>`;
+      }
+      case 'badge':
+        return html`
+          <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="14" fill="${accent}"/>
+            <circle cx="62" cy="38" r="7" fill="${fx.badge_color_on ?? '#32DC50'}">
+              <animate attributeName="fill" values="${fx.badge_color_on ?? '#32DC50'};${fx.badge_color_off ?? '#CC3333'};${fx.badge_color_on ?? '#32DC50'}" dur="2.4s" repeatCount="indefinite"/>
+            </circle>
+          </svg>`;
+      case 'ripple':
+        return html`
+          <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="14" fill="none" stroke="${rc}" stroke-width="2">
+              <animate attributeName="r" values="14;38;14" dur="${fx.ripple_duration ?? 2000}ms" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="0.5;0;0.5" dur="${fx.ripple_duration ?? 2000}ms" repeatCount="indefinite"/>
+            </circle>
+          </svg>`;
+      case 'alert':
+        return html`
+          <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="14" fill="${accent}">
+              <animate attributeName="fill" values="${accent};${alertC};${accent}" dur="250ms" repeatCount="indefinite"/>
+            </circle>
+          </svg>`;
+      default:
+        return html`<svg class="node-effect-preview" viewBox="0 0 100 100"></svg>`;
     }
-    const previewConfig: FlowmeConfig = {
-      ...this.config,
-      nodes: [{ ...node, id: '__editor_fx_preview__', position: { x: 50, y: 50 } }],
-      flows: [],
-    };
-    this.previewNodeFx.sync(svg, previewConfig, this.hass, performance.now());
   }
 
   private renderNodeEffectInspector(
@@ -1369,12 +1441,7 @@ export class FlowmeCardEditor extends LitElement {
             ? html`<p class="hint-sub">${t('editor.nodeEffect.needsEntity')}</p>`
             : nothing}
           <div class="node-effect-type-row">
-            <svg
-              class="node-effect-preview"
-              viewBox="0 0 100 100"
-              xmlns="http://www.w3.org/2000/svg"
-              ${ref(this.nodeEffectPreviewRef)}
-            ></svg>
+            ${this.renderNodeEffectPreviewAnim(node)}
             <label class="node-effect-type-label">
               ${t('editor.nodeEffect.type')}
               <select
