@@ -66,7 +66,8 @@ function rippleOwnerAttr(nodeId: string): string {
 export class NodeEffectsLayerController {
   private lastDiagnosticLogMs = 0;
   private rippleLastRaw = new Map<string, number>();
-  private ripplePendingTimeouts = new Map<string, ReturnType<typeof setTimeout>[]>();
+  /** DOM `window.setTimeout` ids — typed as `number[]` so `tsc` with Node-augmented globals (Vitest CI) does not expect `NodeJS.Timeout`. */
+  private ripplePendingTimeouts = new Map<string, number[]>();
   private rippleBurstGen = new Map<string, number>();
 
   reset(): void {
@@ -242,7 +243,7 @@ export class NodeEffectsLayerController {
     this.cancelRippleBurst(nodeId, rippleHost);
     const gen = this.rippleBurstGen.get(nodeId)!;
     const staggerMs = 300;
-    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    const timeouts: number[] = [];
     for (let i = 0; i < 3; i++) {
       timeouts.push(
         window.setTimeout(() => {
