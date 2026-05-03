@@ -1501,7 +1501,7 @@ const Ot = {
       {
         key: "supply",
         label: "Supply",
-        patterns: ["supply", "in", "inlet", "cold", "mains"],
+        patterns: ["supply", "inlet", "cold", "mains"],
         default: "#60CFFF"
       },
       { key: "drain", label: "Drain", patterns: ["drain", "out", "outlet", "waste"], default: "#0077AA" },
@@ -1566,7 +1566,11 @@ function Re(e, t) {
       if (o && i.includes(o)) return n.key;
 }
 function Sn(e, t, i, n) {
-  const o = e ?? "generic", s = Ot[o] ?? Ot.generic;
+  if (e === void 0) {
+    F("colour resolution:", t, "domain:", "undefined", "matched role:", "none", "resolved:", void 0);
+    return;
+  }
+  const o = e, s = Ot[o] ?? Ot.generic;
   let r;
   if (o === "energy") {
     if (r = kn(t), !r) {
