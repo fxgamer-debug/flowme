@@ -575,6 +575,26 @@ export class SvgRenderer implements FlowRenderer {
       default:
         this.applyDots(dom, flow, profile, value, durMs, color, direction, burstMultiplier);
     }
+
+    if (
+      isDebugEnabled() &&
+      directionMode === 'both' &&
+      (style === 'dots' || style === 'arrow' || style === 'trail')
+    ) {
+      // eslint-disable-next-line no-console -- debug-only dual-stream diagnostic (gated by config.debug)
+      console.log(
+        '[FlowMe] direction both:',
+        flowId,
+        'forward particles:',
+        dom.particles.length,
+        'reverse particles:',
+        dom.particlesBack?.length ?? 0,
+        'forward path:',
+        dom.path.id,
+        'reverse path:',
+        dom.pathRev?.id ?? '(none)',
+      );
+    }
   }
 
   // ── burst state ───────────────────────────────────────────────────────────
@@ -1081,10 +1101,12 @@ export class SvgRenderer implements FlowRenderer {
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    const durS = durMs / 1000;
+    const backBeginPhase = dirMode === 'both' ? durS / 2 : 0;
     const animCfg = flow.animation ?? {};
     const begins = this.resolveParticleBegins(flow.id, desired, durMs, animCfg);
 
-    const installMotion = (particles: ParticleDom[], dir: number) => {
+    const installMotion = (particles: ParticleDom[], particleDir: number, beginPhase: number) => {
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i]!;
         this.updateParticleColor(p, color, flow, profile, flicker);
@@ -1093,9 +1115,9 @@ export class SvgRenderer implements FlowRenderer {
         fresh.setAttribute('repeatCount', 'indefinite');
         fresh.setAttribute('dur', durStr);
         fresh.setAttribute('rotate', this.particleMotionRotateAttr(shape));
-        fresh.setAttribute('begin', `${(begins[i] ?? 0).toFixed(3)}s`);
+        fresh.setAttribute('begin', `${((begins[i] ?? 0) + beginPhase).toFixed(3)}s`);
         const mpath = document.createElementNS(SVG_NS, 'mpath');
-        const href = this.motionPathRef(dom, flow, dir);
+        const href = this.motionPathRef(dom, flow, particleDir);
         mpath.setAttributeNS(XLINK_NS, 'href', `#${href}`);
         mpath.setAttribute('href', `#${href}`);
         fresh.appendChild(mpath);
@@ -1105,8 +1127,8 @@ export class SvgRenderer implements FlowRenderer {
       }
     };
 
-    installMotion(dom.particles, direction);
-    if (dom.particlesBack) installMotion(dom.particlesBack, -direction);
+    installMotion(dom.particles, direction, 0);
+    if (dom.particlesBack) installMotion(dom.particlesBack, -direction, backBeginPhase);
   }
 
   /**
@@ -1179,6 +1201,7 @@ export class SvgRenderer implements FlowRenderer {
     const burstMax = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
     const desired = Math.min(burstMax, Math.max(1, Math.round(baseCount * burstMultiplier)));
     const flicker = flow.animation?.flicker === true;
+    const dirMode = flow.animation?.direction ?? 'auto';
 
     if (dom.particles.length !== desired) {
       for (const p of dom.particles) p.shape.remove();
@@ -1188,25 +1211,46 @@ export class SvgRenderer implements FlowRenderer {
       }
     }
 
-    const durStr = `${(durMs / 1000).toFixed(3)}s`;
-    const arrowBegins = this.resolveParticleBegins(flow.id, desired, durMs, flow.animation ?? {});
-    for (let i = 0; i < dom.particles.length; i++) {
-      const p = dom.particles[i]!;
-      this.updateParticleColor(p, color, flow, profile, flicker);
-      const fresh = document.createElementNS(SVG_NS, 'animateMotion');
-      fresh.setAttribute('repeatCount', 'indefinite');
-      fresh.setAttribute('dur', durStr);
-      fresh.setAttribute('rotate', this.particleMotionRotateAttr('arrow'));
-      fresh.setAttribute('begin', `${(arrowBegins[i] ?? 0).toFixed(3)}s`);
-      const mpath = document.createElementNS(SVG_NS, 'mpath');
-      const href = this.motionPathRef(dom, flow, direction);
-      mpath.setAttributeNS(XLINK_NS, 'href', `#${href}`);
-      mpath.setAttribute('href', `#${href}`);
-      fresh.appendChild(mpath);
-      p.animateMotion.replaceWith(fresh);
-      p.animateMotion = fresh;
-      p.shape.appendChild(fresh);
+    if (dirMode === 'both') {
+      if (!dom.particlesBack || dom.particlesBack.length !== desired) {
+        if (dom.particlesBack) for (const p of dom.particlesBack) p.shape.remove();
+        dom.particlesBack = [];
+        for (let i = 0; i < desired; i++) {
+          dom.particlesBack.push(this.makeParticle(dom, 'arrow', color, flow, profile));
+        }
+      }
+    } else if (dom.particlesBack) {
+      for (const p of dom.particlesBack) p.shape.remove();
+      dom.particlesBack = undefined;
     }
+
+    const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    const durS = durMs / 1000;
+    const backBeginPhase = dirMode === 'both' ? durS / 2 : 0;
+    const arrowBegins = this.resolveParticleBegins(flow.id, desired, durMs, flow.animation ?? {});
+
+    const installMotion = (particles: ParticleDom[], particleDir: number, beginPhase: number) => {
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i]!;
+        this.updateParticleColor(p, color, flow, profile, flicker);
+        const fresh = document.createElementNS(SVG_NS, 'animateMotion');
+        fresh.setAttribute('repeatCount', 'indefinite');
+        fresh.setAttribute('dur', durStr);
+        fresh.setAttribute('rotate', this.particleMotionRotateAttr('arrow'));
+        fresh.setAttribute('begin', `${((arrowBegins[i] ?? 0) + beginPhase).toFixed(3)}s`);
+        const mpath = document.createElementNS(SVG_NS, 'mpath');
+        const href = this.motionPathRef(dom, flow, particleDir);
+        mpath.setAttributeNS(XLINK_NS, 'href', `#${href}`);
+        mpath.setAttribute('href', `#${href}`);
+        fresh.appendChild(mpath);
+        p.animateMotion.replaceWith(fresh);
+        p.animateMotion = fresh;
+        p.shape.appendChild(fresh);
+      }
+    };
+
+    installMotion(dom.particles, direction, 0);
+    if (dom.particlesBack) installMotion(dom.particlesBack, -direction, backBeginPhase);
   }
 
   /**
@@ -1227,22 +1271,42 @@ export class SvgRenderer implements FlowRenderer {
     const flicker = flow.animation?.flicker === true;
     const kind = flow.animation?.particle_shape ?? 'circle';
     const trailRot = this.particleMotionRotateAttr(kind);
+    const dirMode = flow.animation?.direction ?? 'auto';
+    const both = dirMode === 'both';
 
     const firstOk =
       dom.particles.length === desired &&
       dom.particles[0]?.shape.hasAttribute('data-trail-pack') &&
-      dom.particles[0]?.shape.getAttribute('data-head-kind') === kind;
+      dom.particles[0]?.shape.getAttribute('data-head-kind') === kind &&
+      (!both ||
+        (dom.particlesBack?.length === desired &&
+          dom.particlesBack[0]?.shape.hasAttribute('data-trail-pack') &&
+          dom.particlesBack[0]?.shape.getAttribute('data-head-kind') === kind));
 
     if (!firstOk) {
       for (const p of dom.particles) p.shape.remove();
       dom.particles = [];
+      if (dom.particlesBack) {
+        for (const p of dom.particlesBack) p.shape.remove();
+        dom.particlesBack = undefined;
+      }
       for (let i = 0; i < desired; i++) {
         dom.particles.push(this.makeTrailParticle(dom, flow, profile, color, kind));
       }
+      if (both) {
+        dom.particlesBack = [];
+        for (let i = 0; i < desired; i++) {
+          dom.particlesBack.push(this.makeTrailParticle(dom, flow, profile, color, kind));
+        }
+      }
+    } else if (!both && dom.particlesBack) {
+      for (const p of dom.particlesBack) p.shape.remove();
+      dom.particlesBack = undefined;
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
     const durS = durMs / 1000;
+    const backBeginPhase = both ? durS / 2 : 0;
     const trailBegins = this.resolveParticleBegins(flow.id, desired, durMs, flow.animation ?? {});
     let plen = 100;
     try {
@@ -1251,14 +1315,18 @@ export class SvgRenderer implements FlowRenderer {
       plen = 100;
     }
 
-    const installMotion = (mo: SVGAnimateMotionElement, beginS: number): SVGAnimateMotionElement => {
+    const installMotion = (
+      mo: SVGAnimateMotionElement,
+      beginS: number,
+      particleDir: number,
+    ): SVGAnimateMotionElement => {
       const fresh = document.createElementNS(SVG_NS, 'animateMotion');
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
       fresh.setAttribute('rotate', trailRot);
       fresh.setAttribute('begin', `${beginS.toFixed(4)}s`);
       const mpath = document.createElementNS(SVG_NS, 'mpath');
-      const href = this.motionPathRef(dom, flow, direction);
+      const href = this.motionPathRef(dom, flow, particleDir);
       mpath.setAttributeNS(XLINK_NS, 'href', `#${href}`);
       mpath.setAttribute('href', `#${href}`);
       fresh.appendChild(mpath);
@@ -1266,20 +1334,28 @@ export class SvgRenderer implements FlowRenderer {
       return fresh;
     };
 
-    for (let i = 0; i < dom.particles.length; i++) {
-      const p = dom.particles[i]!;
+    const applyPack = (p: ParticleDom, headBegin: number, particleDir: number): void => {
       this.updateParticleColor(p, color, flow, profile, flicker);
-      const headBegin = trailBegins[i] ?? 0;
-
       const tails = p.trailMotions;
       if (tails && tails.length === 4) {
         for (let k = 0; k < 4; k++) {
           const dist = TRAIL_TAIL_DIST_PX[k]!;
           const tb = headBegin + (dist / plen) * durS;
-          tails[k] = installMotion(tails[k]!, tb);
+          tails[k] = installMotion(tails[k]!, tb, particleDir);
         }
       }
-      p.animateMotion = installMotion(p.animateMotion, headBegin);
+      p.animateMotion = installMotion(p.animateMotion, headBegin, particleDir);
+    };
+
+    for (let i = 0; i < dom.particles.length; i++) {
+      const p = dom.particles[i]!;
+      applyPack(p, trailBegins[i] ?? 0, direction);
+    }
+    if (dom.particlesBack) {
+      for (let i = 0; i < dom.particlesBack.length; i++) {
+        const p = dom.particlesBack[i]!;
+        applyPack(p, (trailBegins[i] ?? 0) + backBeginPhase, -direction);
+      }
     }
   }
 

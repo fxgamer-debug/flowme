@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.6';
+const CARD_VERSION = '1.23.7';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -321,9 +321,6 @@ export class FlowmeCard extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
-    if (this.config) {
-      this.nodeFx.prunePulseState(new Set(this.config.nodes.map((n) => n.id)));
-    }
     const svg = this.nodeFxSvgRef.value;
     if (svg && this.config) {
       this.nodeFx.sync(svg, this.config, this.hass, performance.now(), this.nodeEffectHooks());

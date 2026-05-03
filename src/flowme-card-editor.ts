@@ -185,9 +185,11 @@ export class FlowmeCardEditor extends LitElement {
   /** Pan offset at fit level (centres card horizontally when canvas is wider). */
   private fitPanX = 0;
   private fitPanY = 0;
-  /** Natural pixel dimensions of the loaded background image. */
-  private imageNaturalW = 1600;
-  private imageNaturalH = 1000;
+  /** Natural pixel dimensions of the loaded background image (0 until decode). */
+  private imageNaturalW = 0;
+  private imageNaturalH = 0;
+  /** One-shot diagnostics for editor layout timing. */
+  private _editorFirstRenderLogged = false;
   /** URL for which naturalW/H have been loaded (avoids redundant loads). */
   private _loadedImageUrl = '';
   /** True while spacebar is held (enables drag-to-pan). */
@@ -285,7 +287,6 @@ export class FlowmeCardEditor extends LitElement {
       const fxSvg = this.editorFxSvgRef.value;
       if (fxSvg && this.config && this.hass) {
         this.editorNodeFx.sync(fxSvg, this.config, this.hass, performance.now());
-        this.editorNodeFx.prunePulseState(new Set(this.config.nodes.map((n) => n.id)));
       }
       this.ensureEditorNodeFxRaf();
     });
@@ -312,6 +313,17 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   override firstUpdated(): void {
+    // eslint-disable-next-line no-console -- intentional layout diagnostic
+    console.log(
+      '[FlowMe Editor] firstUpdated, imageNaturalW:',
+      this.imageNaturalW,
+      'imageNaturalH:',
+      this.imageNaturalH,
+      'scale:',
+      this.scale,
+      'fitScale:',
+      this.fitScale,
+    );
     const canvasEl = this.canvasRef.value;
     if (!canvasEl) return;
     this._canvasResizeObserver = new ResizeObserver((entries) => {
@@ -330,6 +342,8 @@ export class FlowmeCardEditor extends LitElement {
   private loadBackgroundImage(url: string): void {
     if (!url || url === this._loadedImageUrl) return;
     this._loadedImageUrl = url;
+    this.imageNaturalW = 0;
+    this.imageNaturalH = 0;
     const img = new Image();
     img.onload = () => {
       this.imageNaturalW = img.naturalWidth || 1600;
@@ -337,7 +351,8 @@ export class FlowmeCardEditor extends LitElement {
       this.recalcFit();
     };
     img.onerror = () => {
-      // Keep previous/default dimensions on error
+      this.imageNaturalW = 0;
+      this.imageNaturalH = 0;
       this.recalcFit();
     };
     img.src = url;
@@ -354,6 +369,7 @@ export class FlowmeCardEditor extends LitElement {
     const stageW = canvasEl.offsetWidth - 16;
     const stageH = canvasEl.offsetHeight - 8;
     if (stageW <= 0 || stageH <= 0) return;
+    if (this.imageNaturalW <= 0 || this.imageNaturalH <= 0) return;
     // Scale so image fills stage width exactly
     const newFitScale = stageW / this.imageNaturalW;
     const scaledH = this.imageNaturalH * newFitScale;
@@ -421,6 +437,23 @@ export class FlowmeCardEditor extends LitElement {
     const derivedElement =
       this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? '';
 
+    if (!this._editorFirstRenderLogged) {
+      this._editorFirstRenderLogged = true;
+      // eslint-disable-next-line no-console -- intentional layout diagnostic
+      console.log(
+        '[FlowMe Editor] first render, imageNaturalW:',
+        this.imageNaturalW,
+        'imageNaturalH:',
+        this.imageNaturalH,
+        'scale:',
+        this.scale,
+        'fitScale:',
+        this.fitScale,
+      );
+    }
+
+    const imageReady = this.imageNaturalW > 0 && this.imageNaturalH > 0;
+
     return html`
       <div class="wrap">
 
@@ -451,23 +484,36 @@ export class FlowmeCardEditor extends LitElement {
                  Sized to image natural dimensions so percentages map to image pixels.
                  Transform pans/zooms the whole scene as one unit. -->
             <div
-              class="canvas-content"
-              style=${`width: ${this.imageNaturalW}px; height: ${this.imageNaturalH}px; transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`}
+              class=${`canvas-content${imageReady ? '' : ' canvas-content--pending'}`}
+              style=${imageReady
+                ? `width: ${this.imageNaturalW}px; height: ${this.imageNaturalH}px; transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`
+                : 'left:0;top:0;width:100%;height:100%;'}
             >
-              ${bgUrl ? html`<div class="background" style="background-image: url('${bgUrl}');"></div>` : nothing}
-              <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
-                ${this.config.flows.map((f) => this.renderFlowConnector(f))}
-              </svg>
-              <svg
-                class="node-effects-editor"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                ${ref(this.editorFxSvgRef)}
-              ></svg>
-              ${this.config.flows.filter((f) => f.id === this.selectedFlowId).map((f) => this.renderWaypointHandles(f))}
-              ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
-              ${this.config.nodes.map((n) => this.renderHandle(n))}
-              ${this.renderSuggestPreview()}
+              ${bgUrl
+                ? html`<div
+                    class=${`background${imageReady ? '' : ' background--pending'}`}
+                    style="background-image: url('${bgUrl}');"
+                  ></div>`
+                : nothing}
+              ${imageReady
+                ? html`
+                    <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      ${this.config.flows.map((f) => this.renderFlowConnector(f))}
+                    </svg>
+                    <svg
+                      class="node-effects-editor"
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                      ${ref(this.editorFxSvgRef)}
+                    ></svg>
+                    ${this.config.flows
+                      .filter((f) => f.id === this.selectedFlowId)
+                      .map((f) => this.renderWaypointHandles(f))}
+                    ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
+                    ${this.config.nodes.map((n) => this.renderHandle(n))}
+                    ${this.renderSuggestPreview()}
+                  `
+                : nothing}
             </div>
           </div>
         </div>
@@ -1333,8 +1379,6 @@ export class FlowmeCardEditor extends LitElement {
 
   private defaultNodeEffect(type: NodeEffectType): NodeEffectConfig {
     switch (type) {
-      case 'pulse':
-        return { type: 'pulse', pulse_count: 3, pulse_duration: 800, pulse_threshold: 0.1 };
       case 'glow':
         return { type: 'glow', glow_max_radius: 20, peak_value: 10000 };
       case 'badge':
@@ -1351,7 +1395,7 @@ export class FlowmeCardEditor extends LitElement {
           alert_hysteresis: 0.05,
         };
       default:
-        return { type: 'pulse', pulse_count: 3, pulse_duration: 800, pulse_threshold: 0.1 };
+        return { type: 'glow', glow_max_radius: 20, peak_value: 10000 };
     }
   }
 
@@ -1365,29 +1409,10 @@ export class FlowmeCardEditor extends LitElement {
           <circle cx="50" cy="50" r="14" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
         </svg>`;
     }
-    const pc = fx.type === 'pulse' ? (fx.pulse_color || accent) : accent;
     const gc = fx.type === 'glow' ? (fx.glow_color || accent) : accent;
     const rc = fx.type === 'ripple' ? (fx.ripple_color || accent) : accent;
     const alertC = fx.type === 'alert' ? (fx.alert_color ?? '#FF0000') : '#FF0000';
     switch (fx.type) {
-      case 'pulse':
-        return html`
-          <svg class="node-effect-preview" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="50" cy="50" r="12" fill="${accent}" opacity="0.9"/>
-            ${[0, 1, 2].map(
-              (i) => html`
-              <circle
-                class="fm-pulse-ring-prv"
-                cx="50"
-                cy="50"
-                r="12"
-                fill="none"
-                stroke="${pc}"
-                stroke-width="2"
-                style=${`animation-delay: ${i * 0.45}s`}
-              />`,
-            )}
-          </svg>`;
       case 'glow': {
         const fid = `fm-ed-glow-${node.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
         return html`
@@ -1464,7 +1489,6 @@ export class FlowmeCardEditor extends LitElement {
                 }}
               >
                 <option value="" ?selected=${!fx}>${t('editor.nodeEffect.none')}</option>
-                <option value="pulse" ?selected=${typeVal === 'pulse'}>${t('editor.nodeEffect.pulse')}</option>
                 <option value="glow" ?selected=${typeVal === 'glow'}>${t('editor.nodeEffect.glow')}</option>
                 <option value="badge" ?selected=${typeVal === 'badge'}>${t('editor.nodeEffect.badge')}</option>
                 <option value="ripple" ?selected=${typeVal === 'ripple'}>${t('editor.nodeEffect.ripple')}</option>
@@ -1473,61 +1497,6 @@ export class FlowmeCardEditor extends LitElement {
             </label>
           </div>
 
-          ${fx?.type === 'pulse'
-            ? html`
-                <label>${t('editor.nodeEffect.pulseCount')}
-                  <input type="number" min="1" max="12" step="1"
-                    .value=${String(fx.pulse_count ?? 3)}
-                    @change=${(e: Event) => {
-                      const n = parseInt((e.target as HTMLInputElement).value, 10);
-                      if (!Number.isFinite(n)) return;
-                      patchNode(
-                        { node_effect: { ...fx, pulse_count: n } },
-                        `pulse count ${node.id}`,
-                      );
-                    }}
-                  />
-                </label>
-                <label>${t('editor.nodeEffect.pulseDuration')}
-                  <input type="number" min="200" max="5000" step="50"
-                    .value=${String(fx.pulse_duration ?? 800)}
-                    @change=${(e: Event) => {
-                      const n = parseInt((e.target as HTMLInputElement).value, 10);
-                      if (!Number.isFinite(n)) return;
-                      patchNode(
-                        { node_effect: { ...fx, pulse_duration: n } },
-                        `pulse duration ${node.id}`,
-                      );
-                    }}
-                  />
-                </label>
-                <label>${t('editor.nodeEffect.pulseThreshold')}
-                  <input type="number" min="0" max="1" step="0.01"
-                    .value=${String(fx.pulse_threshold ?? 0.1)}
-                    @change=${(e: Event) => {
-                      const n = parseFloat((e.target as HTMLInputElement).value);
-                      if (!Number.isFinite(n)) return;
-                      patchNode(
-                        { node_effect: { ...fx, pulse_threshold: n } },
-                        `pulse threshold ${node.id}`,
-                      );
-                    }}
-                  />
-                </label>
-                <label>${t('editor.nodeEffect.pulseColor')}
-                  <input type="text" placeholder=${t('editor.inspector.colourDomainDefault')}
-                    .value=${fx.pulse_color ?? ''}
-                    @change=${(e: Event) => {
-                      const v = (e.target as HTMLInputElement).value.trim();
-                      patchNode(
-                        { node_effect: { ...fx, pulse_color: v || undefined } },
-                        `pulse color ${node.id}`,
-                      );
-                    }}
-                  />
-                </label>
-              `
-            : nothing}
           ${fx?.type === 'glow'
             ? html`
                 <label>${t('editor.nodeEffect.glowColor')}
@@ -4334,6 +4303,9 @@ export class FlowmeCardEditor extends LitElement {
       transform-origin: 0 0;
       will-change: transform;
     }
+    .canvas-content--pending {
+      transform: none;
+    }
     /* Background image fills canvas-content exactly — no distortion since
        canvas-content is sized to match the image's natural dimensions. */
     .background {
@@ -4343,6 +4315,10 @@ export class FlowmeCardEditor extends LitElement {
       height: 100%;
       background-size: 100% 100%;
       background-repeat: no-repeat;
+    }
+    .background--pending {
+      background-size: contain;
+      background-position: center center;
     }
     .connectors {
       position: absolute;
@@ -4358,21 +4334,6 @@ export class FlowmeCardEditor extends LitElement {
       height: 100%;
       overflow: visible;
       pointer-events: none;
-    }
-    @keyframes fmPulsePreviewRing {
-      0% {
-        transform: scale(1);
-        opacity: 0.85;
-      }
-      100% {
-        transform: scale(3.6);
-        opacity: 0;
-      }
-    }
-    .fm-pulse-ring-prv {
-      transform-origin: 50px 50px;
-      transform-box: fill-box;
-      animation: fmPulsePreviewRing 1.6s ease-out infinite;
     }
     .inspector-details.node-effect-details {
       margin-top: 6px;

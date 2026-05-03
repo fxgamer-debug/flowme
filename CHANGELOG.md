@@ -2,11 +2,22 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.7] — Node effect pulse removal, direction both, editor canvas guard
+
+### Removed
+
+- **`pulse` node_effect**: Removed from types, renderer (`node-effects-layer`), editor, and strings. Legacy YAML with `node_effect.type: pulse` logs a warning and strips `node_effect` so configs still load.
+
+### Fixed
+
+- **`direction: both`**: `arrow` and `trail` animation styles now spawn a second particle stream on the reversed path (same as `dots`), with reverse-stream SMIL `begin` offset by half the motion duration. Diagnostic `console.log` when `debug: true` lists forward/reverse particle counts and path ids.
+- **Editor canvas**: Connectors, handles, and node-effect overlay SVG render only after the background image natural size is known (`imageNaturalW` / `imageNaturalH` > 0), avoiding a mis-scaled first paint.
+
 ## [1.23.6] — Animation styles trimmed, direction + fluid + trail fixes
 
 ### Removed
 
-- **animation_style `pulse` and `spark`**: dropped from renderer, editor, and types. Legacy YAML values are migrated to `dots` with a console warning. **`pulse` node_effect**, **`pulse` particle_spacing**, and **`ripple` node effect** are unchanged.
+- **animation_style `pulse` and `spark`**: dropped from renderer, editor, and types. Legacy YAML values are migrated to `dots` with a console warning. **`pulse` particle_spacing** and **`ripple` node effect** are unchanged. (**`pulse` node_effect** removed in v1.23.7.)
 
 ### Fixed
 

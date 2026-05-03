@@ -22,16 +22,7 @@ export interface NodePosition {
 }
 
 /** Visual animation at a node position (v1.23.1+). Requires `entity`. */
-export type NodeEffectType = 'pulse' | 'glow' | 'badge' | 'ripple' | 'alert';
-
-export interface NodeEffectPulse {
-  type: 'pulse';
-  pulse_count?: number;
-  pulse_duration?: number;
-  /** Relative change (e.g. 0.1 = 10%) that triggers a pulse burst */
-  pulse_threshold?: number;
-  pulse_color?: string;
-}
+export type NodeEffectType = 'glow' | 'badge' | 'ripple' | 'alert';
 
 export interface NodeEffectGlow {
   type: 'glow';
@@ -65,7 +56,6 @@ export interface NodeEffectAlert {
 }
 
 export type NodeEffectConfig =
-  | NodeEffectPulse
   | NodeEffectGlow
   | NodeEffectBadge
   | NodeEffectRipple

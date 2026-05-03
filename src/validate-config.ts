@@ -83,7 +83,16 @@ function validateNode(raw: unknown, idx: number, seenIds: Set<string>): NodeConf
     node.visible = n['visible'] as boolean;
   }
   if (n['node_effect'] !== undefined) {
-    node.node_effect = validateNodeEffect(n['node_effect'], `${path}.node_effect`);
+    const rawFx = n['node_effect'];
+    if (rawFx && typeof rawFx === 'object' && (rawFx as Record<string, unknown>)['type'] === 'pulse') {
+      console.warn(
+        '[FlowMe]',
+        `${path}.node_effect:`,
+        'type "pulse" is no longer supported; removing node_effect',
+      );
+    } else {
+      node.node_effect = validateNodeEffect(rawFx, `${path}.node_effect`);
+    }
   }
   return node;
 }
@@ -92,15 +101,6 @@ function validateNodeEffect(raw: unknown, path: string): NodeEffectConfig {
   if (!raw || typeof raw !== 'object') fail(path, t('validation.mustBeObject'));
   const o = raw as Record<string, unknown>;
   const typ = o['type'];
-  if (typ === 'pulse') {
-    return {
-      type: 'pulse',
-      ...(typeof o['pulse_count'] === 'number' ? { pulse_count: o['pulse_count'] as number } : {}),
-      ...(typeof o['pulse_duration'] === 'number' ? { pulse_duration: o['pulse_duration'] as number } : {}),
-      ...(typeof o['pulse_threshold'] === 'number' ? { pulse_threshold: o['pulse_threshold'] as number } : {}),
-      ...(typeof o['pulse_color'] === 'string' ? { pulse_color: o['pulse_color'] as string } : {}),
-    };
-  }
   if (typ === 'glow') {
     return {
       type: 'glow',

@@ -43,12 +43,6 @@ export type NodeEffectsSyncHooks = {
   setNodeDotFilter?: (nodeId: string, filter: string | null) => void;
 };
 
-type PulseState = {
-  lastVal: number;
-  hasSample: boolean;
-  burstStartMs: number;
-};
-
 function layoutMetrics(svg: SVGSVGElement): NodeEffectsLayoutMetrics {
   const r = svg.getBoundingClientRect();
   return { widthPx: Math.max(1, r.width), heightPx: Math.max(1, r.height) };
@@ -68,18 +62,9 @@ function pad2pxSvg(m: NodeEffectsLayoutMetrics): number {
 }
 
 export class NodeEffectsLayerController {
-  private pulseState = new Map<string, PulseState>();
   private lastDiagnosticLogMs = 0;
 
-  reset(): void {
-    this.pulseState.clear();
-  }
-
-  prunePulseState(validIds: Set<string>): void {
-    for (const id of this.pulseState.keys()) {
-      if (!validIds.has(id)) this.pulseState.delete(id);
-    }
-  }
+  reset(): void {}
 
   sync(
     svg: SVGSVGElement | null,
@@ -135,9 +120,6 @@ export class NodeEffectsLayerController {
       g.setAttribute('data-node', node.id);
 
       switch (fx.type) {
-        case 'pulse':
-          this.appendPulse(g, node, fx, hass, colour, rSvg, cx, cy, nowMs, m);
-          break;
         case 'glow':
           this.appendGlow(g, node, fx, hass, node.entity, colour, nodeRpx, hooks);
           break;
@@ -154,67 +136,6 @@ export class NodeEffectsLayerController {
           break;
       }
       if (g.childNodes.length > 0) layer.appendChild(g);
-    }
-  }
-
-  private appendPulse(
-    g: SVGGElement,
-    node: NodeConfig,
-    fx: Extract<NodeEffectConfig, { type: 'pulse' }>,
-    hass: HomeAssistant | undefined,
-    colour: string,
-    rSvg: number,
-    cx: number,
-    cy: number,
-    nowMs: number,
-    m: NodeEffectsLayoutMetrics,
-  ): void {
-    const raw = parseReading(hass, node.entity);
-    const threshold = fx.pulse_threshold ?? 0.1;
-    const count = Math.max(1, fx.pulse_count ?? 3);
-    const duration = fx.pulse_duration ?? 800;
-    const strokeC = fx.pulse_color || colour;
-
-    let st = this.pulseState.get(node.id);
-    if (!st) {
-      st = { lastVal: raw ?? 0, hasSample: false, burstStartMs: -1e12 };
-      this.pulseState.set(node.id, st);
-    }
-
-    if (raw !== null) {
-      if (st.hasSample) {
-        const denom = Math.max(Math.abs(st.lastVal), Math.abs(raw), 1e-6);
-        const rel = Math.abs(raw - st.lastVal) / denom;
-        if (rel >= threshold) {
-          st.burstStartMs = nowMs;
-        }
-      } else {
-        st.hasSample = true;
-      }
-      st.lastVal = raw;
-    }
-
-    const burstAge = nowMs - st.burstStartMs;
-    const stagger = duration / count;
-    if (burstAge < 0 || burstAge > duration + stagger * count) return;
-
-    const pad = pad2pxSvg(m);
-    const baseRN = rSvg + pad;
-    const maxRN = rSvg * 4;
-
-    for (let i = 0; i < count; i++) {
-      const ringAge = burstAge - i * stagger;
-      if (ringAge < 0 || ringAge > duration) continue;
-      const t = ringAge / duration;
-      const ring = document.createElementNS(SVG_NS, 'circle');
-      ring.setAttribute('cx', String(cx));
-      ring.setAttribute('cy', String(cy));
-      ring.setAttribute('r', String(baseRN + t * (maxRN - baseRN)));
-      ring.setAttribute('fill', 'none');
-      ring.setAttribute('stroke', strokeC);
-      ring.setAttribute('stroke-width', String(0.12));
-      ring.setAttribute('opacity', String(0.8 * (1 - t)));
-      g.appendChild(ring);
     }
   }
 
