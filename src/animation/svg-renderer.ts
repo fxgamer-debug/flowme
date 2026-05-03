@@ -1401,6 +1401,7 @@ export class SvgRenderer implements FlowRenderer {
     const desired = Math.min(burstMax, Math.max(1, Math.round(baseCount * burstMultiplier)));
     const flicker = flow.animation?.flicker === true;
     const kind = flow.animation?.particle_shape ?? 'circle';
+    const trailRot = kind === 'teardrop' || kind === 'diamond' ? '0' : 'auto';
 
     const firstOk =
       dom.particles.length === desired &&

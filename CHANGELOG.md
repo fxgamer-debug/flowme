@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.5] — Trail rotate fix (CI)
+
+### Fixed
+
+- **`applyTrail`**: Restore missing `trailRot` binding so trail `animateMotion` uses `rotate="0"` for teardrop/diamond and `rotate="auto"` otherwise (fixes TypeScript / build failure in v1.23.4).
+
 ## [1.23.4] — Chevron, path direction, fluid fade, spark branches, editor polish
 
 ### Fixed

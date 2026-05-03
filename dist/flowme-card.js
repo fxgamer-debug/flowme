@@ -294,8 +294,8 @@ class ke {
     for (; (o = te.nextNode()) !== null && l.length < a; ) {
       if (o.nodeType === 1) {
         if (o.hasAttributes()) for (const u of o.getAttributeNames()) if (u.endsWith(_i)) {
-          const h = d[r++], f = o.getAttribute(u).split(X), b = /([.?@])?(.*)/.exec(h);
-          l.push({ type: 1, index: s, name: b[2], strings: f, ctor: b[1] === "." ? sn : b[1] === "?" ? rn : b[1] === "@" ? an : Ue }), o.removeAttribute(u);
+          const h = d[r++], f = o.getAttribute(u).split(X), m = /([.?@])?(.*)/.exec(h);
+          l.push({ type: 1, index: s, name: m[2], strings: f, ctor: m[1] === "." ? sn : m[1] === "?" ? rn : m[1] === "@" ? an : Ue }), o.removeAttribute(u);
         } else u.startsWith(X) && (l.push({ type: 6, index: s }), o.removeAttribute(u));
         if (Ci.test(o.tagName)) {
           const u = o.textContent.split(X), h = u.length - 1;
@@ -1318,7 +1318,7 @@ function kn(t, e, i, n) {
   const u = s.waypoints;
   let h = [];
   u !== void 0 && (Array.isArray(u) || w(`${o}.waypoints`, c("validation.waypointsMustBeArray")), h = u.map(
-    (b, y) => xt(b, `${o}.waypoints[${y}]`)
+    (m, y) => xt(m, `${o}.waypoints[${y}]`)
   ));
   const f = {
     id: a,
@@ -1328,8 +1328,8 @@ function kn(t, e, i, n) {
     waypoints: h
   };
   if (typeof s.domain == "string" && (Me.includes(s.domain) || w(`${o}.domain`, c("validation.mustBeOneOf", Me.join(", "))), f.domain = s.domain), typeof s.color == "string" && (f.color = s.color), typeof s.color_positive == "string" && (f.color_positive = s.color_positive), typeof s.color_negative == "string" && (f.color_negative = s.color_negative), typeof s.threshold == "number" && (f.threshold = s.threshold), typeof s.reverse == "boolean" && (f.reverse = s.reverse), typeof s.speed_multiplier == "number") {
-    const b = s.speed_multiplier;
-    (b < 0.1 || b > 5) && w(`${o}.speed_multiplier`, c("validation.speedMultiplierRange")), f.speed_multiplier = b;
+    const m = s.speed_multiplier;
+    (m < 0.1 || m > 5) && w(`${o}.speed_multiplier`, c("validation.speedMultiplierRange")), f.speed_multiplier = m;
   }
   return s.opacity !== void 0 && (f.opacity = $t(s.opacity, `${o}.opacity`)), s.visible !== void 0 && (typeof s.visible != "boolean" && w(`${o}.visible`, c("validation.mustBeBoolean")), f.visible = s.visible), s.line_style !== void 0 && (st.includes(s.line_style) || w(`${o}.line_style`, c("validation.mustBeOneOf", st.join(", "))), f.line_style = s.line_style), s.speed_curve_override !== void 0 && (f.speed_curve_override = Mn(
     s.speed_curve_override,
@@ -1401,14 +1401,14 @@ function Nn(t, e) {
   (!t || typeof t != "object" || Array.isArray(t)) && w(e, c("validation.mustBeObject"));
   const i = t, n = {};
   i.animation_style !== void 0 && (rt.includes(i.animation_style) || w(`${e}.animation_style`, c("validation.mustBeOneOf", rt.join(", "))), n.animation_style = i.animation_style), i.particle_shape !== void 0 && (at.includes(i.particle_shape) || w(`${e}.particle_shape`, c("validation.mustBeOneOf", at.join(", "))), n.particle_shape = i.particle_shape), i.direction !== void 0 && (lt.includes(i.direction) || w(`${e}.direction`, c("validation.mustBeOneOf", lt.join(", "))), n.direction = i.direction), i.particle_spacing !== void 0 && (ct.includes(i.particle_spacing) || w(`${e}.particle_spacing`, c("validation.mustBeOneOf", ct.join(", "))), n.particle_spacing = i.particle_spacing), i.custom_svg_path !== void 0 && (typeof i.custom_svg_path != "string" && w(`${e}.custom_svg_path`, c("validation.mustBeSvgPathString")), i.custom_svg_path.length === 0 && console.warn(`[flowme] ${e}.custom_svg_path is empty — will fall back to circle`), n.custom_svg_path = i.custom_svg_path);
-  const o = (g, m) => {
-    const $ = i[g];
-    if ($ !== void 0)
-      return (typeof $ != "number" || !Number.isFinite($) || $ <= 0) && w(`${e}.${g}`, c("validation.positiveFinite")), m !== void 0 && $ > m && w(`${e}.${g}`, c("validation.mustBeAtMost", m)), $;
+  const o = (g, b) => {
+    const x = i[g];
+    if (x !== void 0)
+      return (typeof x != "number" || !Number.isFinite(x) || x <= 0) && w(`${e}.${g}`, c("validation.positiveFinite")), b !== void 0 && x > b && w(`${e}.${g}`, c("validation.mustBeAtMost", b)), x;
   }, s = (g) => {
-    const m = i[g];
-    if (m !== void 0)
-      return typeof m != "boolean" && w(`${e}.${g}`, c("validation.mustBeBoolean")), m;
+    const b = i[g];
+    if (b !== void 0)
+      return typeof b != "boolean" && w(`${e}.${g}`, c("validation.mustBeBoolean")), b;
   }, r = o("particle_size");
   if (r !== void 0 && (n.particle_size = r), i.particle_count !== void 0) {
     const g = i.particle_count;
@@ -1438,8 +1438,8 @@ function Nn(t, e) {
     const g = i.pulse_ratio;
     (typeof g != "number" || !Number.isFinite(g) || g <= 0 || g >= 1) && w(`${e}.pulse_ratio`, c("validation.pulseRatioRange")), n.pulse_ratio = g;
   }
-  const b = o("wave_frequency", 20);
-  b !== void 0 && (n.wave_frequency = b);
+  const m = o("wave_frequency", 20);
+  m !== void 0 && (n.wave_frequency = m);
   const y = o("wave_amplitude");
   return y !== void 0 && (n.wave_amplitude = y), n;
 }
@@ -1491,20 +1491,20 @@ function ve(t) {
   const n = i ?? {}, s = { default: n.default === void 0 || n.default === "" ? "" : zt(n.default, "background.default") };
   if (n.weather_entity !== void 0 && (typeof n.weather_entity != "string" && w("background.weather_entity", c("validation.mustBeStringEntityId")), s.weather_entity = n.weather_entity), n.weather_states !== void 0) {
     (!n.weather_states || typeof n.weather_states != "object") && w("background.weather_states", c("validation.weatherStatesMapping"));
-    const f = Object.entries(n.weather_states), b = {};
+    const f = Object.entries(n.weather_states), m = {};
     for (const [y, g] of f)
-      b[y] = zt(g, `background.weather_states.${y}`);
-    s.weather_states = b;
+      m[y] = zt(g, `background.weather_states.${y}`);
+    s.weather_states = m;
   }
   n.sun_entity !== void 0 && (typeof n.sun_entity != "string" && w("background.sun_entity", c("validation.sunEntityExample")), s.sun_entity = n.sun_entity), n.transition_duration !== void 0 && (typeof n.transition_duration != "number" && w("background.transition_duration", c("validation.transitionMustBeNumberMs")), s.transition_duration = n.transition_duration);
   const r = e.nodes;
   Array.isArray(r) || w("nodes", c("validation.nodesMustBeArray"));
-  const a = /* @__PURE__ */ new Set(), l = r.map((f, b) => Sn(f, b, a));
+  const a = /* @__PURE__ */ new Set(), l = r.map((f, m) => Sn(f, m, a));
   l.length === 0 && w("nodes", c("validation.atLeastOneNode"));
   const p = e.flows;
   Array.isArray(p) || w("flows", c("validation.flowsMustBeArray"));
   const d = /* @__PURE__ */ new Set(), u = p.map(
-    (f, b) => kn(f, b, d, a)
+    (f, m) => kn(f, m, d, a)
   ), h = {
     type: "custom:flowme-card",
     domain: e.domain,
@@ -1516,7 +1516,7 @@ function ve(t) {
     Array.isArray(e.overlays) || w("overlays", c("validation.overlaysMustBeArray"));
     const f = /* @__PURE__ */ new Set();
     h.overlays = e.overlays.map(
-      (b, y) => On(b, y, f)
+      (m, y) => On(m, y, f)
     );
   }
   return e.defaults !== void 0 && (h.defaults = Fn(e.defaults)), e.domain_colors !== void 0 && (h.domain_colors = Dn(e.domain_colors)), e.debug !== void 0 && (typeof e.debug != "boolean" && w("debug", c("validation.mustBeBoolean")), h.debug = e.debug), e.opacity !== void 0 && (h.opacity = Pn(e.opacity)), e.visibility !== void 0 && (h.visibility = Rn(e.visibility)), e.animation !== void 0 && (h.animation = En(e.animation)), h;
@@ -1530,20 +1530,20 @@ function On(t, e, i) {
   (typeof l != "string" || !l.length) && w(`${n}.id`, c("validation.mustBeNonEmptyId")), i.has(l) && w(`${n}.id`, c("validation.duplicateOverlayId", l)), i.add(l);
   const p = xt(o.position, `${n}.position`);
   if (a) {
-    const b = c("validation.migrationOverlayWarning", s);
-    console.warn(`[flowme] ${n}: ${b}`);
+    const m = c("validation.migrationOverlayWarning", s);
+    console.warn(`[flowme] ${n}: ${m}`);
     const y = {
       id: l,
       type: "custom",
       position: p,
       card: { type: "markdown", content: "" },
-      _migration_warning: b
+      _migration_warning: m
     };
     if (o.size !== void 0) {
       const g = o.size;
       if (g && typeof g == "object") {
-        const m = g, $ = m.width, x = m.height;
-        typeof $ == "number" && typeof x == "number" && (y.size = { width: $, height: x });
+        const b = g, x = b.width, $ = b.height;
+        typeof x == "number" && typeof $ == "number" && (y.size = { width: x, height: $ });
       }
     }
     return y;
@@ -1552,8 +1552,8 @@ function On(t, e, i) {
   (!d || typeof d != "object" || Array.isArray(d)) && w(`${n}.card`, c("validation.overlayCardMustBeObject"));
   const u = Pi(d, `${n}.card`);
   if (u.length) {
-    const b = u[0];
-    w(b.path, c("validation.unsafeSchemeInCard", b.scheme));
+    const m = u[0];
+    w(m.path, c("validation.unsafeSchemeInCard", m.scheme));
   }
   const f = {
     id: l,
@@ -1562,14 +1562,14 @@ function On(t, e, i) {
     card: d
   };
   if (o.size !== void 0) {
-    const b = o.size;
-    (!b || typeof b != "object") && w(`${n}.size`, c("validation.overlaySizeMustBeObject"));
-    const y = b, g = y.width, m = y.height;
-    (typeof g != "number" || !Number.isFinite(g) || g <= 0 || g > 100) && w(`${n}.size.width`, c("validation.overlayWidthPercent")), (typeof m != "number" || !Number.isFinite(m) || m <= 0 || m > 100) && w(`${n}.size.height`, c("validation.overlayHeightPercent")), f.size = { width: g, height: m };
+    const m = o.size;
+    (!m || typeof m != "object") && w(`${n}.size`, c("validation.overlaySizeMustBeObject"));
+    const y = m, g = y.width, b = y.height;
+    (typeof g != "number" || !Number.isFinite(g) || g <= 0 || g > 100) && w(`${n}.size.width`, c("validation.overlayWidthPercent")), (typeof b != "number" || !Number.isFinite(b) || b <= 0 || b > 100) && w(`${n}.size.height`, c("validation.overlayHeightPercent")), f.size = { width: g, height: b };
   }
   if (o.visible !== void 0 && (typeof o.visible != "boolean" && w(`${n}.visible`, c("validation.mustBeBoolean")), f.visible = o.visible), o.opacity !== void 0) {
-    const b = o.opacity;
-    (typeof b != "number" || !Number.isFinite(b) || b < 0 || b > 1) && w(`${n}.opacity`, c("validation.overlayOpacity01")), f.opacity = b;
+    const m = o.opacity;
+    (typeof m != "number" || !Number.isFinite(m) || m < 0 || m > 1) && w(`${n}.opacity`, c("validation.overlayOpacity01")), f.opacity = m;
   }
   return f;
 }
@@ -1750,8 +1750,8 @@ function we(t, e, i) {
       { x: 2 * n[a - 1].x - n[a - 2].x, y: 2 * n[a - 1].y - n[a - 2].y }
     ], p = [`M ${n[0].x.toFixed(2)} ${n[0].y.toFixed(2)}`];
     for (let d = 1; d < a; d++) {
-      const u = l[d - 1], h = l[d], f = l[d + 1], b = l[d + 2], y = h.x + (f.x - u.x) / 6, g = h.y + (f.y - u.y) / 6, m = f.x - (b.x - h.x) / 6, $ = f.y - (b.y - h.y) / 6;
-      p.push(`C ${y.toFixed(2)} ${g.toFixed(2)} ${m.toFixed(2)} ${$.toFixed(2)} ${f.x.toFixed(2)} ${f.y.toFixed(2)}`);
+      const u = l[d - 1], h = l[d], f = l[d + 1], m = l[d + 2], y = h.x + (f.x - u.x) / 6, g = h.y + (f.y - u.y) / 6, b = f.x - (m.x - h.x) / 6, x = f.y - (m.y - h.y) / 6;
+      p.push(`C ${y.toFixed(2)} ${g.toFixed(2)} ${b.toFixed(2)} ${x.toFixed(2)} ${f.x.toFixed(2)} ${f.y.toFixed(2)}`);
     }
     return p.join(" ");
   }
@@ -1762,8 +1762,8 @@ function we(t, e, i) {
       r.push(`L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`);
       continue;
     }
-    const u = Math.sqrt((p.x - l.x) ** 2 + (p.y - l.y) ** 2), h = Math.sqrt((d.x - p.x) ** 2 + (d.y - p.y) ** 2), f = Math.min(Math.min(u, h) * o, s), b = f / (u || 1), y = p.x - (p.x - l.x) * b, g = p.y - (p.y - l.y) * b, m = f / (h || 1), $ = p.x + (d.x - p.x) * m, x = p.y + (d.y - p.y) * m;
-    r.push(`L ${y.toFixed(2)} ${g.toFixed(2)}`), r.push(`Q ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${$.toFixed(2)} ${x.toFixed(2)}`);
+    const u = Math.sqrt((p.x - l.x) ** 2 + (p.y - l.y) ** 2), h = Math.sqrt((d.x - p.x) ** 2 + (d.y - p.y) ** 2), f = Math.min(Math.min(u, h) * o, s), m = f / (u || 1), y = p.x - (p.x - l.x) * m, g = p.y - (p.y - l.y) * m, b = f / (h || 1), x = p.x + (d.x - p.x) * b, $ = p.y + (d.y - p.y) * b;
+    r.push(`L ${y.toFixed(2)} ${g.toFixed(2)}`), r.push(`Q ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${x.toFixed(2)} ${$.toFixed(2)}`);
   }
   return r.join(" ");
 }
@@ -1867,11 +1867,11 @@ function Un(t, e, i) {
   return `#${a(o)}${a(s)}${a(r)}`;
 }
 function Ei(t, e) {
-  const i = e.high_value - e.low_value, n = i === 0 ? 0 : Math.max(0, Math.min(1, (t - e.low_value) / i)), [o, s, r] = Ut(e.low_color), [a, l, p] = Ut(e.high_color), [d, u, h] = Kt(o, s, r), [f, b, y] = Kt(a, l, p);
+  const i = e.high_value - e.low_value, n = i === 0 ? 0 : Math.max(0, Math.min(1, (t - e.low_value) / i)), [o, s, r] = Ut(e.low_color), [a, l, p] = Ut(e.high_color), [d, u, h] = Kt(o, s, r), [f, m, y] = Kt(a, l, p);
   let g = f - d;
   g > 180 && (g -= 360), g < -180 && (g += 360);
-  const m = (d + g * n + 360) % 360, $ = Gt(u, b, n), x = Gt(h, y, n);
-  return Un(m, $, x);
+  const b = (d + g * n + 360) % 360, x = Gt(u, m, n), $ = Gt(h, y, n);
+  return Un(b, x, $);
 }
 function Ri() {
   try {
@@ -2279,26 +2279,26 @@ class Oe {
       this.setGroupOpacity(o, 0);
       return;
     }
-    const b = et ? io : K(d, l), y = n.speed_multiplier ?? 1;
-    let g = Math.max(50, b * y);
+    const m = et ? io : K(d, l), y = n.speed_multiplier ?? 1;
+    let g = Math.max(50, m * y);
     h && (g = g / ao);
-    const m = this.config?.animation?.smooth_speed !== !1;
-    g = Qn(e, g, m, performance.now(), this.durInterp);
-    const $ = s.direction ?? "auto";
-    let x;
-    $ === "forward" ? x = 1 : $ === "reverse" ? x = -1 : x = i < 0 != (n.reverse === !0) ? -1 : 1;
-    let A = x, C = h ? Ee : 1;
-    const I = 600, S = 300;
-    if (m && $ === "auto") {
+    const b = this.config?.animation?.smooth_speed !== !1;
+    g = Qn(e, g, b, performance.now(), this.durInterp);
+    const x = s.direction ?? "auto";
+    let $;
+    x === "forward" ? $ = 1 : x === "reverse" ? $ = -1 : $ = i < 0 != (n.reverse === !0) ? -1 : 1;
+    let A = $, S = h ? Ee : 1;
+    const I = 600, C = 300;
+    if (b && x === "auto") {
       const me = this.lastDirection.get(e), Wi = this.dirChanging.get(e);
-      me !== void 0 && me !== x && !Wi && this.dirChanging.set(e, { startMs: performance.now(), oldDir: me, newDir: x });
+      me !== void 0 && me !== $ && !Wi && this.dirChanging.set(e, { startMs: performance.now(), oldDir: me, newDir: $ });
       const Ne = this.dirChanging.get(e);
       if (Ne) {
         const V = performance.now() - Ne.startMs;
-        V < I ? (V < S ? (C = (h ? Ee : 1) * (1 - V / S), A = Ne.oldDir) : (C = (h ? Ee : 1) * ((V - S) / S), A = Ne.newDir), !u && V >= 280 && V <= 320 && (g = Math.max(g, 45e3)), u && V >= 270 && V <= 330 && (C = Math.max(C, Ee))) : (this.dirChanging.delete(e), A = x);
+        V < I ? (V < C ? (S = (h ? Ee : 1) * (1 - V / C), A = Ne.oldDir) : (S = (h ? Ee : 1) * ((V - C) / C), A = Ne.newDir), !u && V >= 280 && V <= 320 && (g = Math.max(g, 45e3)), u && V >= 270 && V <= 330 && (S = Math.max(S, Ee))) : (this.dirChanging.delete(e), A = $);
       }
     }
-    this.lastDirection.set(e, x);
+    this.lastDirection.set(e, $);
     const N = n.domain ?? this.config?.domain, F = this.config?.flows.findIndex((me) => me.id === e) ?? -1, P = fe(
       n,
       a,
@@ -2306,8 +2306,8 @@ class Oe {
       A,
       this.config?.domain_colors,
       F >= 0 ? F : 0
-    ), L = this.gradientColors.get(e), z = n.value_gradient?.mode ?? "flow", je = L && z !== "line" ? L : P, Gi = L && z !== "flow" ? L : P, W = je;
-    o.outline && o.outline.setAttribute("stroke", Gi), this.setGroupOpacity(o, C), this.syncFlowPathGeometry(n, o, A);
+    ), O = this.gradientColors.get(e), z = n.value_gradient?.mode ?? "flow", je = O && z !== "line" ? O : P, Gi = O && z !== "flow" ? O : P, W = je;
+    o.outline && o.outline.setAttribute("stroke", Gi), this.setGroupOpacity(o, S), this.syncFlowPathGeometry(n, o, A);
     const J = this.updateBurstState(e, d, l, a);
     switch (Qe("applyFlow:", e, "style=", r, "dur=", g, "dir=", A, "color=", W), r) {
       case "dots":
@@ -2390,12 +2390,12 @@ class Oe {
       if (l.animation?.particle_count !== void 0) continue;
       const p = this.animStyle(l);
       if (p !== "dots" && p !== "trail") continue;
-      const d = this.profileFor(l), u = Math.abs(this.latestValues.get(l.id) ?? 0), h = We(l, d), f = this.updateBurstState(l.id, u, h, d), b = Math.max(
+      const d = this.profileFor(l), u = Math.abs(this.latestValues.get(l.id) ?? 0), h = We(l, d), f = this.updateBurstState(l.id, u, h, d), m = Math.max(
         1,
         Math.round(d.particle_count_curve ? d.particle_count_curve(u) : Be)
-      ), y = this.config.defaults?.burst_max_particles ?? le, g = Math.min(y, Math.max(1, Math.round(b * f)));
-      let m = this.adaptiveCount.get(l.id) ?? g;
-      r && m > 1 ? (m -= 1, s && console.log("[FlowMe] adaptive count:", l.id, m, "avg frame:", o)) : a && m < g && (m += 1, s && console.log("[FlowMe] adaptive count:", l.id, m, "avg frame:", o)), this.adaptiveCount.set(l.id, Math.min(m, g));
+      ), y = this.config.defaults?.burst_max_particles ?? le, g = Math.min(y, Math.max(1, Math.round(m * f)));
+      let b = this.adaptiveCount.get(l.id) ?? g;
+      r && b > 1 ? (b -= 1, s && console.log("[FlowMe] adaptive count:", l.id, b, "avg frame:", o)) : a && b < g && (b += 1, s && console.log("[FlowMe] adaptive count:", l.id, b, "avg frame:", o)), this.adaptiveCount.set(l.id, Math.min(b, g));
     }
   }
   /** Resolve effective particle count, respecting explicit override and burst */
@@ -2436,13 +2436,13 @@ class Oe {
         let u = this.randomOffsets.get(e);
         if (!u || u.length !== i || l - p > d) {
           const h = a * 0.1, f = [];
-          for (let b = 0; b < i; b++) {
+          for (let m = 0; m < i; m++) {
             let y, g = 0;
             do
               y = -(Math.random() * r), g++;
-            while (g < 20 && f.some((m) => {
-              const $ = Math.abs((y - m) % r + r) % r;
-              return $ < h && $ > r - h;
+            while (g < 20 && f.some((b) => {
+              const x = Math.abs((y - b) % r + r) % r;
+              return x < h && x > r - h;
             }));
             f.push(y);
           }
@@ -2454,8 +2454,8 @@ class Oe {
         const l = Math.max(1, Math.round(o.cluster_size ?? 3)), p = o.cluster_gap ?? 3, d = a * 0.3, u = [];
         let h = 0;
         for (let f = 0; f < i; f++) {
-          const b = f % l;
-          f > 0 && b === 0 && (h += d * l * p), u.push(-(h % r)), h += d;
+          const m = f % l;
+          f > 0 && m === 0 && (h += d * l * p), u.push(-(h % r)), h += d;
         }
         return u;
       }
@@ -2503,8 +2503,8 @@ class Oe {
           const u = l + p * a, h = Math.sin(u) * s;
           if (d.shape.getAttribute("data-kind") === "custom_svg") {
             d.shape.hasAttribute("data-base-transform") || d.shape.setAttribute("data-base-transform", d.shape.getAttribute("transform") ?? "");
-            const b = d.shape.getAttribute("data-base-transform") ?? "";
-            d.shape.setAttribute("transform", `${b} translate(0,${h.toFixed(2)})`);
+            const m = d.shape.getAttribute("data-base-transform") ?? "";
+            d.shape.setAttribute("transform", `${m} translate(0,${h.toFixed(2)})`);
           } else
             d.shape.setAttribute("transform", `translate(0,${h.toFixed(2)})`);
         }
@@ -2527,18 +2527,18 @@ class Oe {
         if (!o || o.particles.length === 0) continue;
         const s = o.particles.length, a = (this.durInterp.currentDurMs.get(i.id) ?? 2e3) / 1e3, l = i.animation ?? {}, p = [];
         if (n === "wave_spacing") {
-          const h = l.wave_frequency ?? 2, f = Math.min(l.wave_amplitude ?? 0.85, 0.95), b = e * 1e-3 / a, y = [];
+          const h = l.wave_frequency ?? 2, f = Math.min(l.wave_amplitude ?? 0.85, 0.95), m = e * 1e-3 / a, y = [];
           for (let g = 0; g < s; g++) {
-            const m = (g / s + b) % 1, $ = Math.sin(m * Math.PI * 2 * h) * f * (1 / s);
-            y.push(((m + $) % 1 + 1) % 1);
+            const b = (g / s + m) % 1, x = Math.sin(b * Math.PI * 2 * h) * f * (1 / s);
+            y.push(((b + x) % 1 + 1) % 1);
           }
-          y.sort((g, m) => g - m), p.push(...y);
+          y.sort((g, b) => g - b), p.push(...y);
         } else {
-          const h = l.pulse_frequency ?? 1.5, f = l.pulse_ratio ?? 0.25, b = e * h * 1e-3 % 1, y = e * 1e-3 / a % 1, g = 1 / s;
-          let m;
-          b < f ? m = 1 - (1 - b / f) * 0.9 : m = (b - f) / (1 - f);
-          for (let $ = 0; $ < s; $++)
-            p.push(((y + $ * g * m) % 1 + 1) % 1);
+          const h = l.pulse_frequency ?? 1.5, f = l.pulse_ratio ?? 0.25, m = e * h * 1e-3 % 1, y = e * 1e-3 / a % 1, g = 1 / s;
+          let b;
+          m < f ? b = 1 - (1 - m / f) * 0.9 : b = (m - f) / (1 - f);
+          for (let x = 0; x < s; x++)
+            p.push(((y + x * g * b) % 1 + 1) % 1);
         }
         const d = o.path;
         let u = 0;
@@ -2554,14 +2554,14 @@ class Oe {
             const y = document.createElementNS("http://www.w3.org/2000/svg", "animateMotion");
             y.setAttribute("data-js-driven", "1"), y.setAttribute("begin", "indefinite"), y.setAttribute("dur", "1s"), f.animateMotion.replaceWith(y), f.animateMotion = y, f.shape.appendChild(y);
           }
-          const b = p[h] ?? 0;
+          const m = p[h] ?? 0;
           if (u > 0 && d)
             try {
-              const y = d.getPointAtLength(b * u), g = this.particleKind(f);
+              const y = d.getPointAtLength(m * u), g = this.particleKind(f);
               if (g === "teardrop" || g === "diamond")
                 f.shape.setAttribute("transform", `translate(${y.x.toFixed(2)},${y.y.toFixed(2)})`);
               else {
-                const m = Math.max(0.5, u * 0.01), $ = d.getPointAtLength(Math.max(0, b * u - m)), x = d.getPointAtLength(Math.min(u, b * u + m)), A = Math.atan2(x.y - $.y, x.x - $.x) * (180 / Math.PI);
+                const b = Math.max(0.5, u * 0.01), x = d.getPointAtLength(Math.max(0, m * u - b)), $ = d.getPointAtLength(Math.min(u, m * u + b)), A = Math.atan2($.y - x.y, $.x - x.x) * (180 / Math.PI);
                 f.shape.setAttribute("transform", `translate(${y.x.toFixed(2)},${y.y.toFixed(2)}) rotate(${A.toFixed(1)})`);
               }
             } catch {
@@ -2578,30 +2578,30 @@ class Oe {
   applyDots(e, i, n, o, s, r, a, l) {
     const p = i.animation?.direction ?? "auto", d = this.resolveParticleCount(i, n, o, l), u = i.animation?.particle_shape ?? "circle", h = i.animation?.flicker === !0;
     if (e.particles.length !== d || e.particles[0] && this.particleKind(e.particles[0]) !== u) {
-      for (const m of e.particles) m.shape.remove();
+      for (const b of e.particles) b.shape.remove();
       e.particles = [];
-      for (let m = 0; m < d; m++)
+      for (let b = 0; b < d; b++)
         e.particles.push(this.makeParticle(e, u, r, i, n));
     }
     if (p === "both") {
       if (!e.particlesBack || e.particlesBack.length !== d) {
-        if (e.particlesBack) for (const m of e.particlesBack) m.shape.remove();
+        if (e.particlesBack) for (const b of e.particlesBack) b.shape.remove();
         e.particlesBack = [];
-        for (let m = 0; m < d; m++)
+        for (let b = 0; b < d; b++)
           e.particlesBack.push(this.makeParticle(e, u, r, i, n));
       }
     } else if (e.particlesBack) {
-      for (const m of e.particlesBack) m.shape.remove();
+      for (const b of e.particlesBack) b.shape.remove();
       e.particlesBack = void 0;
     }
-    const f = `${(s / 1e3).toFixed(3)}s`, b = i.animation ?? {}, y = this.resolveParticleBegins(i.id, d, s, b), g = (m, $) => {
-      for (let x = 0; x < m.length; x++) {
-        const A = m[x];
+    const f = `${(s / 1e3).toFixed(3)}s`, m = i.animation ?? {}, y = this.resolveParticleBegins(i.id, d, s, m), g = (b, x) => {
+      for (let $ = 0; $ < b.length; $++) {
+        const A = b[$];
         this.updateParticleColor(A, r, i, n, h);
-        const C = document.createElementNS(M, "animateMotion");
-        C.setAttribute("repeatCount", "indefinite"), C.setAttribute("dur", f), C.setAttribute("rotate", "auto"), C.setAttribute("begin", `${(y[x] ?? 0).toFixed(3)}s`);
-        const I = document.createElementNS(M, "mpath"), S = this.motionPathRef(e, i, $);
-        I.setAttributeNS(U, "href", `#${S}`), I.setAttribute("href", `#${S}`), C.appendChild(I), A.animateMotion.replaceWith(C), A.animateMotion = C, A.shape.appendChild(C);
+        const S = document.createElementNS(M, "animateMotion");
+        S.setAttribute("repeatCount", "indefinite"), S.setAttribute("dur", f), S.setAttribute("rotate", "auto"), S.setAttribute("begin", `${(y[$] ?? 0).toFixed(3)}s`);
+        const I = document.createElementNS(M, "mpath"), C = this.motionPathRef(e, i, x);
+        I.setAttributeNS(U, "href", `#${C}`), I.setAttribute("href", `#${C}`), S.appendChild(I), A.animateMotion.replaceWith(S), A.animateMotion = S, A.shape.appendChild(S);
       }
     };
     g(e.particles, a), e.particlesBack && g(e.particlesBack, -a);
@@ -2612,17 +2612,17 @@ class Oe {
    * Burst: decreases gap ratio.
    */
   applyDash(e, i, n, o, s, r) {
-    for (const m of e.particles) m.shape.remove();
+    for (const b of e.particles) b.shape.remove();
     if (e.particles = [], !e.lineStroke) {
-      const m = document.createElementNS(M, "use");
-      m.setAttributeNS(U, "href", `#${e.pathId}`), m.setAttribute("href", `#${e.pathId}`), m.setAttribute("fill", "none"), m.setAttribute("stroke-linecap", "round"), m.setAttribute("stroke-linejoin", "round"), e.group.appendChild(m), e.lineStroke = m;
+      const b = document.createElementNS(M, "use");
+      b.setAttributeNS(U, "href", `#${e.pathId}`), b.setAttribute("href", `#${e.pathId}`), b.setAttribute("fill", "none"), b.setAttribute("stroke-linecap", "round"), b.setAttribute("stroke-linejoin", "round"), e.group.appendChild(b), e.lineStroke = b;
     }
     const a = this.config?.defaults?.line_width ?? tt, p = (i.animation ?? {}).dash_gap ?? 0.5, d = Math.max(0.1, p / r), u = 14, h = u * d, f = this.glowFilter(i, this.profileFor(i), o);
     e.lineStroke.setAttribute("stroke", o), e.lineStroke.setAttribute("stroke-width", String(a * 2)), e.lineStroke.setAttribute("stroke-dasharray", `${u} ${h}`), f && e.lineStroke.setAttribute("filter", f);
-    const b = u + h, y = e.lineStroke.querySelector("animate");
+    const m = u + h, y = e.lineStroke.querySelector("animate");
     y && y.remove();
     const g = document.createElementNS(M, "animate");
-    g.setAttribute("attributeName", "stroke-dashoffset"), g.setAttribute("from", s > 0 ? "0" : `-${b}`), g.setAttribute("to", s > 0 ? `-${b}` : "0"), g.setAttribute("dur", `${(n / 1e3).toFixed(3)}s`), g.setAttribute("repeatCount", "indefinite"), e.lineStroke.appendChild(g);
+    g.setAttribute("attributeName", "stroke-dashoffset"), g.setAttribute("from", s > 0 ? "0" : `-${m}`), g.setAttribute("to", s > 0 ? `-${m}` : "0"), g.setAttribute("dur", `${(n / 1e3).toFixed(3)}s`), g.setAttribute("repeatCount", "indefinite"), e.lineStroke.appendChild(g);
   }
   /**
    * pulse — expanding rings that travel along path from source to destination,
@@ -2638,39 +2638,39 @@ class Oe {
       Math.round(
         n.particle_count_curve ? n.particle_count_curve(o) : Math.max(3, Math.floor(h / 15))
       )
-    ), b = this.config?.defaults?.burst_max_particles ?? le, y = Math.min(b, Math.max(2, Math.round(f * a))), g = this.containerSize(), m = i.animation?.pulse_width ?? 2, $ = oo * (i.animation?.particle_size ?? 1), x = this.resolveGlow(i, n);
+    ), m = this.config?.defaults?.burst_max_particles ?? le, y = Math.min(m, Math.max(2, Math.round(f * a))), g = this.containerSize(), b = i.animation?.pulse_width ?? 2, x = oo * (i.animation?.particle_size ?? 1), $ = this.resolveGlow(i, n);
     if (!e.pulseCircles || e.pulseCircles.length !== y) {
       if (e.pulseCircles) for (const I of e.pulseCircles) I.circle.remove();
       e.pulseCircles = [];
       for (let I = 0; I < y; I++) {
-        const S = document.createElementNS(M, "circle");
-        S.setAttribute("r", "0"), S.setAttribute("fill", "none"), S.setAttribute("stroke", r), S.setAttribute("stroke-width", String(m)), S.setAttribute("opacity", "0"), x && S.setAttribute("filter", this.glowFilter(i, n, r));
+        const C = document.createElementNS(M, "circle");
+        C.setAttribute("r", "0"), C.setAttribute("fill", "none"), C.setAttribute("stroke", r), C.setAttribute("stroke-width", String(b)), C.setAttribute("opacity", "0"), $ && C.setAttribute("filter", this.glowFilter(i, n, r));
         const N = document.createElementNS(M, "animate");
-        N.setAttribute("attributeName", "r"), N.setAttribute("values", `0;${$};0`), N.setAttribute("repeatCount", "indefinite"), S.appendChild(N);
+        N.setAttribute("attributeName", "r"), N.setAttribute("values", `0;${x};0`), N.setAttribute("repeatCount", "indefinite"), C.appendChild(N);
         const F = document.createElementNS(M, "animate");
-        F.setAttribute("attributeName", "opacity"), F.setAttribute("values", "0;0.9;0"), F.setAttribute("repeatCount", "indefinite"), S.appendChild(F), e.group.appendChild(S), e.pulseCircles.push({ circle: S, animateRadius: N, animateOpacity: F });
+        F.setAttribute("attributeName", "opacity"), F.setAttribute("values", "0;0.9;0"), F.setAttribute("repeatCount", "indefinite"), C.appendChild(F), e.group.appendChild(C), e.pulseCircles.push({ circle: C, animateRadius: N, animateOpacity: F });
       }
     }
     const A = e.path;
-    let C = 0;
+    let S = 0;
     try {
-      C = A.getTotalLength();
+      S = A.getTotalLength();
     } catch {
-      C = 0;
+      S = 0;
     }
     for (let I = 0; I < e.pulseCircles.length; I++) {
-      const S = e.pulseCircles[I], N = (I + 0.5) / e.pulseCircles.length;
+      const C = e.pulseCircles[I], N = (I + 0.5) / e.pulseCircles.length;
       let F;
-      if (C > 0) {
-        const z = A.getPointAtLength(N * C);
+      if (S > 0) {
+        const z = A.getPointAtLength(N * S);
         F = { x: z.x, y: z.y };
       } else {
         const z = Gn(u, N);
         F = pe(z, g);
       }
-      S.circle.setAttribute("cx", F.x.toFixed(2)), S.circle.setAttribute("cy", F.y.toFixed(2)), S.circle.setAttribute("stroke", r);
-      const P = `${(s / 1e3).toFixed(3)}s`, L = `${(-s * I / (e.pulseCircles.length * 1e3)).toFixed(3)}s`;
-      S.animateRadius.setAttribute("values", `0;${$};0`), S.animateRadius.setAttribute("dur", P), S.animateRadius.setAttribute("begin", L), S.animateOpacity.setAttribute("dur", P), S.animateOpacity.setAttribute("begin", L);
+      C.circle.setAttribute("cx", F.x.toFixed(2)), C.circle.setAttribute("cy", F.y.toFixed(2)), C.circle.setAttribute("stroke", r);
+      const P = `${(s / 1e3).toFixed(3)}s`, O = `${(-s * I / (e.pulseCircles.length * 1e3)).toFixed(3)}s`;
+      C.animateRadius.setAttribute("values", `0;${x};0`), C.animateRadius.setAttribute("dur", P), C.animateRadius.setAttribute("begin", O), C.animateOpacity.setAttribute("dur", P), C.animateOpacity.setAttribute("begin", O);
     }
   }
   /**
@@ -2679,57 +2679,57 @@ class Oe {
   applyArrows(e, i, n, o, s, r) {
     const a = this.profileFor(i), l = i.animation?.particle_count ?? Be, p = this.config?.defaults?.burst_max_particles ?? le, d = Math.min(p, Math.max(1, Math.round(l * r))), u = i.animation?.flicker === !0;
     if (e.particles.length !== d) {
-      for (const b of e.particles) b.shape.remove();
+      for (const m of e.particles) m.shape.remove();
       e.particles = [];
-      for (let b = 0; b < d; b++)
+      for (let m = 0; m < d; m++)
         e.particles.push(this.makeParticle(e, "arrow", o, i, a));
     }
     const h = `${(n / 1e3).toFixed(3)}s`, f = this.resolveParticleBegins(i.id, d, n, i.animation ?? {});
-    for (let b = 0; b < e.particles.length; b++) {
-      const y = e.particles[b];
+    for (let m = 0; m < e.particles.length; m++) {
+      const y = e.particles[m];
       this.updateParticleColor(y, o, i, a, u);
       const g = document.createElementNS(M, "animateMotion");
-      g.setAttribute("repeatCount", "indefinite"), g.setAttribute("dur", h), g.setAttribute("rotate", "auto"), g.setAttribute("begin", `${(f[b] ?? 0).toFixed(3)}s`);
-      const m = document.createElementNS(M, "mpath"), $ = this.motionPathRef(e, i, s);
-      m.setAttributeNS(U, "href", `#${$}`), m.setAttribute("href", `#${$}`), g.appendChild(m), y.animateMotion.replaceWith(g), y.animateMotion = g, y.shape.appendChild(g);
+      g.setAttribute("repeatCount", "indefinite"), g.setAttribute("dur", h), g.setAttribute("rotate", "auto"), g.setAttribute("begin", `${(f[m] ?? 0).toFixed(3)}s`);
+      const b = document.createElementNS(M, "mpath"), x = this.motionPathRef(e, i, s);
+      b.setAttributeNS(U, "href", `#${x}`), b.setAttribute("href", `#${x}`), g.appendChild(b), y.animateMotion.replaceWith(g), y.animateMotion = g, y.shape.appendChild(g);
     }
   }
   /**
    * trail — head uses particle_shape; four tail segments follow along path with staggered begins.
    */
   applyTrail(e, i, n, o, s, r) {
-    const a = this.profileFor(i), l = i.animation?.particle_count ?? Be, p = this.config?.defaults?.burst_max_particles ?? le, d = Math.min(p, Math.max(1, Math.round(l * r))), u = i.animation?.flicker === !0, h = i.animation?.particle_shape ?? "circle";
+    const a = this.profileFor(i), l = i.animation?.particle_count ?? Be, p = this.config?.defaults?.burst_max_particles ?? le, d = Math.min(p, Math.max(1, Math.round(l * r))), u = i.animation?.flicker === !0, h = i.animation?.particle_shape ?? "circle", f = h === "teardrop" || h === "diamond" ? "0" : "auto";
     if (!(e.particles.length === d && e.particles[0]?.shape.hasAttribute("data-trail-pack") && e.particles[0]?.shape.getAttribute("data-head-kind") === h)) {
-      for (const x of e.particles) x.shape.remove();
+      for (const A of e.particles) A.shape.remove();
       e.particles = [];
-      for (let x = 0; x < d; x++)
+      for (let A = 0; A < d; A++)
         e.particles.push(this.makeTrailParticle(e, i, a, o, h));
     }
-    const b = `${(n / 1e3).toFixed(3)}s`, y = n / 1e3, g = this.resolveParticleBegins(i.id, d, n, i.animation ?? {});
-    let m = 100;
+    const y = `${(n / 1e3).toFixed(3)}s`, g = n / 1e3, b = this.resolveParticleBegins(i.id, d, n, i.animation ?? {});
+    let x = 100;
     try {
-      m = Math.max(1, e.path.getTotalLength());
+      x = Math.max(1, e.path.getTotalLength());
     } catch {
-      m = 100;
+      x = 100;
     }
-    const $ = (x, A) => {
-      const C = document.createElementNS(M, "animateMotion");
-      C.setAttribute("repeatCount", "indefinite"), C.setAttribute("dur", b), C.setAttribute("rotate", trailRot), C.setAttribute("begin", `${A.toFixed(4)}s`);
-      const I = document.createElementNS(M, "mpath"), S = this.motionPathRef(e, i, s);
-      return I.setAttributeNS(U, "href", `#${S}`), I.setAttribute("href", `#${S}`), C.appendChild(I), x.replaceWith(C), C;
+    const $ = (A, S) => {
+      const I = document.createElementNS(M, "animateMotion");
+      I.setAttribute("repeatCount", "indefinite"), I.setAttribute("dur", y), I.setAttribute("rotate", f), I.setAttribute("begin", `${S.toFixed(4)}s`);
+      const C = document.createElementNS(M, "mpath"), N = this.motionPathRef(e, i, s);
+      return C.setAttributeNS(U, "href", `#${N}`), C.setAttribute("href", `#${N}`), I.appendChild(C), A.replaceWith(I), I;
     };
-    for (let x = 0; x < e.particles.length; x++) {
-      const A = e.particles[x];
-      this.updateParticleColor(A, o, i, a, u);
-      const C = g[x] ?? 0, I = A.trailMotions;
-      if (I && I.length === 4) {
-        const S = s >= 0 ? 1 : -1;
-        for (let N = 0; N < 4; N++) {
-          const F = po[N], P = C + S * (F / m) * y;
-          I[N] = $(I[N], P);
+    for (let A = 0; A < e.particles.length; A++) {
+      const S = e.particles[A];
+      this.updateParticleColor(S, o, i, a, u);
+      const I = b[A] ?? 0, C = S.trailMotions;
+      if (C && C.length === 4) {
+        const N = s >= 0 ? 1 : -1;
+        for (let F = 0; F < 4; F++) {
+          const P = po[F], O = I + N * (P / x) * g;
+          C[F] = $(C[F], O);
         }
       }
-      A.animateMotion = $(A.animateMotion, C);
+      S.animateMotion = $(S.animateMotion, I);
     }
   }
   /**
@@ -2749,21 +2749,21 @@ class Oe {
     const h = `fluid-grad-${i.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
     let f = this.svg.getElementById(h);
     f || (f = document.createElementNS(M, "linearGradient"), f.setAttribute("id", h), r.appendChild(f)), e.fluidGradient = f;
-    const b = e.path;
+    const m = e.path;
     let y = 100;
     try {
-      y = Math.max(1, b.getTotalLength());
+      y = Math.max(1, m.getTotalLength());
     } catch {
       y = 100;
     }
-    let g = pe(l.position, d), m = pe(p.position, d);
+    let g = pe(l.position, d), b = pe(p.position, d);
     try {
-      const P = b.getPointAtLength(0), L = b.getPointAtLength(y);
-      g = { x: P.x, y: P.y }, m = { x: L.x, y: L.y };
+      const P = m.getPointAtLength(0), O = m.getPointAtLength(y);
+      g = { x: P.x, y: P.y }, b = { x: O.x, y: O.y };
     } catch {
     }
-    const $ = (m.x - g.x) / y, x = (m.y - g.y) / y;
-    for (f.setAttribute("gradientUnits", "userSpaceOnUse"), f.setAttribute("x1", String(g.x)), f.setAttribute("y1", String(g.y)), f.setAttribute("x2", String(g.x + $ * 2 * y)), f.setAttribute("y2", String(g.y + x * 2 * y)); f.firstChild; ) f.firstChild.remove();
+    const x = (b.x - g.x) / y, $ = (b.y - g.y) / y;
+    for (f.setAttribute("gradientUnits", "userSpaceOnUse"), f.setAttribute("x1", String(g.x)), f.setAttribute("y1", String(g.y)), f.setAttribute("x2", String(g.x + x * 2 * y)), f.setAttribute("y2", String(g.y + $ * 2 * y)); f.firstChild; ) f.firstChild.remove();
     const A = [
       ["0%", "0"],
       ["12%", "0.3"],
@@ -2775,14 +2775,14 @@ class Oe {
       ["87%", "0.3"],
       ["100%", "0"]
     ];
-    for (const [P, L] of A) {
+    for (const [P, O] of A) {
       const z = document.createElementNS(M, "stop");
-      z.setAttribute("offset", P), z.setAttribute("stop-color", o), z.setAttribute("stop-opacity", L), f.appendChild(z);
+      z.setAttribute("offset", P), z.setAttribute("stop-color", o), z.setAttribute("stop-opacity", O), f.appendChild(z);
     }
-    const C = document.createElementNS(M, "animateTransform");
-    C.setAttribute("attributeName", "gradientTransform"), C.setAttribute("type", "translate"), C.setAttribute("additive", "replace"), C.setAttribute("calcMode", "linear"), C.setAttribute("dur", `${Math.max(1, Math.round(n))}ms`), C.setAttribute("repeatCount", "indefinite");
-    const I = $ * y, S = x * y;
-    s >= 0 ? (C.setAttribute("from", "0 0"), C.setAttribute("to", `${I} ${S}`)) : (C.setAttribute("from", "0 0"), C.setAttribute("to", `${-I} ${-S}`)), f.appendChild(C);
+    const S = document.createElementNS(M, "animateTransform");
+    S.setAttribute("attributeName", "gradientTransform"), S.setAttribute("type", "translate"), S.setAttribute("additive", "replace"), S.setAttribute("calcMode", "linear"), S.setAttribute("dur", `${Math.max(1, Math.round(n))}ms`), S.setAttribute("repeatCount", "indefinite");
+    const I = x * y, C = $ * y;
+    s >= 0 ? (S.setAttribute("from", "0 0"), S.setAttribute("to", `${I} ${C}`)) : (S.setAttribute("from", "0 0"), S.setAttribute("to", `${-I} ${-C}`)), f.appendChild(S);
     const N = (this.config?.defaults?.line_width ?? tt) * 3, F = this.glowFilter(i, this.profileFor(i), o);
     if (e.lineStroke.setAttribute("stroke", `url(#${h})`), e.lineStroke.setAttribute("stroke-width", String(N)), e.lineStroke.removeAttribute("stroke-dasharray"), F && e.lineStroke.setAttribute("filter", F), !e.fluidInitialised) {
       e.fluidInitialised = !0, e.lineStroke.setAttribute("opacity", "0");
@@ -2801,43 +2801,43 @@ class Oe {
     if (e.particles.length !== d || e.particles.some((f) => !f.shape.hasAttribute("data-spark-pack"))) {
       for (const y of e.particles) y.shape.remove();
       e.particles = [];
-      const f = [], b = i.animation?.particle_spacing === "random";
+      const f = [], m = i.animation?.particle_spacing === "random";
       for (let y = 0; y < d; y++) {
-        const g = (0.5 + Math.random()) * this.resolveParticleRadius(i), m = Yt(r, "#ffffff", 0.3), $ = document.createElementNS(M, "g");
-        $.setAttribute("data-spark-pack", "1");
-        const { shape: x } = this.buildParticleShapeOnly(e, u, g, m, i);
-        x.setAttribute("data-spark-core", "1");
+        const g = (0.5 + Math.random()) * this.resolveParticleRadius(i), b = Yt(r, "#ffffff", 0.3), x = document.createElementNS(M, "g");
+        x.setAttribute("data-spark-pack", "1");
+        const { shape: $ } = this.buildParticleShapeOnly(e, u, g, b, i);
+        $.setAttribute("data-spark-core", "1");
         const A = (2.2 + y % 7 * 0.45).toFixed(2);
-        x.setAttribute(
+        $.setAttribute(
           "filter",
           `drop-shadow(0 0 2px #FFFFFF) drop-shadow(0 0 ${A}px ${r})`
         );
-        const C = 0.4 + Math.random() * 0.6;
-        x.setAttribute("opacity", String(C.toFixed(3))), $.appendChild(x);
+        const S = 0.4 + Math.random() * 0.6;
+        $.setAttribute("opacity", String(S.toFixed(3))), x.appendChild($);
         const I = document.createElementNS(M, "animateMotion");
-        I.setAttribute("dur", "99999s"), $.appendChild(I), e.group.appendChild($);
-        let S = y / Math.max(1, d);
-        b && (S += (Math.random() - 0.5) * 0.12), S = (S % 1 + 1) % 1, f.push({
-          group: $,
-          shape: x,
-          progress: S,
+        I.setAttribute("dur", "99999s"), x.appendChild(I), e.group.appendChild(x);
+        let C = y / Math.max(1, d);
+        m && (C += (Math.random() - 0.5) * 0.12), C = (C % 1 + 1) % 1, f.push({
+          group: x,
+          shape: $,
+          progress: C,
           baseR: g,
-          baseOpacity: C,
-          color: m,
+          baseOpacity: S,
+          color: b,
           flowId: i.id
-        }), e.particles.push({ shape: $, animateMotion: I });
+        }), e.particles.push({ shape: x, animateMotion: I });
       }
       this.sparkMainsByFlow.set(i.id, f);
     } else {
       const f = this.sparkMainsByFlow.get(i.id);
       if (f)
-        for (let b = 0; b < f.length; b++) {
-          const y = f[b], g = Yt(r, "#ffffff", 0.3);
+        for (let m = 0; m < f.length; m++) {
+          const y = f[m], g = Yt(r, "#ffffff", 0.3);
           y.color = g, y.shape.setAttribute("fill", g);
-          const m = (2.2 + b % 7 * 0.45).toFixed(2);
+          const b = (2.2 + m % 7 * 0.45).toFixed(2);
           y.shape.setAttribute(
             "filter",
-            `drop-shadow(0 0 2px #FFFFFF) drop-shadow(0 0 ${m}px ${r})`
+            `drop-shadow(0 0 2px #FFFFFF) drop-shadow(0 0 ${b}px ${r})`
           );
         }
     }
@@ -2888,27 +2888,27 @@ class Oe {
     } catch {
       return;
     }
-    const b = Math.atan2(f.y - h.y, f.x - h.x), y = 20 + Math.random() * 20, g = b + (Math.random() < 0.5 ? -1 : 1) * (y * Math.PI) / 180, m = i / Math.max(50, a), $ = (0.4 + Math.random() * 0.4) * m, x = 15 + Math.random() * 35, A = Math.random() < 0.5 ? "return" : "fadeout", C = this.sparkBranchPool.find((L) => parseFloat(L.getAttribute("opacity") ?? "1") < 0.05);
-    if (!C) return;
-    for (; C.firstChild; ) C.firstChild.remove();
-    const I = p.animation?.particle_shape ?? "circle", S = Math.max(1.2, l * 0.7), N = document.createElementNS(M, "g"), { shape: F, alreadyAppended: P } = this.buildParticleShapeOnly(
+    const m = Math.atan2(f.y - h.y, f.x - h.x), y = 20 + Math.random() * 20, g = m + (Math.random() < 0.5 ? -1 : 1) * (y * Math.PI) / 180, b = i / Math.max(50, a), x = (0.4 + Math.random() * 0.4) * b, $ = 15 + Math.random() * 35, A = Math.random() < 0.5 ? "return" : "fadeout", S = this.sparkBranchPool.find((O) => parseFloat(O.getAttribute("opacity") ?? "1") < 0.05);
+    if (!S) return;
+    for (; S.firstChild; ) S.firstChild.remove();
+    const I = p.animation?.particle_shape ?? "circle", C = Math.max(1.2, l * 0.7), N = document.createElementNS(M, "g"), { shape: F, alreadyAppended: P } = this.buildParticleShapeOnly(
       e,
       I,
-      S,
+      C,
       "#FFFFFF",
       p,
       I === "custom_svg" ? N : void 0
     );
-    P || N.appendChild(F), C.appendChild(N), C.setAttribute("transform", `translate(${o},${s})`), C.setAttribute("opacity", "1"), this.sparkBranchActive.push({
-      el: C,
+    P || N.appendChild(F), S.appendChild(N), S.setAttribute("transform", `translate(${o},${s})`), S.setAttribute("opacity", "1"), this.sparkBranchActive.push({
+      el: S,
       flowId: e.group.getAttribute("data-flow-id") ?? "",
       x: o,
       y: s,
       vx: Math.cos(g),
       vy: Math.sin(g),
-      speed: $,
+      speed: x,
       dist: 0,
-      maxDist: x,
+      maxDist: $,
       angle: g,
       fadeType: A,
       path: e.path,
@@ -2949,18 +2949,18 @@ class Oe {
     const r = this.resolveParticleRadius(i), a = this.resolveGlow(i, n), l = s === "custom_svg" ? "circle" : s, p = document.createElementNS(M, "g");
     p.setAttribute("data-trail-pack", "1"), p.setAttribute("data-head-kind", s);
     const d = [], u = [], h = s === "teardrop" || s === "diamond" ? "0" : "auto";
-    for (let m = 0; m < 4; m++) {
-      const $ = document.createElementNS(M, "g"), { shape: x } = this.buildParticleShapeOnly(e, l, r * uo[m], o, i);
-      a && x.setAttribute("filter", this.glowFilter(i, n, o)), x.setAttribute("opacity", String(ho[m])), $.appendChild(x);
+    for (let b = 0; b < 4; b++) {
+      const x = document.createElementNS(M, "g"), { shape: $ } = this.buildParticleShapeOnly(e, l, r * uo[b], o, i);
+      a && $.setAttribute("filter", this.glowFilter(i, n, o)), $.setAttribute("opacity", String(ho[b])), x.appendChild($);
       const A = document.createElementNS(M, "animateMotion");
       A.setAttribute("repeatCount", "indefinite"), A.setAttribute("dur", "2s"), A.setAttribute("rotate", h);
-      const C = document.createElementNS(M, "mpath");
-      C.setAttributeNS(U, "href", `#${e.pathId}`), C.setAttribute("href", `#${e.pathId}`), A.appendChild(C), $.appendChild(A), u.push($), d.push(A);
+      const S = document.createElementNS(M, "mpath");
+      S.setAttributeNS(U, "href", `#${e.pathId}`), S.setAttribute("href", `#${e.pathId}`), A.appendChild(S), x.appendChild(A), u.push(x), d.push(A);
     }
-    for (let m = 3; m >= 0; m--) p.appendChild(u[m]);
+    for (let b = 3; b >= 0; b--) p.appendChild(u[b]);
     const f = document.createElementNS(M, "g");
-    let b;
-    s === "custom_svg" ? b = this.buildParticleShapeOnly(e, s, r, o, i, f).shape : (b = this.buildParticleShapeOnly(e, s, r, o, i).shape, f.appendChild(b)), a && b.setAttribute("filter", this.glowFilter(i, n, o));
+    let m;
+    s === "custom_svg" ? m = this.buildParticleShapeOnly(e, s, r, o, i, f).shape : (m = this.buildParticleShapeOnly(e, s, r, o, i).shape, f.appendChild(m)), a && m.setAttribute("filter", this.glowFilter(i, n, o));
     const y = document.createElementNS(M, "animateMotion");
     y.setAttribute("repeatCount", "indefinite"), y.setAttribute("dur", "2s"), y.setAttribute("rotate", h);
     const g = document.createElementNS(M, "mpath");
@@ -3008,8 +3008,8 @@ class Oe {
         const d = document.createElementNS(M, "path");
         d.setAttribute("d", p), d.setAttribute("fill", o), d.setAttribute("opacity", "0"), d.setAttribute("data-kind", "custom_svg"), (r ?? e.group).appendChild(d), l = !0;
         try {
-          const h = d.getBBox(), f = Math.max(h.width, h.height, 1), y = n * 2 / f, g = -(h.x + h.width / 2), m = -(h.y + h.height / 2);
-          d.setAttribute("transform", `scale(${y.toFixed(4)}) translate(${g.toFixed(4)},${m.toFixed(4)})`);
+          const h = d.getBBox(), f = Math.max(h.width, h.height, 1), y = n * 2 / f, g = -(h.x + h.width / 2), b = -(h.y + h.height / 2);
+          d.setAttribute("transform", `scale(${y.toFixed(4)}) translate(${g.toFixed(4)},${b.toFixed(4)})`);
         } catch {
         }
         a = d;
@@ -3372,7 +3372,7 @@ class wo {
       return;
     }
     o.el.style.opacity = "1";
-    const p = n.speed_multiplier ?? 1, d = Math.max(50, K(a, r) * p), u = i < 0 != (n.reverse === !0) ? -1 : 1, h = n.domain ?? this.config?.domain, f = this.config?.flows.findIndex((A) => A.id === n.id) ?? -1, b = fe(
+    const p = n.speed_multiplier ?? 1, d = Math.max(50, K(a, r) * p), u = i < 0 != (n.reverse === !0) ? -1 : 1, h = n.domain ?? this.config?.domain, f = this.config?.flows.findIndex((A) => A.id === n.id) ?? -1, m = fe(
       n,
       s,
       h,
@@ -3382,18 +3382,18 @@ class wo {
     ), y = Math.max(
       1,
       Math.round(s.particle_count_curve ? s.particle_count_curve(i) : 3)
-    ), g = s.wave_amplitude_curve ? s.wave_amplitude_curve(i) : 4, m = o.el.style;
-    m.setProperty("--flowme-shape", s.shape), m.setProperty("--flowme-color", b), m.setProperty("--flowme-glow", s.glow ? "1" : "0"), m.setProperty("--flowme-count", String(y)), m.setProperty("--flowme-radius", String(go)), m.setProperty("--flowme-line", String(mo)), m.setProperty("--flowme-amp", String(g)), m.setProperty("--flowme-direction", String(u));
-    const $ = this.lastDurMsByFlow.get(e) ?? d, x = Math.round(d);
-    if (Math.abs(d - $) < 50) {
-      m.transition = "none", m.setProperty("--flowme-dur", String(x));
+    ), g = s.wave_amplitude_curve ? s.wave_amplitude_curve(i) : 4, b = o.el.style;
+    b.setProperty("--flowme-shape", s.shape), b.setProperty("--flowme-color", m), b.setProperty("--flowme-glow", s.glow ? "1" : "0"), b.setProperty("--flowme-count", String(y)), b.setProperty("--flowme-radius", String(go)), b.setProperty("--flowme-line", String(mo)), b.setProperty("--flowme-amp", String(g)), b.setProperty("--flowme-direction", String(u));
+    const x = this.lastDurMsByFlow.get(e) ?? d, $ = Math.round(d);
+    if (Math.abs(d - x) < 50) {
+      b.transition = "none", b.setProperty("--flowme-dur", String($));
       const A = o.el;
       requestAnimationFrame(() => {
         A.style.transition = "--flowme-dur 500ms cubic-bezier(0.42, 0, 0.58, 1)";
       });
     } else
-      m.setProperty("--flowme-dur", String(x));
-    this.lastDurMsByFlow.set(e, d), m.animation = `${pt} calc(var(--flowme-dur) * 1ms) linear infinite`;
+      b.setProperty("--flowme-dur", String($));
+    this.lastDurMsByFlow.set(e, d), b.animation = `${pt} calc(var(--flowme-dur) * 1ms) linear infinite`;
   }
   profileFor(e) {
     return T(e.domain ?? this.config?.domain);
@@ -3676,29 +3676,29 @@ class Li {
     for (const p of i.nodes) {
       const d = p.node_effect;
       if (!d || p.visible === !1 || !p.entity) continue;
-      const u = p.size ?? l, h = Jt(u, a), f = p.position.x, b = p.position.y, y = Mo(p, i), g = document.createElementNS(G, "g");
+      const u = p.size ?? l, h = Jt(u, a), f = p.position.x, m = p.position.y, y = Mo(p, i), g = document.createElementNS(G, "g");
       switch (g.classList.add("node-effect"), g.setAttribute("data-node", p.id), d.type) {
         case "pulse":
-          this.appendPulse(g, p, d, n, y, h, f, b, o, a);
+          this.appendPulse(g, p, d, n, y, h, f, m, o, a);
           break;
         case "glow":
           this.appendGlow(g, p, d, n, p.entity, y, u, s);
           break;
         case "badge":
-          this.appendBadge(g, d, n, p.entity, y, p.id, f, b, u, a, s);
+          this.appendBadge(g, d, n, p.entity, y, p.id, f, m, u, a, s);
           break;
         case "ripple":
-          this.appendRipple(g, d, n, p.entity, y, h, f, b, a);
+          this.appendRipple(g, d, n, p.entity, y, h, f, m, a);
           break;
         case "alert":
-          this.appendAlert(g, d, n, p.entity, y, p.id, f, b, h, o, s);
+          this.appendAlert(g, d, n, p.entity, y, p.id, f, m, h, o, s);
           break;
       }
       g.childNodes.length > 0 && r.appendChild(g);
     }
   }
   appendPulse(e, i, n, o, s, r, a, l, p, d) {
-    const u = ye(o, i.entity), h = n.pulse_threshold ?? 0.1, f = Math.max(1, n.pulse_count ?? 3), b = n.pulse_duration ?? 800, y = n.pulse_color || s;
+    const u = ye(o, i.entity), h = n.pulse_threshold ?? 0.1, f = Math.max(1, n.pulse_count ?? 3), m = n.pulse_duration ?? 800, y = n.pulse_color || s;
     let g = this.pulseState.get(i.id);
     if (g || (g = { lastVal: u ?? 0, hasSample: !1, burstStartMs: -1e12 }, this.pulseState.set(i.id, g)), u !== null) {
       if (g.hasSample) {
@@ -3708,77 +3708,77 @@ class Li {
         g.hasSample = !0;
       g.lastVal = u;
     }
-    const m = p - g.burstStartMs, $ = b / f;
-    if (m < 0 || m > b + $ * f) return;
-    const x = Qt(d), A = r + x, C = r * 4;
+    const b = p - g.burstStartMs, x = m / f;
+    if (b < 0 || b > m + x * f) return;
+    const $ = Qt(d), A = r + $, S = r * 4;
     for (let I = 0; I < f; I++) {
-      const S = m - I * $;
-      if (S < 0 || S > b) continue;
-      const N = S / b, F = document.createElementNS(G, "circle");
-      F.setAttribute("cx", String(a)), F.setAttribute("cy", String(l)), F.setAttribute("r", String(A + N * (C - A))), F.setAttribute("fill", "none"), F.setAttribute("stroke", y), F.setAttribute("stroke-width", String(0.12)), F.setAttribute("opacity", String(0.8 * (1 - N))), e.appendChild(F);
+      const C = b - I * x;
+      if (C < 0 || C > m) continue;
+      const N = C / m, F = document.createElementNS(G, "circle");
+      F.setAttribute("cx", String(a)), F.setAttribute("cy", String(l)), F.setAttribute("r", String(A + N * (S - A))), F.setAttribute("fill", "none"), F.setAttribute("stroke", y), F.setAttribute("stroke-width", String(0.12)), F.setAttribute("opacity", String(0.8 * (1 - N))), e.appendChild(F);
     }
   }
   appendGlow(e, i, n, o, s, r, a, l) {
-    const p = ye(o, s), d = n.peak_value ?? 1e4, u = n.glow_max_radius ?? 20, h = n.glow_color || r, f = p === null ? 0 : Math.max(0, Math.min(1, Math.abs(p) / d)), b = 4 + f * u;
+    const p = ye(o, s), d = n.peak_value ?? 1e4, u = n.glow_max_radius ?? 20, h = n.glow_color || r, f = p === null ? 0 : Math.max(0, Math.min(1, Math.abs(p) / d)), m = 4 + f * u;
     if (l?.setNodeDotFilter) {
-      l.setNodeDotFilter(i.id, `drop-shadow(0 0 ${b.toFixed(1)}px ${h})`);
+      l.setNodeDotFilter(i.id, `drop-shadow(0 0 ${m.toFixed(1)}px ${h})`);
       return;
     }
     const y = document.createElementNS(G, "circle");
     y.setAttribute("cx", String(i.position.x)), y.setAttribute("cy", String(i.position.y)), y.setAttribute("r", String(a / 100)), y.setAttribute("fill", "none"), y.setAttribute("stroke", h), y.setAttribute("stroke-width", String(0.08)), y.setAttribute("opacity", String(0.2 + f * 0.6)), y.setAttribute(
       "style",
-      `filter: drop-shadow(0 0 ${b.toFixed(1)}px ${h}); transition: filter 500ms ease, opacity 500ms ease`
+      `filter: drop-shadow(0 0 ${m.toFixed(1)}px ${h}); transition: filter 500ms ease, opacity 500ms ease`
     ), e.appendChild(y);
   }
   appendBadge(e, i, n, o, s, r, a, l, p, d, u) {
-    const h = i.badge_color_on ?? "#32DC50", f = i.badge_color_off ?? "#CC3333", b = n?.states[o];
+    const h = i.badge_color_on ?? "#32DC50", f = i.badge_color_off ?? "#CC3333", m = n?.states[o];
     let y = "#888888";
-    if (b)
-      if (b.state === "unavailable" || b.state === "unknown") y = "#888888";
+    if (m)
+      if (m.state === "unavailable" || m.state === "unknown") y = "#888888";
       else if (i.threshold !== void 0 && i.threshold !== null) {
         const A = ye(n, o);
         y = A !== null && A >= i.threshold ? h : f;
       } else {
-        const A = String(b.state).toLowerCase();
+        const A = String(m.state).toLowerCase();
         y = A === "on" || A === "open" || A === "true" ? h : f;
       }
     if (u?.setNodeDotBackground) {
       u.setNodeDotBackground(r, y, { transitionMs: 300 });
       return;
     }
-    const g = Jt(p * 0.6, d), m = a + Math.min(g * 1.1, 3), $ = l - Math.min(g * 1.1, 3), x = document.createElementNS(G, "circle");
-    x.setAttribute("cx", String(m)), x.setAttribute("cy", String($)), x.setAttribute("r", String(g)), x.setAttribute("fill", y), x.setAttribute("stroke", "#ffffff"), x.setAttribute("stroke-width", String(0.03)), e.appendChild(x);
+    const g = Jt(p * 0.6, d), b = a + Math.min(g * 1.1, 3), x = l - Math.min(g * 1.1, 3), $ = document.createElementNS(G, "circle");
+    $.setAttribute("cx", String(b)), $.setAttribute("cy", String(x)), $.setAttribute("r", String(g)), $.setAttribute("fill", y), $.setAttribute("stroke", "#ffffff"), $.setAttribute("stroke-width", String(0.03)), e.appendChild($);
   }
   appendRipple(e, i, n, o, s, r, a, l, p) {
     const d = ye(n, o), u = i.ripple_threshold ?? 0;
     if (d === null || Math.abs(d) <= u) return;
-    const h = i.ripple_duration ?? 2e3, f = i.ripple_color || s, b = Qt(p), y = r + b, g = r * 3, m = document.createElementNS(G, "circle");
-    m.setAttribute("cx", String(a)), m.setAttribute("cy", String(l)), m.setAttribute("r", String(y)), m.setAttribute("fill", "none"), m.setAttribute("stroke", f), m.setAttribute("stroke-width", String(0.1));
-    const $ = document.createElementNS(G, "animate");
-    $.setAttribute("attributeName", "r"), $.setAttribute("values", `${y};${g};${y}`), $.setAttribute("dur", `${h}ms`), $.setAttribute("repeatCount", "indefinite"), m.appendChild($);
+    const h = i.ripple_duration ?? 2e3, f = i.ripple_color || s, m = Qt(p), y = r + m, g = r * 3, b = document.createElementNS(G, "circle");
+    b.setAttribute("cx", String(a)), b.setAttribute("cy", String(l)), b.setAttribute("r", String(y)), b.setAttribute("fill", "none"), b.setAttribute("stroke", f), b.setAttribute("stroke-width", String(0.1));
     const x = document.createElementNS(G, "animate");
-    x.setAttribute("attributeName", "opacity"), x.setAttribute("values", "0.6;0;0.6"), x.setAttribute("dur", `${h}ms`), x.setAttribute("repeatCount", "indefinite"), m.appendChild(x), e.appendChild(m);
+    x.setAttribute("attributeName", "r"), x.setAttribute("values", `${y};${g};${y}`), x.setAttribute("dur", `${h}ms`), x.setAttribute("repeatCount", "indefinite"), b.appendChild(x);
+    const $ = document.createElementNS(G, "animate");
+    $.setAttribute("attributeName", "opacity"), $.setAttribute("values", "0.6;0;0.6"), $.setAttribute("dur", `${h}ms`), $.setAttribute("repeatCount", "indefinite"), b.appendChild($), e.appendChild(b);
   }
   appendAlert(e, i, n, o, s, r, a, l, p, d, u) {
     const h = ye(n, o);
     if (h === null) return;
-    const f = i.alert_threshold ?? 0, b = i.alert_condition ?? "above", y = i.alert_hysteresis ?? 0.05, g = Math.abs(f) * y + 1e-6;
-    let m = b === "above" ? h > f : h < f;
-    !m && b === "above" && h > f - g && (m = !0), !m && b === "below" && h < f + g && (m = !0);
-    const $ = i.alert_frequency ?? 2, x = i.alert_color ?? "#FF0000";
-    if (!m) {
+    const f = i.alert_threshold ?? 0, m = i.alert_condition ?? "above", y = i.alert_hysteresis ?? 0.05, g = Math.abs(f) * y + 1e-6;
+    let b = m === "above" ? h > f : h < f;
+    !b && m === "above" && h > f - g && (b = !0), !b && m === "below" && h < f + g && (b = !0);
+    const x = i.alert_frequency ?? 2, $ = i.alert_color ?? "#FF0000";
+    if (!b) {
       u?.setNodeDotBackground && u.setNodeDotBackground(r, s, { transitionMs: 200 });
       return;
     }
     if (u?.setNodeDotBackground) {
-      const S = 1e3 / Math.max(0.25, $), N = Math.floor(d / (S / 2)) % 2 === 0;
-      u.setNodeDotBackground(r, N ? x : s, { transitionMs: 80 });
+      const C = 1e3 / Math.max(0.25, x), N = Math.floor(d / (C / 2)) % 2 === 0;
+      u.setNodeDotBackground(r, N ? $ : s, { transitionMs: 80 });
       return;
     }
     const A = document.createElementNS(G, "circle");
     A.setAttribute("cx", String(a)), A.setAttribute("cy", String(l)), A.setAttribute("r", String(p)), A.setAttribute("fill", s), A.setAttribute("opacity", "0.85");
-    const C = Math.max(100, Math.round(1e3 / Math.max(0.25, $))), I = document.createElementNS(G, "animate");
-    I.setAttribute("attributeName", "fill"), I.setAttribute("values", `${s};${x};${s}`), I.setAttribute("dur", `${C}ms`), I.setAttribute("repeatCount", "indefinite"), A.appendChild(I), e.appendChild(A);
+    const S = Math.max(100, Math.round(1e3 / Math.max(0.25, x))), I = document.createElementNS(G, "animate");
+    I.setAttribute("attributeName", "fill"), I.setAttribute("values", `${s};${$};${s}`), I.setAttribute("dur", `${S}ms`), I.setAttribute("repeatCount", "indefinite"), A.appendChild(I), e.appendChild(A);
   }
 }
 const Po = 100;
@@ -3825,7 +3825,7 @@ class No {
 function k(t) {
   return JSON.parse(JSON.stringify(t));
 }
-function O(t) {
+function L(t) {
   return t < 0 ? 0 : t > 100 ? 100 : t;
 }
 function Re(t, e = 8) {
@@ -3850,13 +3850,13 @@ function Eo(t) {
 function nt(t, e, i) {
   const n = k(t);
   for (const o of n.nodes)
-    o.id === e && (o.position = { x: O(i.x), y: O(i.y) });
+    o.id === e && (o.position = { x: L(i.x), y: L(i.y) });
   return n;
 }
 function Ro(t, e, i) {
   const n = k(t), o = {
     id: Bo(t),
-    position: { x: O(e.x), y: O(e.y) },
+    position: { x: L(e.x), y: L(e.y) },
     ...i ? { label: i } : {}
   };
   return n.nodes.push(o), { config: n, node: o };
@@ -3869,7 +3869,7 @@ function Oo(t, e) {
   const i = k(t);
   for (const n of i.nodes) {
     const o = e.get(n.id);
-    o && (n.position = { x: O(o.x), y: O(o.y) });
+    o && (n.position = { x: L(o.x), y: L(o.y) });
   }
   return i;
 }
@@ -3911,8 +3911,8 @@ function ot(t, e, i, n) {
     if (s.id === e) {
       if (i < 0 || i >= s.waypoints.length) return t;
       s.waypoints[i] = {
-        x: O(n.x),
-        y: O(n.y)
+        x: L(n.x),
+        y: L(n.y)
       };
     }
   return o;
@@ -3923,8 +3923,8 @@ function ii(t, e, i, n) {
     if (s.id !== e) continue;
     const r = Math.max(0, Math.min(s.waypoints.length, i));
     s.waypoints.splice(r, 0, {
-      x: O(n.x),
-      y: O(n.y)
+      x: L(n.x),
+      y: L(n.y)
     });
   }
   return o;
@@ -3990,8 +3990,8 @@ function Yo(t, e) {
     ...e,
     id: n,
     position: {
-      x: O(e.position.x),
-      y: O(e.position.y)
+      x: L(e.position.x),
+      y: L(e.position.y)
     }
   };
   return i.overlays = [...i.overlays ?? [], o], { config: i, overlay: o };
@@ -4003,7 +4003,7 @@ function Zo(t, e) {
 function Xo(t, e, i) {
   const n = k(t);
   for (const o of n.overlays ?? [])
-    o.id === e && (o.position = { x: O(i.x), y: O(i.y) });
+    o.id === e && (o.position = { x: L(i.x), y: L(i.y) });
   return n;
 }
 function ri(t, e, i) {
@@ -4182,11 +4182,11 @@ function fs(t, e = Ct) {
     for (let p = 0; p < n; p++) {
       const d = p * i, u = Math.min(t.width, d + i);
       let h = 0;
-      for (let b = a; b < l; b++) {
-        const y = b * t.width;
+      for (let m = a; m < l; m++) {
+        const y = m * t.width;
         for (let g = d; g < u; g++) {
-          const m = t.data[y + g] ?? 0;
-          m > h && (h = m);
+          const b = t.data[y + g] ?? 0;
+          b > h && (h = b);
         }
       }
       const f = ut - h;
@@ -4242,9 +4242,9 @@ function _s(t, e, i) {
   for (let o = 1; o < i - 1; o++) {
     const s = (o - 1) * e, r = o * e, a = (o + 1) * e;
     for (let l = 1; l < e - 1; l++) {
-      const p = t[s + (l - 1)] ?? 0, d = t[s + l] ?? 0, u = t[s + (l + 1)] ?? 0, h = t[r + (l - 1)] ?? 0, f = t[r + (l + 1)] ?? 0, b = t[a + (l - 1)] ?? 0, y = t[a + l] ?? 0, g = t[a + (l + 1)] ?? 0, m = -p - 2 * h - b + u + 2 * f + g, $ = -p - 2 * d - u + b + 2 * y + g;
-      let x = Math.sqrt(m * m + $ * $);
-      x < vs && (x = 0), x > 255 && (x = 255), n[r + l] = x;
+      const p = t[s + (l - 1)] ?? 0, d = t[s + l] ?? 0, u = t[s + (l + 1)] ?? 0, h = t[r + (l - 1)] ?? 0, f = t[r + (l + 1)] ?? 0, m = t[a + (l - 1)] ?? 0, y = t[a + l] ?? 0, g = t[a + (l + 1)] ?? 0, b = -p - 2 * h - m + u + 2 * f + g, x = -p - 2 * d - u + m + 2 * y + g;
+      let $ = Math.sqrt(b * b + x * x);
+      $ < vs && ($ = 0), $ > 255 && ($ = 255), n[r + l] = $;
     }
   }
   return { width: e, height: i, data: n };
@@ -4311,29 +4311,29 @@ function Is(t, e, i) {
   p.fill(-1), d.fill(-1);
   const u = new Uint8Array(a), h = new Uint8Array(a), f = o * t.cols + n;
   l[f] = 0;
-  const b = new Ss();
-  b.push({ col: n, row: o, f: mi(n, o, s, r) });
+  const m = new Ss();
+  m.push({ col: n, row: o, f: mi(n, o, s, r) });
   const y = [
     [1, 0, 1],
     [-1, 0, 2],
     [0, 1, 3],
     [0, -1, 4]
   ];
-  for (; b.size > 0; ) {
-    const g = b.pop(), { col: m, row: $ } = g, x = $ * t.cols + m;
-    if (!h[x]) {
-      if (h[x] = 1, m === s && $ === r)
+  for (; m.size > 0; ) {
+    const g = m.pop(), { col: b, row: x } = g, $ = x * t.cols + b;
+    if (!h[$]) {
+      if (h[$] = 1, b === s && x === r)
         return ks(t, p, d, i);
-      for (const [A, C, I] of y) {
-        const S = m + A, N = $ + C;
-        if (S < 0 || N < 0 || S >= t.cols || N >= t.rows) continue;
-        const F = N * t.cols + S;
+      for (const [A, S, I] of y) {
+        const C = b + A, N = x + S;
+        if (C < 0 || N < 0 || C >= t.cols || N >= t.rows) continue;
+        const F = N * t.cols + C;
         if (h[F]) continue;
-        const P = ms(t, S, N), L = u[x] && u[x] !== I ? Cs : 0, z = (l[x] ?? 1 / 0) + P + L;
+        const P = ms(t, C, N), O = u[$] && u[$] !== I ? Cs : 0, z = (l[$] ?? 1 / 0) + P + O;
         if (z < (l[F] ?? 1 / 0)) {
-          l[F] = z, p[F] = m, d[F] = $, u[F] = I;
-          const je = z + mi(S, N, s, r);
-          b.push({ col: S, row: N, f: je });
+          l[F] = z, p[F] = b, d[F] = x, u[F] = I;
+          const je = z + mi(C, N, s, r);
+          m.push({ col: C, row: N, f: je });
         }
       }
     }
@@ -4636,7 +4636,7 @@ let B = class extends ie {
       if (!this.dragMoved) return;
       const i = this.pointerToPercent(t);
       if (!i) return;
-      const n = this.dragShiftHeld ? { x: O(Re(i.x)), y: O(Re(i.y)) } : i;
+      const n = this.dragShiftHeld ? { x: L(Re(i.x)), y: L(Re(i.y)) } : i;
       if (e.kind === "node")
         this.config = nt(this.config, e.id, n);
       else if (e.kind === "node-bulk") {
@@ -4646,8 +4646,8 @@ let B = class extends ie {
         if (s.width === 0 || s.height === 0) return;
         const r = s.width - 16, a = s.height - 8, l = (t.clientX - e.startPx.x) / this.scale / r * 100, p = (t.clientY - e.startPx.y) / this.scale / a * 100, d = /* @__PURE__ */ new Map();
         for (const [u, h] of e.startPositions) {
-          const f = this.dragShiftHeld ? Re(h.x + l) : h.x + l, b = this.dragShiftHeld ? Re(h.y + p) : h.y + p;
-          d.set(u, { x: f, y: b });
+          const f = this.dragShiftHeld ? Re(h.x + l) : h.x + l, m = this.dragShiftHeld ? Re(h.y + p) : h.y + p;
+          d.set(u, { x: f, y: m });
         }
         this.config = Oo(this.config, d);
       } else e.kind === "overlay" ? this.config = Xo(this.config, e.id, n) : e.kind === "waypoint" && (this.config = ot(this.config, e.flowId, e.index, n));
@@ -5522,13 +5522,13 @@ let B = class extends ie {
         const h = {};
         for (const y of Object.keys(n))
           y !== a && (h[y] = n[y]);
-        const f = this.config, b = ui(f, t.id, h);
-        this.pushPatch(f, b, `update speed curve ${a} for ${t.id}`);
+        const f = this.config, m = ui(f, t.id, h);
+        this.pushPatch(f, m, `update speed curve ${a} for ${t.id}`);
       } else {
         const h = parseFloat(u);
         if (!Number.isFinite(h)) return;
-        const f = this.config, b = ui(f, t.id, { ...n, [a]: h });
-        this.pushPatch(f, b, `update speed curve ${a} for ${t.id}`);
+        const f = this.config, m = ui(f, t.id, { ...n, [a]: h });
+        this.pushPatch(f, m, `update speed curve ${a} for ${t.id}`);
       }
     }}
         />
@@ -6283,9 +6283,9 @@ let B = class extends ie {
         ...n ? [n.position] : []
       ];
       let r = 0, a = 0;
-      for (let b = 0; b < s.length - 1; b++) {
-        const y = s[b], g = s[b + 1], m = Math.hypot(g.x - y.x, g.y - y.y);
-        m > a && (a = m, r = b);
+      for (let m = 0; m < s.length - 1; m++) {
+        const y = s[m], g = s[m + 1], b = Math.hypot(g.x - y.x, g.y - y.y);
+        b > a && (a = b, r = m);
       }
       const l = s[r], p = s[r + 1], d = { x: (l.x + p.x) / 2, y: (l.y + p.y) / 2 }, u = r > 0 ? r - 1 + 1 : 0, h = this.config, f = ii(h, t.id, u, d);
       this.pushPatch(h, f, `add waypoint to ${t.id}`);
@@ -7352,7 +7352,7 @@ let B = class extends ie {
     if (!e) return null;
     const i = e.getBoundingClientRect();
     if (i.width <= 0 || i.height <= 0) return null;
-    const n = t.clientX - (i.left + 8), o = t.clientY - (i.top + 4), s = (n - this.panX) / this.scale, r = (o - this.panY) / this.scale, a = O(s / this.imageNaturalW * 100), l = O(r / this.imageNaturalH * 100);
+    const n = t.clientX - (i.left + 8), o = t.clientY - (i.top + 4), s = (n - this.panX) / this.scale, r = (o - this.panY) / this.scale, a = L(s / this.imageNaturalW * 100), l = L(r / this.imageNaturalH * 100);
     return { x: a, y: l };
   }
   pushPatch(t, e, i) {
@@ -8954,7 +8954,7 @@ var Ts = Object.defineProperty, Hs = Object.getOwnPropertyDescriptor, j = (t, e,
     (r = t[s]) && (o = (n ? r(e, i, o) : r(o)) || o);
   return n && o && Ts(e, i, o), o;
 };
-const Gs = "1.23.4", xi = 5e3;
+const Gs = "1.23.5", xi = 5e3;
 console.info(
   `%c flowme %c v${Gs} `,
   "color: white; background: #4ADE80; font-weight: 700;",
