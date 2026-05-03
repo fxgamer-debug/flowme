@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.3';
+const CARD_VERSION = '1.23.4';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -809,9 +809,6 @@ export class FlowmeCard extends LitElement {
             data-flowme-base-fill=${fill}
             style=${`background: ${fill}; width: ${size}px; height: ${size}px;`}
           ></span>
-          ${node.node_effect
-            ? html`<span class="node-effect-indicator" title=${t('editor.nodeEffect.active')} aria-hidden="true">✦</span>`
-            : null}
         </span>
         ${showLabel ? html`<span class="node-label">${node.label}</span>` : null}
         ${showValue ? html`<span class="node-value">${valueText}</span>` : null}
@@ -963,16 +960,6 @@ export class FlowmeCard extends LitElement {
       border-radius: 50%;
       box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
       flex-shrink: 0;
-    }
-    .node-effect-indicator {
-      position: absolute;
-      right: -6px;
-      top: -8px;
-      font-size: 11px;
-      line-height: 1;
-      color: var(--primary-color, #4ade80);
-      text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
-      pointer-events: none;
     }
     .node-label {
       font-weight: 600;

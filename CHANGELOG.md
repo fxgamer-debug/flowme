@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.4] — Chevron, path direction, fluid fade, spark branches, editor polish
+
+### Fixed
+
+- **Chevron / arrow**: Final path geometry (`15r` tip, `10r` arms, `5r` notch) scaled by `dot_radius × particle_size`.
+- **Rotation / reversal**: Reverse waypoint order when flow is backward (and dual paths for `direction: both`) so `rotate="auto"` matches travel — no `keyPoints="1;0"` workaround.
+- **Teardrop**: No tangent rotation in `wave_spacing` / `pulse` spacing JS driver (stays vertical).
+- **Fluid**: One-time 600ms stroke fade-in per flow (`fluidInitialised`), not tied only to new `<use>` creation.
+- **Spark branches**: Same `particle_shape` as mains (`buildParticleShapeOnly`), white fill, group-based pool.
+- **Editor**: Pulse node-effect preview uses CSS `scale` animation (reliable); removed ✦ sparkle from node handles on canvas and card.
+
 ## [1.23.3] — Animation polish and node-effect sizing
 
 ### Fixed

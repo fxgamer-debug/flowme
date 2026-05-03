@@ -54,23 +54,18 @@ const SHIMMER_SPEED_FACTOR = 0.2;
 const SHIMMER_OPACITY = 0.3;
 
 /**
- * Bold road chevron (local coords, tip toward +X). Same geometry as pre-v1.23.2,
- * with rear centre at −0.6×w (40% V-notch depth vs flat back at −w).
- * `w` ≈ line_width×4, `h` ≈ dot_radius×3.
+ * Chevron / arrow particle (local coords, tip toward +X).
+ * `r` = dot_radius × particle_size (same units as {@link SvgRenderer.resolveParticleRadius}).
  */
-function boldChevronPath(w: number, h: number): string {
-  const hh = h / 2;
-  const tip = w * 0.52;
-  const nd = h * 0.4;
+function chevronArrowPath(r: number): string {
+  const f = (n: number) => n.toFixed(4);
   return [
-    `M ${tip} 0`,
-    `L ${w * 0.06} ${hh}`,
-    `L ${-w * 0.36} ${hh}`,
-    `L ${-w * 0.48} ${nd * 0.4}`,
-    `L ${-w * 0.6} 0`,
-    `L ${-w * 0.48} ${-nd * 0.4}`,
-    `L ${-w * 0.36} ${-hh}`,
-    `L ${w * 0.06} ${-hh}`,
+    `M ${f(15 * r)} 0`,
+    `L ${f(10 * r)} ${f(-10 * r)}`,
+    `L ${f(0)} ${f(-10 * r)}`,
+    `L ${f(5 * r)} 0`,
+    `L ${f(0)} ${f(10 * r)}`,
+    `L ${f(10 * r)} ${f(10 * r)}`,
     'Z',
   ].join(' ');
 }
@@ -126,7 +121,7 @@ interface SparkMainRow {
 }
 
 interface SparkBranch {
-  el: SVGCircleElement;
+  el: SVGGElement;
   flowId: string;
   x: number;
   y: number;
@@ -145,6 +140,9 @@ interface SparkBranch {
 interface FlowDomNodes {
   group: SVGGElement;
   path: SVGPathElement;
+  /** When `direction === 'both'`, reversed polyline for particles travelling opposite.way */
+  pathRev?: SVGPathElement;
+  pathRevId?: string;
   pathId: string;
   /** The faint background outline <use> element (used for gradient line colour). */
   outline?: SVGUseElement;
@@ -161,8 +159,8 @@ interface FlowDomNodes {
   }>;
   /** fluid: linear gradient element */
   fluidGradient?: SVGLinearGradientElement;
-  /** fluid: one-time stroke fade-in applied */
-  fluidFadeApplied?: boolean;
+  /** fluid: first paint fade-in done for this flow (not reset on hass ticks) */
+  fluidInitialised?: boolean;
   /** "both" direction uses a second set of particles going the other way */
   particlesBack?: ParticleDom[];
 }
@@ -216,7 +214,9 @@ export class SvgRenderer implements FlowRenderer {
   /** Spark: rAF-driven mains + branch overlay (pool max 15) */
   private sparkMainsByFlow = new Map<string, SparkMainRow[]>();
   private sparkFlowPhysics = new Map<string, { durMs: number; direction: number }>();
-  private sparkBranchPool: SVGCircleElement[] = [];
+  private sparkBranchPool: SVGGElement[] = [];
+  /** Last direction used for path geometry (resize / sync). */
+  private flowPathSyncedDirection = new Map<string, number>();
   private sparkBranchActive: SparkBranch[] = [];
   private lastSparkFrameMs = 0;
 
@@ -333,6 +333,7 @@ export class SvgRenderer implements FlowRenderer {
     this.sparkFlowPhysics.clear();
     this.sparkBranchActive = [];
     this.lastSparkFrameMs = 0;
+    this.flowPathSyncedDirection.clear();
   }
 
   // ── internal ──────────────────────────────────────────────────────────────
@@ -341,6 +342,69 @@ export class SvgRenderer implements FlowRenderer {
     if (!this.container) return { width: 0, height: 0 };
     const rect = this.container.getBoundingClientRect();
     return { width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
+  }
+
+  private computeIntendedDirection(flow: FlowConfig, value: number): number {
+    const directionMode = flow.animation?.direction ?? 'auto';
+    if (directionMode === 'forward') return 1;
+    if (directionMode === 'reverse') return -1;
+    return value < 0 !== (flow.reverse === true) ? -1 : 1;
+  }
+
+  /** Second path in defs for `direction: both` — opposite waypoint order. */
+  private ensurePathRev(dom: FlowDomNodes): void {
+    if (dom.pathRev || !this.svg) return;
+    const defs = this.svg.querySelector('defs');
+    if (!defs) return;
+    const rev = document.createElementNS(SVG_NS, 'path');
+    rev.setAttribute('id', `${dom.pathId}-rev`);
+    rev.setAttribute('fill', 'none');
+    defs.appendChild(rev);
+    dom.pathRev = rev;
+    dom.pathRevId = `${dom.pathId}-rev`;
+  }
+
+  /**
+   * Keep motion path geometry aligned with travel direction so `rotate="auto"` matches flow.
+   * Reverse waypoint order when direction &lt; 0 (single-stream); `both` uses forward + reversed paths.
+   */
+  private syncFlowPathGeometry(flow: FlowConfig, dom: FlowDomNodes, direction: number): void {
+    if (!this.config) return;
+    const size = this.containerSize();
+    const nodesById = new Map(this.config.nodes.map((n) => [n.id, n]));
+    const fromNode = nodesById.get(flow.from_node);
+    const toNode = nodesById.get(flow.to_node);
+    if (!fromNode || !toNode) return;
+
+    const pointsForward = [fromNode.position, ...flow.waypoints, toNode.position];
+    const lineStyle = flow.line_style ?? 'corner';
+    const dirMode = flow.animation?.direction ?? 'auto';
+
+    if (dirMode === 'both') {
+      this.ensurePathRev(dom);
+      const fwd = polylineToSvgPathStyled(pointsForward, size, lineStyle);
+      const revPts = [...pointsForward].reverse();
+      const rev = polylineToSvgPathStyled(revPts, size, lineStyle);
+      dom.path.setAttribute('d', fwd);
+      if (dom.pathRev) dom.pathRev.setAttribute('d', rev);
+    } else {
+      if (dom.pathRev) {
+        dom.pathRev.remove();
+        dom.pathRev = undefined;
+        dom.pathRevId = undefined;
+      }
+      const pts = direction >= 0 ? pointsForward : [...pointsForward].reverse();
+      dom.path.setAttribute('d', polylineToSvgPathStyled(pts, size, lineStyle));
+    }
+    this.flowPathSyncedDirection.set(flow.id, direction);
+  }
+
+  private motionPathRef(dom: FlowDomNodes, flow: FlowConfig, particleDirection: number): string {
+    const dirMode = flow.animation?.direction ?? 'auto';
+    if (dirMode === 'both') {
+      return particleDirection >= 0 ? dom.pathId : (dom.pathRevId ?? dom.pathId);
+    }
+    return dom.pathId;
   }
 
   private animStyle(flow: FlowConfig): AnimStyle {
@@ -422,10 +486,11 @@ export class SvgRenderer implements FlowRenderer {
       const fromNode = nodesById.get(flow.from_node);
       const toNode = nodesById.get(flow.to_node);
       if (!fromNode || !toNode) continue;
-      const points = [fromNode.position, ...flow.waypoints, toNode.position];
-      dom.path.setAttribute('d', polylineToSvgPathStyled(points, size, flow.line_style ?? 'corner'));
+      const v = this.latestValues.get(flow.id) ?? 0;
+      const syncDir = this.flowPathSyncedDirection.get(flow.id) ?? this.computeIntendedDirection(flow, v);
+      this.syncFlowPathGeometry(flow, dom, syncDir);
       if (dom.style === 'pulse') {
-        this.applyFlow(flow.id, this.latestValues.get(flow.id) ?? 0);
+        this.applyFlow(flow.id, v);
       }
     }
   }
@@ -546,6 +611,8 @@ export class SvgRenderer implements FlowRenderer {
 
     this.setGroupOpacity(dom, effectiveGroupOpacity);
 
+    this.syncFlowPathGeometry(flow, dom, direction);
+
     const burstMultiplier = this.updateBurstState(flowId, magnitude, params, profile);
 
     rlog('applyFlow:', flowId, 'style=', style, 'dur=', durMs, 'dir=', direction, 'color=', color);
@@ -641,7 +708,7 @@ export class SvgRenderer implements FlowRenderer {
     }
     dom.lineStroke?.remove();
     dom.lineStroke = undefined;
-    dom.fluidFadeApplied = undefined;
+    dom.fluidInitialised = undefined;
     if (dom.pulseCircles) {
       for (const p of dom.pulseCircles) p.circle.remove();
       dom.pulseCircles = undefined;
@@ -1023,12 +1090,16 @@ export class SvgRenderer implements FlowRenderer {
         if (totalLen > 0 && svgPath) {
           try {
             const pt = svgPath.getPointAtLength(pos * totalLen);
-            // Use a small delta to compute tangent for rotate="auto" emulation
-            const DELTA = Math.max(0.5, totalLen * 0.01);
-            const ptA = svgPath.getPointAtLength(Math.max(0, pos * totalLen - DELTA));
-            const ptB = svgPath.getPointAtLength(Math.min(totalLen, pos * totalLen + DELTA));
-            const angle = Math.atan2(ptB.y - ptA.y, ptB.x - ptA.x) * (180 / Math.PI);
-            p.shape.setAttribute('transform', `translate(${pt.x.toFixed(2)},${pt.y.toFixed(2)}) rotate(${angle.toFixed(1)})`);
+            const pk = this.particleKind(p);
+            if (pk === 'teardrop' || pk === 'diamond') {
+              p.shape.setAttribute('transform', `translate(${pt.x.toFixed(2)},${pt.y.toFixed(2)})`);
+            } else {
+              const DELTA = Math.max(0.5, totalLen * 0.01);
+              const ptA = svgPath.getPointAtLength(Math.max(0, pos * totalLen - DELTA));
+              const ptB = svgPath.getPointAtLength(Math.min(totalLen, pos * totalLen + DELTA));
+              const angle = Math.atan2(ptB.y - ptA.y, ptB.x - ptA.x) * (180 / Math.PI);
+              p.shape.setAttribute('transform', `translate(${pt.x.toFixed(2)},${pt.y.toFixed(2)}) rotate(${angle.toFixed(1)})`);
+            }
           } catch {
             // getPointAtLength unavailable in this environment; skip frame
           }
@@ -1095,13 +1166,10 @@ export class SvgRenderer implements FlowRenderer {
         fresh.setAttribute('dur', durStr);
         fresh.setAttribute('rotate', 'auto');
         fresh.setAttribute('begin', `${(begins[i] ?? 0).toFixed(3)}s`);
-        if (dir < 0) {
-          fresh.setAttribute('keyPoints', '1;0');
-          fresh.setAttribute('keyTimes', '0;1');
-        }
         const mpath = document.createElementNS(SVG_NS, 'mpath');
-        mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
-        mpath.setAttribute('href', `#${dom.pathId}`);
+        const href = this.motionPathRef(dom, flow, dir);
+        mpath.setAttributeNS(XLINK_NS, 'href', `#${href}`);
+        mpath.setAttribute('href', `#${href}`);
         fresh.appendChild(mpath);
         p.animateMotion.replaceWith(fresh);
         p.animateMotion = fresh;
@@ -1305,13 +1373,10 @@ export class SvgRenderer implements FlowRenderer {
       fresh.setAttribute('dur', durStr);
       fresh.setAttribute('rotate', 'auto');
       fresh.setAttribute('begin', `${(arrowBegins[i] ?? 0).toFixed(3)}s`);
-      if (direction < 0) {
-        fresh.setAttribute('keyPoints', '1;0');
-        fresh.setAttribute('keyTimes', '0;1');
-      }
       const mpath = document.createElementNS(SVG_NS, 'mpath');
-      mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
-      mpath.setAttribute('href', `#${dom.pathId}`);
+      const href = this.motionPathRef(dom, flow, direction);
+      mpath.setAttributeNS(XLINK_NS, 'href', `#${href}`);
+      mpath.setAttribute('href', `#${href}`);
       fresh.appendChild(mpath);
       p.animateMotion.replaceWith(fresh);
       p.animateMotion = fresh;
@@ -1364,15 +1429,12 @@ export class SvgRenderer implements FlowRenderer {
       const fresh = document.createElementNS(SVG_NS, 'animateMotion');
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
-      fresh.setAttribute('rotate', 'auto');
+      fresh.setAttribute('rotate', trailRot);
       fresh.setAttribute('begin', `${beginS.toFixed(4)}s`);
-      if (direction < 0) {
-        fresh.setAttribute('keyPoints', '1;0');
-        fresh.setAttribute('keyTimes', '0;1');
-      }
       const mpath = document.createElementNS(SVG_NS, 'mpath');
-      mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
-      mpath.setAttribute('href', `#${dom.pathId}`);
+      const href = this.motionPathRef(dom, flow, direction);
+      mpath.setAttributeNS(XLINK_NS, 'href', `#${href}`);
+      mpath.setAttribute('href', `#${href}`);
       fresh.appendChild(mpath);
       mo.replaceWith(fresh);
       return fresh;
@@ -1419,9 +1481,7 @@ export class SvgRenderer implements FlowRenderer {
     const size = this.containerSize();
     if (!from || !to) return;
 
-    let fluidStrokeNew = false;
     if (!dom.lineStroke) {
-      fluidStrokeNew = true;
       const stroke = document.createElementNS(SVG_NS, 'use');
       stroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
       stroke.setAttribute('href', `#${dom.pathId}`);
@@ -1516,13 +1576,13 @@ export class SvgRenderer implements FlowRenderer {
     dom.lineStroke.removeAttribute('stroke-dasharray');
     if (glowFilter) dom.lineStroke.setAttribute('filter', glowFilter);
 
-    if (fluidStrokeNew && !dom.fluidFadeApplied) {
-      dom.fluidFadeApplied = true;
+    if (!dom.fluidInitialised) {
+      dom.fluidInitialised = true;
       dom.lineStroke.setAttribute('opacity', '0');
       const opIn = document.createElementNS(SVG_NS, 'animate');
       opIn.setAttribute('attributeName', 'opacity');
-      opIn.setAttribute('values', '0;0.95');
-      opIn.setAttribute('dur', '500ms');
+      opIn.setAttribute('values', '0;1');
+      opIn.setAttribute('dur', '600ms');
       opIn.setAttribute('fill', 'freeze');
       dom.lineStroke.appendChild(opIn);
     }
@@ -1626,12 +1686,10 @@ export class SvgRenderer implements FlowRenderer {
     g.setAttribute('pointer-events', 'none');
     this.svg.appendChild(g);
     for (let i = 0; i < 15; i++) {
-      const c = document.createElementNS(SVG_NS, 'circle');
-      c.setAttribute('r', '2');
-      c.setAttribute('fill', '#ffffff');
-      c.setAttribute('opacity', '0');
-      g.appendChild(c);
-      this.sparkBranchPool.push(c);
+      const poolG = document.createElementNS(SVG_NS, 'g');
+      poolG.setAttribute('opacity', '0');
+      g.appendChild(poolG);
+      this.sparkBranchPool.push(poolG);
     }
   }
 
@@ -1673,7 +1731,7 @@ export class SvgRenderer implements FlowRenderer {
         m.shape.setAttribute('opacity', String(op.toFixed(3)));
 
         if (Math.random() < 0.008) {
-          this.spawnSparkBranch(dom, plen, m.progress, pt.x, pt.y, physics.direction, physics.durMs, m.baseR);
+          this.spawnSparkBranch(dom, plen, m.progress, pt.x, pt.y, physics.direction, physics.durMs, m.baseR, flow);
         }
       }
     }
@@ -1688,10 +1746,8 @@ export class SvgRenderer implements FlowRenderer {
     direction: number,
     durMs: number,
     mainRadiusPx: number,
+    flow: FlowConfig,
   ): void {
-    const pool = this.sparkBranchPool.find((c) => parseFloat(c.getAttribute('opacity') ?? '1') < 0.05);
-    if (!pool) return;
-
     const t0 = progress * plen;
     const dlt = Math.max(2, plen * 0.02);
     let pA: DOMPoint;
@@ -1710,10 +1766,26 @@ export class SvgRenderer implements FlowRenderer {
     const maxDist = 15 + Math.random() * 35;
     const fadeType: 'return' | 'fadeout' = Math.random() < 0.5 ? 'return' : 'fadeout';
 
-    pool.setAttribute('fill', '#ffffff');
-    pool.setAttribute('cx', String(cx));
-    pool.setAttribute('cy', String(cy));
-    pool.setAttribute('r', String(Math.max(1.2, mainRadiusPx * 0.7)));
+    const pool = this.sparkBranchPool.find((g) => parseFloat(g.getAttribute('opacity') ?? '1') < 0.05);
+    if (!pool) return;
+
+    while (pool.firstChild) pool.firstChild.remove();
+
+    const shapeKind = flow.animation?.particle_shape ?? 'circle';
+    const branchR = Math.max(1.2, mainRadiusPx * 0.7);
+    const inner = document.createElementNS(SVG_NS, 'g');
+    const { shape, alreadyAppended } = this.buildParticleShapeOnly(
+      dom,
+      shapeKind,
+      branchR,
+      '#FFFFFF',
+      flow,
+      shapeKind === 'custom_svg' ? inner : undefined,
+    );
+    if (!alreadyAppended) inner.appendChild(shape);
+    pool.appendChild(inner);
+
+    pool.setAttribute('transform', `translate(${cx},${cy})`);
     pool.setAttribute('opacity', '1');
 
     this.sparkBranchActive.push({
@@ -1771,8 +1843,7 @@ export class SvgRenderer implements FlowRenderer {
       br.x += Math.cos(br.angle) * br.speed * deltaMs;
       br.y += Math.sin(br.angle) * br.speed * deltaMs;
 
-      br.el.setAttribute('cx', String(br.x));
-      br.el.setAttribute('cy', String(br.y));
+      br.el.setAttribute('transform', `translate(${br.x.toFixed(2)},${br.y.toFixed(2)})`);
       br.el.setAttribute('opacity', String(Math.max(0, (1 - life) * 0.95).toFixed(3)));
       activeNext.push(br);
     }
@@ -1896,11 +1967,8 @@ export class SvgRenderer implements FlowRenderer {
         break;
       }
       case 'arrow': {
-        const lw = this.config?.defaults?.line_width ?? STROKE_WIDTH;
-        const chevW = lw * 4;
-        const chevH = r * 3;
         const pathEl = document.createElementNS(SVG_NS, 'path');
-        pathEl.setAttribute('d', boldChevronPath(chevW, chevH));
+        pathEl.setAttribute('d', chevronArrowPath(r));
         pathEl.setAttribute('fill', color);
         pathEl.setAttribute('opacity', '0');
         pathEl.setAttribute('data-kind', 'arrow');

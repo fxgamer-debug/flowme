@@ -875,7 +875,6 @@ export class FlowmeCardEditor extends LitElement {
             this.pushPatch(prev, next, `${isHidden ? 'show' : 'hide'} node ${node.id}`);
           }}
         >${isHidden ? '◉' : '◎'}</button>
-        ${node.node_effect ? html`<span class="node-effect-indicator" title=${t('editor.nodeEffect.active')}>✦</span>` : nothing}
       </div>
     `;
   }
@@ -1377,10 +1376,16 @@ export class FlowmeCardEditor extends LitElement {
             <circle cx="50" cy="50" r="12" fill="${accent}" opacity="0.9"/>
             ${[0, 1, 2].map(
               (i) => html`
-              <circle cx="50" cy="50" r="12" fill="none" stroke="${pc}" stroke-width="2" opacity="0">
-                <animate attributeName="r" values="12;44;12" dur="1.6s" repeatCount="indefinite" begin="${i * 0.45}s"/>
-                <animate attributeName="opacity" values="0.75;0;0.75" dur="1.6s" repeatCount="indefinite" begin="${i * 0.45}s"/>
-              </circle>`,
+              <circle
+                class="fm-pulse-ring-prv"
+                cx="50"
+                cy="50"
+                r="12"
+                fill="none"
+                stroke="${pc}"
+                stroke-width="2"
+                style=${`animation-delay: ${i * 0.45}s`}
+              />`,
             )}
           </svg>`;
       case 'glow': {
@@ -4384,14 +4389,20 @@ export class FlowmeCardEditor extends LitElement {
       overflow: visible;
       pointer-events: none;
     }
-    .node-effect-indicator {
-      position: absolute;
-      right: -4px;
-      top: -6px;
-      font-size: 11px;
-      line-height: 1;
-      opacity: 0.85;
-      pointer-events: none;
+    @keyframes fmPulsePreviewRing {
+      0% {
+        transform: scale(1);
+        opacity: 0.85;
+      }
+      100% {
+        transform: scale(3.6);
+        opacity: 0;
+      }
+    }
+    .fm-pulse-ring-prv {
+      transform-origin: 50px 50px;
+      transform-box: fill-box;
+      animation: fmPulsePreviewRing 1.6s ease-out infinite;
     }
     .inspector-details.node-effect-details {
       margin-top: 6px;
