@@ -5,6 +5,7 @@ import type {
   VisibilityConfig,
   DomainColors,
   NodeConfig,
+  NodeEffectConfig,
   FlowConfig,
   FlowAnimationConfig,
   AnimationConfig,
@@ -81,7 +82,64 @@ function validateNode(raw: unknown, idx: number, seenIds: Set<string>): NodeConf
     if (typeof n['visible'] !== 'boolean') fail(`${path}.visible`, t('validation.mustBeBoolean'));
     node.visible = n['visible'] as boolean;
   }
+  if (n['node_effect'] !== undefined) {
+    node.node_effect = validateNodeEffect(n['node_effect'], `${path}.node_effect`);
+  }
   return node;
+}
+
+function validateNodeEffect(raw: unknown, path: string): NodeEffectConfig {
+  if (!raw || typeof raw !== 'object') fail(path, t('validation.mustBeObject'));
+  const o = raw as Record<string, unknown>;
+  const typ = o['type'];
+  if (typ === 'pulse') {
+    return {
+      type: 'pulse',
+      ...(typeof o['pulse_count'] === 'number' ? { pulse_count: o['pulse_count'] as number } : {}),
+      ...(typeof o['pulse_duration'] === 'number' ? { pulse_duration: o['pulse_duration'] as number } : {}),
+      ...(typeof o['pulse_threshold'] === 'number' ? { pulse_threshold: o['pulse_threshold'] as number } : {}),
+      ...(typeof o['pulse_color'] === 'string' ? { pulse_color: o['pulse_color'] as string } : {}),
+    };
+  }
+  if (typ === 'glow') {
+    return {
+      type: 'glow',
+      ...(typeof o['glow_color'] === 'string' ? { glow_color: o['glow_color'] as string } : {}),
+      ...(typeof o['glow_max_radius'] === 'number' ? { glow_max_radius: o['glow_max_radius'] as number } : {}),
+      ...(typeof o['peak_value'] === 'number' ? { peak_value: o['peak_value'] as number } : {}),
+    };
+  }
+  if (typ === 'badge') {
+    return {
+      type: 'badge',
+      ...(typeof o['badge_color_on'] === 'string' ? { badge_color_on: o['badge_color_on'] as string } : {}),
+      ...(typeof o['badge_color_off'] === 'string' ? { badge_color_off: o['badge_color_off'] as string } : {}),
+      ...(o['threshold'] === null ? { threshold: null } : typeof o['threshold'] === 'number' ? { threshold: o['threshold'] as number } : {}),
+    };
+  }
+  if (typ === 'ripple') {
+    return {
+      type: 'ripple',
+      ...(typeof o['ripple_color'] === 'string' ? { ripple_color: o['ripple_color'] as string } : {}),
+      ...(typeof o['ripple_duration'] === 'number' ? { ripple_duration: o['ripple_duration'] as number } : {}),
+      ...(typeof o['ripple_threshold'] === 'number' ? { ripple_threshold: o['ripple_threshold'] as number } : {}),
+    };
+  }
+  if (typ === 'alert') {
+    const cond = o['alert_condition'];
+    if (cond !== undefined && cond !== 'above' && cond !== 'below') {
+      fail(`${path}.alert_condition`, t('validation.mustBeString'));
+    }
+    return {
+      type: 'alert',
+      ...(typeof o['alert_threshold'] === 'number' ? { alert_threshold: o['alert_threshold'] as number } : {}),
+      ...(cond === 'above' || cond === 'below' ? { alert_condition: cond } : {}),
+      ...(typeof o['alert_color'] === 'string' ? { alert_color: o['alert_color'] as string } : {}),
+      ...(typeof o['alert_frequency'] === 'number' ? { alert_frequency: o['alert_frequency'] as number } : {}),
+      ...(typeof o['alert_hysteresis'] === 'number' ? { alert_hysteresis: o['alert_hysteresis'] as number } : {}),
+    };
+  }
+  fail(`${path}.type`, t('validation.invalidNodeEffectType'));
 }
 
 function validateFlow(

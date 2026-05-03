@@ -21,6 +21,56 @@ export interface NodePosition {
   y: number;
 }
 
+/** Visual animation at a node position (v1.23.1+). Requires `entity`. */
+export type NodeEffectType = 'pulse' | 'glow' | 'badge' | 'ripple' | 'alert';
+
+export interface NodeEffectPulse {
+  type: 'pulse';
+  pulse_count?: number;
+  pulse_duration?: number;
+  /** Relative change (e.g. 0.1 = 10%) that triggers a pulse burst */
+  pulse_threshold?: number;
+  pulse_color?: string;
+}
+
+export interface NodeEffectGlow {
+  type: 'glow';
+  glow_color?: string;
+  glow_max_radius?: number;
+  peak_value?: number;
+}
+
+export interface NodeEffectBadge {
+  type: 'badge';
+  badge_color_on?: string;
+  badge_color_off?: string;
+  /** Numeric threshold for on/off; omit for binary sensor string states */
+  threshold?: number | null;
+}
+
+export interface NodeEffectRipple {
+  type: 'ripple';
+  ripple_color?: string;
+  ripple_duration?: number;
+  ripple_threshold?: number;
+}
+
+export interface NodeEffectAlert {
+  type: 'alert';
+  alert_threshold?: number;
+  alert_condition?: 'above' | 'below';
+  alert_color?: string;
+  alert_frequency?: number;
+  alert_hysteresis?: number;
+}
+
+export type NodeEffectConfig =
+  | NodeEffectPulse
+  | NodeEffectGlow
+  | NodeEffectBadge
+  | NodeEffectRipple
+  | NodeEffectAlert;
+
 export interface NodeConfig {
   id: string;
   position: NodePosition;
@@ -40,6 +90,8 @@ export interface NodeConfig {
    * v1.0.11+.
    */
   visible?: boolean;
+  /** Optional ambient animation at the node (requires entity). v1.23.1+. */
+  node_effect?: NodeEffectConfig;
 }
 
 /**

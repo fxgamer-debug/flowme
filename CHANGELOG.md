@@ -2,6 +2,20 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.1] — Animation styles and node effects
+
+### Added
+
+- **Node effects** (`nodes[].node_effect`): optional SVG overlays at each node — `pulse`, `glow`, `badge`, `ripple`, and `alert`, with type-specific options. Rendered in a dedicated layer above flows; editor includes a **Node effect** inspector section and canvas preview.
+
+### Fixed
+
+- **Arrow / chevron**: Bold filled chevron markers aligned to path tangent; spacing scales with `particle_count`.
+- **Trail**: Head uses `particle_shape`; tail segments follow along the path with staged opacity and size.
+- **Fluid**: Full-path animated gradient stroke along the flow direction (no discrete particles); `particle_shape` is ignored for this style — noted in the editor.
+- **Spark**: Variable particle appearance with optional branch sparks; distinct from dot style.
+- **Teardrop**: Proper teardrop path rotated with flow direction.
+
 ## [1.23.0] — Animation quality pass
 
 ### Changed

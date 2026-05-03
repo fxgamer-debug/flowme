@@ -53,6 +53,37 @@ const BURST_MAX_PARTICLES = 20;
 const SHIMMER_SPEED_FACTOR = 0.2;
 const SHIMMER_OPACITY = 0.3;
 
+/** Bold road-marking chevron (local coords, tip toward +X). `w` ≈ line_width×4, `h` ≈ dot_radius×3 */
+function boldChevronPath(w: number, h: number): string {
+  const hh = h / 2;
+  const tip = w * 0.52;
+  const nd = h * 0.4;
+  return [
+    `M ${tip} 0`,
+    `L ${w * 0.06} ${hh}`,
+    `L ${-w * 0.36} ${hh}`,
+    `L ${-w * 0.48} ${nd * 0.4}`,
+    `L ${-w * 0.52} 0`,
+    `L ${-w * 0.48} ${-nd * 0.4}`,
+    `L ${-w * 0.36} ${-hh}`,
+    `L ${w * 0.06} ${-hh}`,
+    'Z',
+  ].join(' ');
+}
+
+function teardropShapePath(r: number): string {
+  return [
+    `M 0,-${r * 2.5}`,
+    `C ${r * 1.2},-${r * 1.5} ${r * 1.2},${r * 0.5} 0,${r}`,
+    `C -${r * 1.2},${r * 0.5} -${r * 1.2},-${r * 1.5} 0,-${r * 2.5}`,
+    'Z',
+  ].join(' ');
+}
+
+const TRAIL_TAIL_DIST_PX = [8, 16, 24, 32];
+const TRAIL_TAIL_SCALE = [0.9, 0.75, 0.6, 0.4];
+const TRAIL_TAIL_OPACITY = [0.8, 0.55, 0.35, 0.15];
+
 type AnimStyle = NonNullable<FlowAnimationConfig['animation_style']>;
 type ParticleKind = NonNullable<FlowAnimationConfig['particle_shape']>;
 
@@ -61,6 +92,23 @@ interface ParticleDom {
   animateMotion: SVGAnimateMotionElement;
   /** Flicker animation element (added when flicker:true) */
   flickerAnim?: SVGAnimateElement;
+  /** trail style: extra motion elements for tail segments (parallel to head) */
+  trailMotions?: SVGAnimateMotionElement[];
+}
+
+interface SparkBranch {
+  el: SVGCircleElement;
+  flowId: string;
+  startMs: number;
+  durationMs: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** return to path vs fade out */
+  phase: 'out' | 'return';
+  opacity: number;
+  returnTgt: { x: number; y: number } | null;
 }
 
 interface FlowDomNodes {
@@ -132,6 +180,11 @@ export class SvgRenderer implements FlowRenderer {
   /** When true, all flows render as static lines (OS reduced-motion preference). */
   private prefersReducedMotionFlag = false;
 
+  /** Spark branch overlay + pool (max 20) */
+  private sparkBranchesRoot: SVGGElement | null = null;
+  private sparkBranchPool: SVGCircleElement[] = [];
+  private sparkBranchActive: SparkBranch[] = [];
+
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
     this.container = container;
@@ -150,6 +203,7 @@ export class SvgRenderer implements FlowRenderer {
     this.svg = svg;
     container.appendChild(svg);
 
+    this.initSparkBranchLayer();
     this.buildSkeleton();
     this.resizeObserver = new ResizeObserver(() => this.onResize());
     this.resizeObserver.observe(container);
@@ -203,6 +257,7 @@ export class SvgRenderer implements FlowRenderer {
         // wave_spacing / pulse: recompute begin= offsets from elapsed time
         this.updateTimeBasedSpacing(now);
       }
+      this.updateSparkBranches(now);
       this.rafHandle = requestAnimationFrame(loop);
     };
 
@@ -1206,8 +1261,7 @@ export class SvgRenderer implements FlowRenderer {
   }
 
   /**
-   * trail — particles with a fading tail (gradient-filled elongated shape).
-   * trail_length controls how long the tail is relative to particle_size.
+   * trail — head uses particle_shape; four tail segments follow along path with staggered begins.
    */
   private applyTrail(
     dom: FlowDomNodes,
@@ -1222,25 +1276,37 @@ export class SvgRenderer implements FlowRenderer {
     const burstMax = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
     const desired = Math.min(burstMax, Math.max(1, Math.round(baseCount * burstMultiplier)));
     const flicker = flow.animation?.flicker === true;
+    const kind = flow.animation?.particle_shape ?? 'circle';
 
-    if (dom.particles.length !== desired) {
+    const firstOk =
+      dom.particles.length === desired &&
+      dom.particles[0]?.shape.hasAttribute('data-trail-pack') &&
+      dom.particles[0]?.shape.getAttribute('data-head-kind') === kind;
+
+    if (!firstOk) {
       for (const p of dom.particles) p.shape.remove();
       dom.particles = [];
       for (let i = 0; i < desired; i++) {
-        dom.particles.push(this.makeParticle(dom, 'teardrop', color, flow, profile));
+        dom.particles.push(this.makeTrailParticle(dom, flow, profile, color, kind));
       }
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    const durS = durMs / 1000;
     const trailBegins = this.resolveParticleBegins(flow.id, desired, durMs, flow.animation ?? {});
-    for (let i = 0; i < dom.particles.length; i++) {
-      const p = dom.particles[i]!;
-      this.updateParticleColor(p, color, flow, profile, flicker);
+    let plen = 100;
+    try {
+      plen = Math.max(1, dom.path.getTotalLength());
+    } catch {
+      plen = 100;
+    }
+
+    const installMotion = (mo: SVGAnimateMotionElement, beginS: number): SVGAnimateMotionElement => {
       const fresh = document.createElementNS(SVG_NS, 'animateMotion');
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
       fresh.setAttribute('rotate', 'auto');
-      fresh.setAttribute('begin', `${(trailBegins[i] ?? 0).toFixed(3)}s`);
+      fresh.setAttribute('begin', `${beginS.toFixed(4)}s`);
       if (direction < 0) {
         fresh.setAttribute('keyPoints', '1;0');
         fresh.setAttribute('keyTimes', '0;1');
@@ -1249,15 +1315,29 @@ export class SvgRenderer implements FlowRenderer {
       mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
       mpath.setAttribute('href', `#${dom.pathId}`);
       fresh.appendChild(mpath);
-      p.animateMotion.replaceWith(fresh);
-      p.animateMotion = fresh;
-      p.shape.appendChild(fresh);
+      mo.replaceWith(fresh);
+      return fresh;
+    };
+
+    for (let i = 0; i < dom.particles.length; i++) {
+      const p = dom.particles[i]!;
+      this.updateParticleColor(p, color, flow, profile, flicker);
+      const headBegin = trailBegins[i] ?? 0;
+
+      const tails = p.trailMotions;
+      if (tails && tails.length === 4) {
+        for (let k = 0; k < 4; k++) {
+          const dist = TRAIL_TAIL_DIST_PX[k]!;
+          const tb = headBegin - (dist / plen) * durS;
+          tails[k] = installMotion(tails[k]!, tb);
+        }
+      }
+      p.animateMotion = installMotion(p.animateMotion, headBegin);
     }
   }
 
   /**
-   * fluid — continuous gradient flowing along the line.
-   * Implemented as an animated stroke-dashoffset on a wide stroke.
+   * fluid — animated linear gradient along full path (v1.23.1).
    */
   private applyFluid(
     dom: FlowDomNodes,
@@ -1269,39 +1349,106 @@ export class SvgRenderer implements FlowRenderer {
     for (const p of dom.particles) p.shape.remove();
     dom.particles = [];
 
+    if (!this.svg) return;
+    const defs = this.svg.querySelector('defs');
+    if (!defs) return;
+
+    const nodesById = new Map(this.config!.nodes.map((n) => [n.id, n]));
+    const from = nodesById.get(flow.from_node);
+    const to = nodesById.get(flow.to_node);
+    const size = this.containerSize();
+    if (!from || !to) return;
+
     if (!dom.lineStroke) {
       const stroke = document.createElementNS(SVG_NS, 'use');
       stroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
       stroke.setAttribute('href', `#${dom.pathId}`);
       stroke.setAttribute('fill', 'none');
       stroke.setAttribute('stroke-linecap', 'round');
+      stroke.setAttribute('stroke-linejoin', 'round');
       dom.group.appendChild(stroke);
       dom.lineStroke = stroke;
     }
 
+    const safeFlow = flow.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const gradId = `fluid-grad-${safeFlow}`;
+    let grad = this.svg.getElementById(gradId) as SVGLinearGradientElement | null;
+    if (!grad) {
+      grad = document.createElementNS(SVG_NS, 'linearGradient');
+      grad.setAttribute('id', gradId);
+      defs.appendChild(grad);
+    }
+    dom.fluidGradient = grad;
+
+    const p0 = percentToPixel(from.position, size);
+    const p1 = percentToPixel(to.position, size);
+    grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+    grad.setAttribute('x1', String(p0.x));
+    grad.setAttribute('y1', String(p0.y));
+    grad.setAttribute('x2', String(p1.x));
+    grad.setAttribute('y2', String(p1.y));
+
+    while (grad.firstChild) grad.firstChild.remove();
+
+    const stops: Array<[string, string, string]> = [
+      ['0%', color, '0'],
+      ['30%', color, '0.3'],
+      ['50%', color, '1'],
+      ['70%', color, '0.3'],
+      ['100%', color, '0'],
+    ];
+    for (const [off, col, op] of stops) {
+      const s = document.createElementNS(SVG_NS, 'stop');
+      s.setAttribute('offset', off);
+      s.setAttribute('stop-color', col);
+      s.setAttribute('stop-opacity', op);
+      grad.appendChild(s);
+    }
+
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const pl = Math.hypot(dx, dy) || 1;
+    const ux = dx / pl;
+    const uy = dy / pl;
+    const sweep = Math.max(pl * 0.55, 48);
+    const tx = ux * sweep;
+    const ty = uy * sweep;
+
+    const anim = document.createElementNS(SVG_NS, 'animateTransform');
+    anim.setAttribute('attributeName', 'gradientTransform');
+    anim.setAttribute('type', 'translate');
+    anim.setAttribute('additive', 'replace');
+    anim.setAttribute('dur', `${(durMs / 1000).toFixed(3)}s`);
+    anim.setAttribute('repeatCount', 'indefinite');
+    if (direction >= 0) {
+      anim.setAttribute('values', `${-tx},${-ty}; ${tx},${ty}; ${-tx},${-ty}`);
+    } else {
+      anim.setAttribute('values', `${tx},${ty}; ${-tx},${-ty}; ${tx},${ty}`);
+    }
+    anim.setAttribute('keyTimes', '0;0.5;1');
+    anim.setAttribute('calcMode', 'spline');
+    anim.setAttribute('keySplines', '0.42 0 0.58 1;0.42 0 0.58 1');
+    grad.appendChild(anim);
+
     const strokeWidth = (this.config?.defaults?.line_width ?? STROKE_WIDTH) * 3;
     const glowFilter = this.glowFilter(flow, this.profileFor(flow), color);
 
-    dom.lineStroke.setAttribute('stroke', color);
+    dom.lineStroke.setAttribute('stroke', `url(#${gradId})`);
     dom.lineStroke.setAttribute('stroke-width', String(strokeWidth));
-    // large dash+gap so only one segment visible at a time for the "wave" look
-    dom.lineStroke.setAttribute('stroke-dasharray', '50 200');
+    dom.lineStroke.removeAttribute('stroke-dasharray');
     if (glowFilter) dom.lineStroke.setAttribute('filter', glowFilter);
+  }
 
-    const existing = dom.lineStroke.querySelector('animate');
-    if (existing) existing.remove();
-    const anim = document.createElementNS(SVG_NS, 'animate');
-    anim.setAttribute('attributeName', 'stroke-dashoffset');
-    anim.setAttribute('from', direction > 0 ? '0' : '-250');
-    anim.setAttribute('to', direction > 0 ? '-250' : '0');
-    anim.setAttribute('dur', `${(durMs / 1000).toFixed(3)}s`);
-    anim.setAttribute('repeatCount', 'indefinite');
-    dom.lineStroke.appendChild(anim);
+  /** Stable pseudo-random in [0,1) for spark particles */
+  private sparkUnit(flowId: string, i: number, salt: number): number {
+    let h = salt;
+    const s = `${flowId}:${i}`;
+    for (let k = 0; k < s.length; k++) h = Math.imul(31, h) + s.charCodeAt(k);
+    return Math.abs(Math.sin(h)) % 1;
   }
 
   /**
-   * spark — particles with randomised size/opacity, slight scatter.
-   * Scatter is achieved via SVG transform on each particle's <g> wrapper.
+   * spark — bright core, glow, stable random size/opacity; branches via sparkBranch pool.
    */
   private applySpark(
     dom: FlowDomNodes,
@@ -1314,9 +1461,8 @@ export class SvgRenderer implements FlowRenderer {
     burstMultiplier: number,
   ): void {
     const baseCount = this.resolveParticleCount(flow, profile, value, burstMultiplier);
-    // burst: dramatically more particles
     const desired = Math.min(
-      (this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES),
+      this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES,
       Math.round(baseCount * burstMultiplier),
     );
     const shape = flow.animation?.particle_shape ?? 'circle';
@@ -1327,26 +1473,42 @@ export class SvgRenderer implements FlowRenderer {
       dom.particles = [];
       for (let i = 0; i < desired; i++) {
         const p = this.makeParticle(dom, shape, color, flow, profile);
-        // randomise size ±30%
-        const scale = 0.7 + Math.random() * 0.6;
-        p.shape.setAttribute('transform', `scale(${scale.toFixed(2)})`);
+        p.shape.setAttribute('data-spark-core', '1');
+        const su = this.sparkUnit(flow.id, i, 1);
+        const scale = 0.5 + su * 1.0;
+        p.shape.setAttribute('transform', `scale(${scale.toFixed(3)})`);
+        p.shape.setAttribute('fill', '#ffffff');
+        p.shape.setAttribute(
+          'filter',
+          `drop-shadow(0 0 ${(3 + this.sparkUnit(flow.id, i, 2) * 4).toFixed(1)}px ${color})`,
+        );
         dom.particles.push(p);
       }
     }
 
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
+    const n = Math.max(1, dom.particles.length);
+    const uneven = flow.animation?.particle_spacing === 'random';
     for (let i = 0; i < dom.particles.length; i++) {
       const p = dom.particles[i]!;
-      // randomised opacity 0.5–1.0
-      const baseOpacity = 0.5 + Math.random() * 0.5;
-      p.shape.setAttribute('opacity', String(baseOpacity.toFixed(2)));
+      const su = this.sparkUnit(flow.id, i, 3);
+      const baseOpacity = 0.4 + su * 0.6;
+      p.shape.setAttribute('opacity', String(baseOpacity.toFixed(3)));
       this.updateParticleColor(p, color, flow, profile, flicker);
+      p.shape.setAttribute('fill', '#ffffff');
+      p.shape.setAttribute(
+        'filter',
+        `drop-shadow(0 0 ${(3 + this.sparkUnit(flow.id, i, 2) * 4).toFixed(1)}px ${color})`,
+      );
+
+      let beginOff = (-durMs * i) / (n * 1000);
+      if (uneven) beginOff += (this.sparkUnit(flow.id, i, 4) - 0.5) * (durMs / 1000) * 0.15;
 
       const fresh = document.createElementNS(SVG_NS, 'animateMotion');
       fresh.setAttribute('repeatCount', 'indefinite');
       fresh.setAttribute('dur', durStr);
       fresh.setAttribute('rotate', 'auto');
-      fresh.setAttribute('begin', `${((-durMs * i) / (dom.particles.length * 1000)).toFixed(3)}s`);
+      fresh.setAttribute('begin', `${beginOff.toFixed(4)}s`);
       if (direction < 0) {
         fresh.setAttribute('keyPoints', '1;0');
         fresh.setAttribute('keyTimes', '0;1');
@@ -1359,14 +1521,185 @@ export class SvgRenderer implements FlowRenderer {
       p.animateMotion = fresh;
       p.shape.appendChild(fresh);
     }
-    // suppress the unused variable lint error
     void value;
+  }
+
+  private initSparkBranchLayer(): void {
+    if (!this.svg) return;
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', 'flowme-spark-branches');
+    g.setAttribute('pointer-events', 'none');
+    this.svg.appendChild(g);
+    this.sparkBranchesRoot = g;
+    for (let i = 0; i < 20; i++) {
+      const c = document.createElementNS(SVG_NS, 'circle');
+      c.setAttribute('r', '2');
+      c.setAttribute('fill', '#ffffff');
+      c.setAttribute('opacity', '0');
+      g.appendChild(c);
+      this.sparkBranchPool.push(c);
+    }
+  }
+
+  private updateSparkBranches(nowMs: number): void {
+    const root = this.sparkBranchesRoot;
+    if (!root || !this.config) return;
+
+    const activeNext: SparkBranch[] = [];
+
+    for (const br of this.sparkBranchActive) {
+      const age = nowMs - br.startMs;
+      const t = age / br.durationMs;
+      if (t >= 1) {
+        br.el.setAttribute('opacity', '0');
+        continue;
+      }
+      br.opacity = 1 - t;
+      const ret = br.returnTgt;
+      if (br.phase === 'return' && ret) {
+        br.x += (ret.x - br.x) * 0.12;
+        br.y += (ret.y - br.y) * 0.12;
+      } else {
+        br.x += br.vx * 0.35;
+        br.y += br.vy * 0.35;
+      }
+      br.el.setAttribute('cx', String(br.x));
+      br.el.setAttribute('cy', String(br.y));
+      br.el.setAttribute('opacity', String((0.35 + 0.65 * br.opacity).toFixed(3)));
+      activeNext.push(br);
+    }
+    this.sparkBranchActive = activeNext;
+
+    if (Math.random() > 0.004) return;
+
+    const sparkFlows = this.config.flows.filter((f) => this.animStyle(f) === 'spark');
+    if (sparkFlows.length === 0) return;
+    const flow = sparkFlows[Math.floor(Math.random() * sparkFlows.length)]!;
+    const dom = this.flowNodes.get(flow.id);
+    if (!dom) return;
+
+    let plen = 100;
+    try {
+      plen = Math.max(10, dom.path.getTotalLength());
+    } catch {
+      return;
+    }
+    const pos = 0.15 + Math.random() * 0.7;
+    let pt: DOMPoint;
+    try {
+      pt = dom.path.getPointAtLength(pos * plen);
+    } catch {
+      return;
+    }
+    const delta = Math.max(2, plen * 0.02);
+    let ang = 0;
+    try {
+      const p2 = dom.path.getPointAtLength(Math.min(plen, pos * plen + delta));
+      ang = Math.atan2(p2.y - pt.y, p2.x - pt.x);
+    } catch {
+      ang = 0;
+    }
+    const spread = ((20 + Math.random() * 20) * Math.PI) / 180;
+    const branchAng = ang + (Math.random() < 0.5 ? -spread : spread);
+    const vx = Math.cos(branchAng) * 2.2;
+    const vy = Math.sin(branchAng) * 2.2;
+
+    const pool = this.sparkBranchPool.find((c) => parseFloat(c.getAttribute('opacity') ?? '1') < 0.05);
+    if (!pool) return;
+
+    pool.setAttribute('opacity', '0.9');
+    pool.setAttribute('cx', String(pt.x));
+    pool.setAttribute('cy', String(pt.y));
+    pool.setAttribute('r', String(1.2 + Math.random() * 0.8));
+
+    const returnPath = Math.random() < 0.5;
+    this.sparkBranchActive.push({
+      el: pool,
+      flowId: flow.id,
+      startMs: nowMs,
+      durationMs: 200 + Math.random() * 200,
+      x: pt.x,
+      y: pt.y,
+      vx,
+      vy,
+      phase: returnPath ? 'return' : 'out',
+      opacity: 1,
+      returnTgt: returnPath ? { x: pt.x, y: pt.y } : null,
+    });
+  }
+
+  private makeTrailParticle(
+    dom: FlowDomNodes,
+    flow: FlowConfig,
+    profile: FlowProfile,
+    color: string,
+    kind: ParticleKind,
+  ): ParticleDom {
+    const r = this.resolveParticleRadius(flow);
+    const glow = this.resolveGlow(flow, profile);
+    const tailKind: ParticleKind = kind === 'custom_svg' ? 'circle' : kind;
+
+    const pack = document.createElementNS(SVG_NS, 'g');
+    pack.setAttribute('data-trail-pack', '1');
+    pack.setAttribute('data-head-kind', kind);
+
+    const tailMotions: SVGAnimateMotionElement[] = [];
+    const tailGroups: SVGGElement[] = [];
+
+    for (let k = 0; k < 4; k++) {
+      const sg = document.createElementNS(SVG_NS, 'g');
+      const { shape: geom } = this.buildParticleShapeOnly(dom, tailKind, r * TRAIL_TAIL_SCALE[k]!, color, flow);
+      if (glow) geom.setAttribute('filter', this.glowFilter(flow, profile, color));
+      geom.setAttribute('opacity', String(TRAIL_TAIL_OPACITY[k]));
+      sg.appendChild(geom);
+      const motion = document.createElementNS(SVG_NS, 'animateMotion');
+      motion.setAttribute('repeatCount', 'indefinite');
+      motion.setAttribute('dur', '2s');
+      motion.setAttribute('rotate', 'auto');
+      const mpath = document.createElementNS(SVG_NS, 'mpath');
+      mpath.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
+      mpath.setAttribute('href', `#${dom.pathId}`);
+      motion.appendChild(mpath);
+      sg.appendChild(motion);
+      tailGroups.push(sg);
+      tailMotions.push(motion);
+    }
+    for (let k = 3; k >= 0; k--) pack.appendChild(tailGroups[k]!);
+
+    const hg = document.createElementNS(SVG_NS, 'g');
+    let headGeom: SVGGraphicsElement;
+    if (kind === 'custom_svg') {
+      const o = this.buildParticleShapeOnly(dom, kind, r, color, flow, hg);
+      headGeom = o.shape;
+    } else {
+      const o = this.buildParticleShapeOnly(dom, kind, r, color, flow);
+      headGeom = o.shape;
+      hg.appendChild(headGeom);
+    }
+    if (glow) headGeom.setAttribute('filter', this.glowFilter(flow, profile, color));
+    const headMotion = document.createElementNS(SVG_NS, 'animateMotion');
+    headMotion.setAttribute('repeatCount', 'indefinite');
+    headMotion.setAttribute('dur', '2s');
+    headMotion.setAttribute('rotate', 'auto');
+    const hmp = document.createElementNS(SVG_NS, 'mpath');
+    hmp.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
+    hmp.setAttribute('href', `#${dom.pathId}`);
+    headMotion.appendChild(hmp);
+    hg.appendChild(headMotion);
+    pack.appendChild(hg);
+
+    dom.group.appendChild(pack);
+
+    return { shape: pack, animateMotion: headMotion, trailMotions: tailMotions };
   }
 
   // ── particle shape factories ──────────────────────────────────────────────
 
   private particleKind(p: ParticleDom): ParticleKind {
     const tag = p.shape.tagName.toLowerCase();
+    if (tag === 'g' && p.shape.hasAttribute('data-trail-pack')) {
+      return (p.shape.getAttribute('data-head-kind') as ParticleKind) ?? 'circle';
+    }
     if (tag === 'circle') return 'circle';
     if (tag === 'rect') return 'square';
     if (tag === 'polygon') {
@@ -1374,19 +1707,25 @@ export class SvgRenderer implements FlowRenderer {
       return (p.shape.getAttribute('data-kind') as ParticleKind | null) ?? 'arrow';
     }
     if (tag === 'ellipse') return 'teardrop';
-    if (tag === 'path') return (p.shape.getAttribute('data-kind') as ParticleKind | null) ?? 'custom_svg';
+    if (tag === 'path') {
+      const dk = p.shape.getAttribute('data-kind') as ParticleKind | null;
+      return dk ?? 'custom_svg';
+    }
     return 'circle';
   }
 
-  private makeParticle(
+  /**
+   * Geometry only — used by dots/arrow/spark and trail head/tail segments.
+   */
+  private buildParticleShapeOnly(
     dom: FlowDomNodes,
     kind: ParticleKind,
+    r: number,
     color: string,
     flow: FlowConfig,
-    profile: FlowProfile,
-  ): ParticleDom {
-    const r = this.resolveParticleRadius(flow);
-    const glow = this.resolveGlow(flow, profile);
+    /** When set, custom_svg path is appended here instead of dom.group (trail head). */
+    customSvgMount?: SVGGElement,
+  ): { shape: SVGGraphicsElement; alreadyAppended: boolean } {
     let shape: SVGGraphicsElement;
     let alreadyAppended = false;
 
@@ -1405,28 +1744,24 @@ export class SvgRenderer implements FlowRenderer {
         break;
       }
       case 'arrow': {
-        // Chevron pointing right (animateMotion rotate:auto will orient it)
-        const w = r * 2.2;
-        const h = r * 1.5;
-        const poly = document.createElementNS(SVG_NS, 'polygon');
-        poly.setAttribute('points', `${w},0 ${-w * 0.4},${h} 0,0 ${-w * 0.4},${-h}`);
-        poly.setAttribute('fill', color);
-        poly.setAttribute('opacity', '0');
-        poly.setAttribute('data-kind', 'arrow');
-        shape = poly;
+        const lw = this.config?.defaults?.line_width ?? STROKE_WIDTH;
+        const chevW = lw * 4;
+        const chevH = r * 3;
+        const pathEl = document.createElementNS(SVG_NS, 'path');
+        pathEl.setAttribute('d', boldChevronPath(chevW, chevH));
+        pathEl.setAttribute('fill', color);
+        pathEl.setAttribute('opacity', '0');
+        pathEl.setAttribute('data-kind', 'arrow');
+        shape = pathEl;
         break;
       }
       case 'teardrop': {
-        const trailLength = flow.animation?.trail_length ?? 2.0;
-        const rx = r;
-        const ry = r * trailLength;
-        const ellipse = document.createElementNS(SVG_NS, 'ellipse');
-        ellipse.setAttribute('rx', String(rx));
-        ellipse.setAttribute('ry', String(ry));
-        ellipse.setAttribute('cy', String(-ry * 0.3));
-        ellipse.setAttribute('fill', color);
-        ellipse.setAttribute('opacity', '0');
-        shape = ellipse;
+        const pathEl = document.createElementNS(SVG_NS, 'path');
+        pathEl.setAttribute('d', teardropShapePath(r));
+        pathEl.setAttribute('fill', color);
+        pathEl.setAttribute('opacity', '0');
+        pathEl.setAttribute('data-kind', 'teardrop');
+        shape = pathEl;
         break;
       }
       case 'diamond': {
@@ -1455,20 +1790,19 @@ export class SvgRenderer implements FlowRenderer {
         pathEl.setAttribute('fill', color);
         pathEl.setAttribute('opacity', '0');
         pathEl.setAttribute('data-kind', 'custom_svg');
-        // Append to group first so getBBox() works in a real SVG context
-        dom.group.appendChild(pathEl);
+        const mount = customSvgMount ?? dom.group;
+        mount.appendChild(pathEl);
         alreadyAppended = true;
         try {
           const bbox = (pathEl as SVGGraphicsElement).getBBox();
           const maxDim = Math.max(bbox.width, bbox.height, 1);
           const targetSize = r * 2;
           const scale = targetSize / maxDim;
-          // Translate to centre the path on origin, then scale to fit
           const tx = -(bbox.x + bbox.width / 2);
           const ty = -(bbox.y + bbox.height / 2);
           pathEl.setAttribute('transform', `scale(${scale.toFixed(4)}) translate(${tx.toFixed(4)},${ty.toFixed(4)})`);
         } catch {
-          // getBBox() can fail in JSDOM/SSR — skip scaling
+          /* getBBox unavailable */
         }
         shape = pathEl as unknown as SVGGraphicsElement;
         break;
@@ -1481,6 +1815,19 @@ export class SvgRenderer implements FlowRenderer {
         shape = circle;
       }
     }
+    return { shape, alreadyAppended };
+  }
+
+  private makeParticle(
+    dom: FlowDomNodes,
+    kind: ParticleKind,
+    color: string,
+    flow: FlowConfig,
+    profile: FlowProfile,
+  ): ParticleDom {
+    const r = this.resolveParticleRadius(flow);
+    const glow = this.resolveGlow(flow, profile);
+    const { shape, alreadyAppended } = this.buildParticleShapeOnly(dom, kind, r, color, flow);
 
     if (glow) {
       shape.setAttribute('filter', this.glowFilter(flow, profile, color));
@@ -1506,16 +1853,25 @@ export class SvgRenderer implements FlowRenderer {
     profile: FlowProfile,
     flicker: boolean,
   ): void {
-    p.shape.setAttribute('fill', color);
+    if (p.shape.hasAttribute('data-trail-pack')) {
+      p.shape.querySelectorAll('path, circle, rect, ellipse, polygon').forEach((el) => {
+        el.setAttribute('fill', color);
+      });
+    } else if (!p.shape.hasAttribute('data-spark-core')) {
+      p.shape.setAttribute('fill', color);
+    }
     (p.shape as unknown as HTMLElement).style.color = color;
     const glow = this.resolveGlow(flow, profile);
-    if (glow) p.shape.setAttribute('filter', this.glowFilter(flow, profile, color));
+    if (glow && !p.shape.hasAttribute('data-spark-core')) {
+      p.shape.setAttribute('filter', this.glowFilter(flow, profile, color));
+    }
 
-    // base opacity — visible
     const baseOp = '1';
-    p.shape.setAttribute('opacity', baseOp);
+    if (!p.shape.hasAttribute('data-trail-pack') && !p.shape.hasAttribute('data-spark-core')) {
+      p.shape.setAttribute('opacity', baseOp);
+    }
 
-    if (flicker) {
+    if (flicker && !p.shape.hasAttribute('data-trail-pack') && !p.shape.hasAttribute('data-spark-core')) {
       // Add/update a <animate> on opacity for flicker effect
       if (!p.flickerAnim) {
         const fa = document.createElementNS(SVG_NS, 'animate');

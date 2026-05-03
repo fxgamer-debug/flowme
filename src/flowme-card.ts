@@ -23,9 +23,10 @@ import type { FlowmeCustomOverlay } from './overlays/custom-overlay.js';
 import './overlays/custom-overlay.js';
 import { dlog, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
+import { NodeEffectsLayerController } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.0';
+const CARD_VERSION = '1.23.1';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -197,6 +198,8 @@ export class FlowmeCard extends LitElement {
 
   private renderer: FlowRenderer | null = null;
   private readonly rendererMount: Ref<HTMLDivElement> = createRef();
+  private readonly nodeFxSvgRef: Ref<SVGSVGElement> = createRef();
+  private readonly nodeFx = new NodeEffectsLayerController();
   private rendererReadyFor?: FlowmeConfig;
 
   /**
@@ -255,6 +258,7 @@ export class FlowmeCard extends LitElement {
 
   override disconnectedCallback(): void {
     this.bindHaConnection(undefined);
+    this.nodeFx.reset();
     this.teardownRenderer();
     if (this.transitionTimer !== null) {
       window.clearTimeout(this.transitionTimer);
@@ -306,6 +310,17 @@ export class FlowmeCard extends LitElement {
 
     if (changed.has('config') || changed.has('hass')) {
       this.syncWeatherBackground();
+    }
+  }
+
+  override updated(changed: PropertyValues): void {
+    super.updated(changed);
+    if (this.config) {
+      this.nodeFx.prunePulseState(new Set(this.config.nodes.map((n) => n.id)));
+    }
+    const svg = this.nodeFxSvgRef.value;
+    if (svg && this.config) {
+      this.nodeFx.sync(svg, this.config, this.hass, performance.now());
     }
   }
 
@@ -535,6 +550,12 @@ export class FlowmeCard extends LitElement {
             style=${this.buildLayerStyle(this.bgLayerB, transitionMs)}
           ></div>
           <div class="renderer-mount" ${ref(this.rendererMount)}></div>
+          <svg
+            class="node-effects-svg"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            ${ref(this.nodeFxSvgRef)}
+          ></svg>
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
           ${(config.overlays ?? []).map((o) => {
             dlog('rendering overlay →', o.type, 'position=', o.position, 'size=', o.size);
@@ -713,10 +734,15 @@ export class FlowmeCard extends LitElement {
         aria-label=${this.formatNodeAriaLabel(node)}
         style=${`left: ${node.position.x}%; top: ${node.position.y}%; --flowme-dot-size: ${size}px;${node.opacity !== undefined ? ` opacity: ${node.opacity};` : ''}${nodeHidden ? ' display: none;' : ''}`}
       >
-        <span
-          class="node-dot node-circle"
-          style=${`background: ${fill}; width: ${size}px; height: ${size}px;`}
-        ></span>
+        <span class="node-dot-wrap">
+          <span
+            class="node-dot node-circle"
+            style=${`background: ${fill}; width: ${size}px; height: ${size}px;`}
+          ></span>
+          ${node.node_effect
+            ? html`<span class="node-effect-indicator" title=${t('editor.nodeEffect.active')} aria-hidden="true">✦</span>`
+            : null}
+        </span>
         ${showLabel ? html`<span class="node-label">${node.label}</span>` : null}
         ${showValue ? html`<span class="node-value">${valueText}</span>` : null}
       </div>
@@ -825,6 +851,15 @@ export class FlowmeCard extends LitElement {
       pointer-events: none;
       opacity: var(--flowme-opacity-flows, 1);
     }
+    .node-effects-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+      overflow: visible;
+    }
     .node {
       position: absolute;
       /* The configured (x%, y%) is the dot's CENTRE, not the wrapper's
@@ -848,11 +883,26 @@ export class FlowmeCard extends LitElement {
       opacity: var(--flowme-opacity-nodes, 1);
       display: var(--flowme-vis-nodes, flex);
     }
+    .node-dot-wrap {
+      position: relative;
+      display: inline-block;
+      flex-shrink: 0;
+    }
     .node-dot {
       display: inline-block;
       border-radius: 50%;
       box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
       flex-shrink: 0;
+    }
+    .node-effect-indicator {
+      position: absolute;
+      right: -6px;
+      top: -8px;
+      font-size: 11px;
+      line-height: 1;
+      color: var(--primary-color, #4ade80);
+      text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+      pointer-events: none;
     }
     .node-label {
       font-weight: 600;

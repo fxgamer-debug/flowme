@@ -12,6 +12,8 @@ import type {
   FlowConfig,
   HomeAssistant,
   NodeConfig,
+  NodeEffectConfig,
+  NodeEffectType,
   NodePosition,
   OpacityConfig,
   OverlayConfig,
@@ -90,6 +92,7 @@ import type { Point } from './pathfinding/types.js';
 import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
 import { setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
+import { NodeEffectsLayerController } from './node-effects-layer.js';
 
 import PathfindingWorker from './pathfinding/pathfinding.worker.ts?worker&inline';
 
@@ -195,6 +198,11 @@ export class FlowmeCardEditor extends LitElement {
 
   private readonly stageRef: Ref<HTMLDivElement> = createRef();
   private readonly canvasRef: Ref<HTMLDivElement> = createRef();
+  /** Node effects overlay (same viewBox as connectors). */
+  private readonly editorFxSvgRef: Ref<SVGSVGElement> = createRef();
+  private readonly nodeEffectPreviewRef: Ref<SVGSVGElement> = createRef();
+  private readonly editorNodeFx = new NodeEffectsLayerController();
+  private readonly previewNodeFx = new NodeEffectsLayerController();
   private undoStack = new UndoStack((next) => this.applyConfig(next, /*commitToHa*/ false));
   private unsubscribe: (() => void) | null = null;
   /** True while we are in the middle of dispatching a config-changed event.
@@ -235,6 +243,8 @@ export class FlowmeCardEditor extends LitElement {
     this.panY = this.fitPanY;
     this.spaceHeld = false;
     this.panPointerId = null;
+    this.editorNodeFx.reset();
+    this.previewNodeFx.reset();
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -268,6 +278,15 @@ export class FlowmeCardEditor extends LitElement {
         el?.select();
       });
     }
+
+    void this.updateComplete.then(() => {
+      const fxSvg = this.editorFxSvgRef.value;
+      if (fxSvg && this.config && this.hass) {
+        this.editorNodeFx.sync(fxSvg, this.config, this.hass, performance.now());
+        this.editorNodeFx.prunePulseState(new Set(this.config.nodes.map((n) => n.id)));
+      }
+      this.syncNodeEffectPreview();
+    });
   }
 
   override firstUpdated(): void {
@@ -417,6 +436,12 @@ export class FlowmeCardEditor extends LitElement {
               <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
                 ${this.config.flows.map((f) => this.renderFlowConnector(f))}
               </svg>
+              <svg
+                class="node-effects-editor"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                ${ref(this.editorFxSvgRef)}
+              ></svg>
               ${this.config.flows.filter((f) => f.id === this.selectedFlowId).map((f) => this.renderWaypointHandles(f))}
               ${(this.config.overlays ?? []).map((o) => this.renderOverlayHandle(o))}
               ${this.config.nodes.map((n) => this.renderHandle(n))}
@@ -828,6 +853,7 @@ export class FlowmeCardEditor extends LitElement {
             this.pushPatch(prev, next, `${isHidden ? 'show' : 'hide'} node ${node.id}`);
           }}
         >${isHidden ? '◉' : '◎'}</button>
+        ${node.node_effect ? html`<span class="node-effect-indicator" title=${t('editor.nodeEffect.active')}>✦</span>` : nothing}
       </div>
     `;
   }
@@ -1050,6 +1076,8 @@ export class FlowmeCardEditor extends LitElement {
               />
             </label>
           </div>
+
+          ${this.renderNodeEffectInspector(node, patchNode)}
 
           <!-- Delete -->
           <div class="node-row">
@@ -1282,6 +1310,358 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
+  private defaultNodeEffect(type: NodeEffectType): NodeEffectConfig {
+    switch (type) {
+      case 'pulse':
+        return { type: 'pulse', pulse_count: 3, pulse_duration: 800, pulse_threshold: 0.1 };
+      case 'glow':
+        return { type: 'glow', glow_max_radius: 20, peak_value: 10000 };
+      case 'badge':
+        return { type: 'badge', badge_color_on: '#32DC50', badge_color_off: '#CC3333', threshold: null };
+      case 'ripple':
+        return { type: 'ripple', ripple_duration: 2000, ripple_threshold: 0 };
+      case 'alert':
+        return {
+          type: 'alert',
+          alert_threshold: 0,
+          alert_condition: 'above',
+          alert_color: '#FF0000',
+          alert_frequency: 2,
+          alert_hysteresis: 0.05,
+        };
+      default:
+        return { type: 'pulse', pulse_count: 3, pulse_duration: 800, pulse_threshold: 0.1 };
+    }
+  }
+
+  private syncNodeEffectPreview(): void {
+    const svg = this.nodeEffectPreviewRef.value;
+    if (!svg) return;
+    if (!this.config || !this.hass || !this.selectedNodeId) {
+      svg.replaceChildren();
+      return;
+    }
+    const node = this.config.nodes.find((n) => n.id === this.selectedNodeId);
+    if (!node?.node_effect) {
+      svg.replaceChildren();
+      return;
+    }
+    const previewConfig: FlowmeConfig = {
+      ...this.config,
+      nodes: [{ ...node, id: '__editor_fx_preview__', position: { x: 50, y: 50 } }],
+      flows: [],
+    };
+    this.previewNodeFx.sync(svg, previewConfig, this.hass, performance.now());
+  }
+
+  private renderNodeEffectInspector(
+    node: NodeConfig,
+    patchNode: (patch: Partial<NodeConfig>, description: string) => void,
+  ): TemplateResult {
+    const fx = node.node_effect;
+    const typeVal = fx?.type ?? '';
+
+    return html`
+      <details class="inspector-details node-effect-details">
+        <summary>${t('editor.nodeEffect.section')}</summary>
+        <div class="node-effect-body">
+          ${!node.entity && fx
+            ? html`<p class="hint-sub">${t('editor.nodeEffect.needsEntity')}</p>`
+            : nothing}
+          <div class="node-effect-type-row">
+            <svg
+              class="node-effect-preview"
+              viewBox="0 0 100 100"
+              xmlns="http://www.w3.org/2000/svg"
+              ${ref(this.nodeEffectPreviewRef)}
+            ></svg>
+            <label class="node-effect-type-label">
+              ${t('editor.nodeEffect.type')}
+              <select
+                .value=${typeVal}
+                @change=${(e: Event) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  if (!v) {
+                    patchNode({ node_effect: undefined }, `clear node effect on ${node.id}`);
+                    return;
+                  }
+                  patchNode(
+                    { node_effect: this.defaultNodeEffect(v as NodeEffectType) },
+                    `set node effect on ${node.id}`,
+                  );
+                }}
+              >
+                <option value="" ?selected=${!fx}>${t('editor.nodeEffect.none')}</option>
+                <option value="pulse" ?selected=${typeVal === 'pulse'}>${t('editor.nodeEffect.pulse')}</option>
+                <option value="glow" ?selected=${typeVal === 'glow'}>${t('editor.nodeEffect.glow')}</option>
+                <option value="badge" ?selected=${typeVal === 'badge'}>${t('editor.nodeEffect.badge')}</option>
+                <option value="ripple" ?selected=${typeVal === 'ripple'}>${t('editor.nodeEffect.ripple')}</option>
+                <option value="alert" ?selected=${typeVal === 'alert'}>${t('editor.nodeEffect.alert')}</option>
+              </select>
+            </label>
+          </div>
+
+          ${fx?.type === 'pulse'
+            ? html`
+                <label>${t('editor.nodeEffect.pulseCount')}
+                  <input type="number" min="1" max="12" step="1"
+                    .value=${String(fx.pulse_count ?? 3)}
+                    @change=${(e: Event) => {
+                      const n = parseInt((e.target as HTMLInputElement).value, 10);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, pulse_count: n } },
+                        `pulse count ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.pulseDuration')}
+                  <input type="number" min="200" max="5000" step="50"
+                    .value=${String(fx.pulse_duration ?? 800)}
+                    @change=${(e: Event) => {
+                      const n = parseInt((e.target as HTMLInputElement).value, 10);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, pulse_duration: n } },
+                        `pulse duration ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.pulseThreshold')}
+                  <input type="number" min="0" max="1" step="0.01"
+                    .value=${String(fx.pulse_threshold ?? 0.1)}
+                    @change=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, pulse_threshold: n } },
+                        `pulse threshold ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.pulseColor')}
+                  <input type="text" placeholder=${t('editor.inspector.colourDomainDefault')}
+                    .value=${fx.pulse_color ?? ''}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value.trim();
+                      patchNode(
+                        { node_effect: { ...fx, pulse_color: v || undefined } },
+                        `pulse color ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+              `
+            : nothing}
+          ${fx?.type === 'glow'
+            ? html`
+                <label>${t('editor.nodeEffect.glowColor')}
+                  <input type="text" placeholder=${t('editor.inspector.colourDomainDefault')}
+                    .value=${fx.glow_color ?? ''}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value.trim();
+                      patchNode(
+                        { node_effect: { ...fx, glow_color: v || undefined } },
+                        `glow color ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.glowMaxRadius')}
+                  <input type="number" min="4" max="80" step="1"
+                    .value=${String(fx.glow_max_radius ?? 20)}
+                    @change=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, glow_max_radius: n } },
+                        `glow radius ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.peakValue')}
+                  <input type="number" min="0" step="any"
+                    .value=${String(fx.peak_value ?? 10000)}
+                    @change=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, peak_value: n } },
+                        `glow peak ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+              `
+            : nothing}
+          ${fx?.type === 'badge'
+            ? html`
+                <label>${t('editor.nodeEffect.badgeColorOn')}
+                  <input type="color"
+                    .value=${fx.badge_color_on ?? '#32DC50'}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value;
+                      patchNode(
+                        { node_effect: { ...fx, badge_color_on: v } },
+                        `badge on ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.badgeColorOff')}
+                  <input type="color"
+                    .value=${fx.badge_color_off ?? '#CC3333'}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value;
+                      patchNode(
+                        { node_effect: { ...fx, badge_color_off: v } },
+                        `badge off ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.threshold')}
+                  <input type="number" step="any" placeholder="binary"
+                    .value=${fx.threshold === null || fx.threshold === undefined ? '' : String(fx.threshold)}
+                    @change=${(e: Event) => {
+                      const raw = (e.target as HTMLInputElement).value.trim();
+                      const num = raw === '' ? null : parseFloat(raw);
+                      patchNode(
+                        {
+                          node_effect: {
+                            ...fx,
+                            threshold:
+                              num === null || Number.isNaN(num) ? null : num,
+                          },
+                        },
+                        `badge threshold ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+              `
+            : nothing}
+          ${fx?.type === 'ripple'
+            ? html`
+                <label>${t('editor.nodeEffect.rippleColor')}
+                  <input type="text" placeholder=${t('editor.inspector.colourDomainDefault')}
+                    .value=${fx.ripple_color ?? ''}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value.trim();
+                      patchNode(
+                        { node_effect: { ...fx, ripple_color: v || undefined } },
+                        `ripple color ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.rippleDuration')}
+                  <input type="number" min="500" max="20000" step="100"
+                    .value=${String(fx.ripple_duration ?? 2000)}
+                    @change=${(e: Event) => {
+                      const n = parseInt((e.target as HTMLInputElement).value, 10);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, ripple_duration: n } },
+                        `ripple duration ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.rippleThreshold')}
+                  <input type="number" step="any"
+                    .value=${String(fx.ripple_threshold ?? 0)}
+                    @change=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, ripple_threshold: n } },
+                        `ripple threshold ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+              `
+            : nothing}
+          ${fx?.type === 'alert'
+            ? html`
+                <label>${t('editor.nodeEffect.alertThreshold')}
+                  <input type="number" step="any"
+                    .value=${String(fx.alert_threshold ?? 0)}
+                    @change=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, alert_threshold: n } },
+                        `alert threshold ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.alertCondition')}
+                  <select
+                    .value=${fx.alert_condition ?? 'above'}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLSelectElement).value as 'above' | 'below';
+                      patchNode(
+                        { node_effect: { ...fx, alert_condition: v } },
+                        `alert condition ${node.id}`,
+                      );
+                    }}
+                  >
+                    <option value="above">${t('editor.nodeEffect.above')}</option>
+                    <option value="below">${t('editor.nodeEffect.below')}</option>
+                  </select>
+                </label>
+                <label>${t('editor.nodeEffect.alertColor')}
+                  <input type="color"
+                    .value=${fx.alert_color ?? '#FF0000'}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value;
+                      patchNode(
+                        { node_effect: { ...fx, alert_color: v } },
+                        `alert color ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.alertFrequency')}
+                  <input type="number" min="0.25" max="10" step="0.25"
+                    .value=${String(fx.alert_frequency ?? 2)}
+                    @change=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, alert_frequency: n } },
+                        `alert frequency ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+                <label>${t('editor.nodeEffect.alertHysteresis')}
+                  <input type="number" min="0" max="1" step="0.01"
+                    .value=${String(fx.alert_hysteresis ?? 0.05)}
+                    @change=${(e: Event) => {
+                      const n = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(n)) return;
+                      patchNode(
+                        { node_effect: { ...fx, alert_hysteresis: n } },
+                        `alert hysteresis ${node.id}`,
+                      );
+                    }}
+                  />
+                </label>
+              `
+            : nothing}
+        </div>
+      </details>
+    `;
+  }
+
   private renderAnimationSection(flow: FlowConfig): TemplateResult {
     if (!this.config) return html``;
     const anim: FlowAnimationConfig = flow.animation ?? {};
@@ -1328,6 +1708,10 @@ export class FlowmeCardEditor extends LitElement {
               )}
             </select>
           </label>
+
+          ${style === 'fluid'
+            ? html`<p class="hint-sub">${t('editor.inspector.fluidIgnoresParticleShape')}</p>`
+            : nothing}
 
           ${showShape ? html`
             <label>${t('editor.inspector.particleShape')}
@@ -3924,6 +4308,78 @@ export class FlowmeCardEditor extends LitElement {
       width: 100%;
       height: 100%;
       overflow: visible;
+    }
+    .node-effects-editor {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+    .node-effect-indicator {
+      position: absolute;
+      right: -4px;
+      top: -6px;
+      font-size: 11px;
+      line-height: 1;
+      opacity: 0.85;
+      pointer-events: none;
+    }
+    .inspector-details.node-effect-details {
+      margin-top: 6px;
+      border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
+      padding-top: 4px;
+    }
+    .inspector-details.node-effect-details summary {
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      padding: 4px 0;
+    }
+    .inspector-details.node-effect-details summary::before {
+      content: '▸ ';
+    }
+    .inspector-details.node-effect-details[open] summary::before {
+      content: '▾ ';
+    }
+    .inspector-details.node-effect-details summary::-webkit-details-marker {
+      display: none;
+    }
+    .node-effect-body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 6px 0 8px;
+    }
+    .node-effect-body label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+    }
+    .node-effect-type-row {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .node-effect-preview {
+      flex-shrink: 0;
+      width: 60px;
+      height: 60px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+    }
+    .node-effect-type-label {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
     }
     .connectors .flow-path {
       stroke-width: 2;
