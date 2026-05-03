@@ -17,7 +17,8 @@ import {
   type ResolvedSpeedCurveParams,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
-import { dlog } from '../debug-log.js';
+import { dlog, isDebugEnabled } from '../debug-log.js';
+import { createDurInterpState, resolveSmoothedDuration, type DurInterpState } from './dur-interpolation.js';
 
 const RLOG = '[FlowMe Renderer]';
 function rlog(...args: unknown[]): void {
@@ -93,7 +94,7 @@ interface FlowDomNodes {
  * Supports direction: auto | forward | reverse | both
  * Supports shimmer, flicker, glow_intensity, particle_size, particle_count,
  *          pulse_width, trail_length, dash_gap
- * Supports global animation.fps cap and smooth_speed interpolation (ANIM-2)
+ * Supports global animation.fps cap and smooth_speed interpolation (v1.23 ANIM-1).
  */
 export class SvgRenderer implements FlowRenderer {
   private container: HTMLElement | null = null;
@@ -107,18 +108,18 @@ export class SvgRenderer implements FlowRenderer {
   private burstEnteredAt = new Map<string, number>();
   private burstActive = new Set<string>();
 
-  // ANIM-2: smooth_speed — per-flow speed state
-  private currentDurMs = new Map<string, number>();
-  private targetDurMs = new Map<string, number>();
-  private speedTransitionStart = new Map<string, number>();
-  // Direction change: track last direction; on sign flip decelerate→0→new direction
+  /** ANIM-1: eased duration interpolation state */
+  private durInterp: DurInterpState = createDurInterpState();
+  // Direction change: track last direction; on sign flip decelerate→0→new direction (600ms total)
   private lastDirection = new Map<string, number>(); // +1 or -1
   private dirChanging = new Map<string, { startMs: number; oldDir: number; newDir: number }>();
   private rafHandle: number | null = null;
   private lastFrameTime = 0;
-  // Adaptive particle count per flow (P3-4)
+  // Adaptive particle count per flow — adjusted at most once per second globally (ANIM-2)
   private adaptiveCount = new Map<string, number>();
-  private lastAdaptiveChange = new Map<string, number>();
+  private lastAdaptivePassAt = 0;
+  private frameTimeSamples: number[] = [];
+  private lastFrameForAdaptive = 0;
   // Animation resume (P3-4): track last particle offsets
   private particleOffsets = new Map<string, number[]>();
   // GRADIENT-1: per-flow gradient colour (resolved by FlowmeCard from hass state)
@@ -188,11 +189,13 @@ export class SvgRenderer implements FlowRenderer {
       if (!this.svg) return; // destroyed
       const delta = now - this.lastFrameTime;
       this.sampleFrameTime();
+      this.runAdaptivePassIfDue(now);
       if (delta >= frameInterval) {
         this.lastFrameTime = now - (delta % frameInterval);
         // Smooth speed/direction transitions need periodic flush
         const smoothSpeed = this.config?.animation?.smooth_speed !== false;
-        if (smoothSpeed && (this.speedTransitionStart.size > 0 || this.dirChanging.size > 0)) {
+        const hasDurInterp = this.durInterp.interpStartMs.size > 0;
+        if (smoothSpeed && (hasDurInterp || this.dirChanging.size > 0)) {
           this.flushUpdates();
         }
         // wave_lateral: update perpendicular offsets every frame
@@ -222,13 +225,12 @@ export class SvgRenderer implements FlowRenderer {
     this.latestValues.clear();
     this.burstEnteredAt.clear();
     this.burstActive.clear();
-    this.currentDurMs.clear();
-    this.targetDurMs.clear();
-    this.speedTransitionStart.clear();
+    this.durInterp = createDurInterpState();
     this.lastDirection.clear();
     this.dirChanging.clear();
     this.adaptiveCount.clear();
-    this.lastAdaptiveChange.clear();
+    this.frameTimeSamples.length = 0;
+    this.lastAdaptivePassAt = 0;
     this.particleOffsets.clear();
     this.gradientColors.clear();
     this.randomOffsets.clear();
@@ -371,9 +373,9 @@ export class SvgRenderer implements FlowRenderer {
     let durMs = Math.max(50, rawSpeed * speedMultiplier);
     if (isShimmer) durMs = durMs / SHIMMER_SPEED_FACTOR;
 
-    // ANIM-2 / P3-4: smooth_speed
+    // ANIM-1: smooth_speed — interpolate duration toward target
     const smoothSpeed = this.config?.animation?.smooth_speed !== false;
-    durMs = this.resolveSmoothedDur(flowId, durMs, smoothSpeed);
+    durMs = resolveSmoothedDuration(flowId, durMs, smoothSpeed, performance.now(), this.durInterp);
 
     // direction
     const directionMode = anim.direction ?? 'auto';
@@ -382,9 +384,11 @@ export class SvgRenderer implements FlowRenderer {
     else if (directionMode === 'reverse') intendedDirection = -1;
     else intendedDirection = value < 0 !== (flow.reverse === true) ? -1 : 1;
 
-    // P3-4: direction change — decelerate to zero then re-accelerate in new direction (300ms total)
+    // ANIM-1: direction change — 300ms decelerate + 300ms re-accelerate (600ms total)
     let direction = intendedDirection;
     let effectiveGroupOpacity = isShimmer ? SHIMMER_OPACITY : 1;
+    const DIR_TOTAL_MS = 600;
+    const DIR_HALF_MS = 300;
     if (smoothSpeed && directionMode === 'auto') {
       const prevDir = this.lastDirection.get(flowId);
       const changing = this.dirChanging.get(flowId);
@@ -393,18 +397,24 @@ export class SvgRenderer implements FlowRenderer {
       }
       const dirChange = this.dirChanging.get(flowId);
       if (dirChange) {
-        const DIR_CHANGE_MS = 300;
         const elapsed = performance.now() - dirChange.startMs;
-        if (elapsed < DIR_CHANGE_MS) {
-          const t = elapsed / DIR_CHANGE_MS;
-          if (t < 0.5) {
-            // decelerate: fade group opacity toward 0
-            effectiveGroupOpacity = (isShimmer ? SHIMMER_OPACITY : 1) * (1 - t * 2);
+        if (elapsed < DIR_TOTAL_MS) {
+          if (elapsed < DIR_HALF_MS) {
+            // decelerate: fade group opacity toward crossover
+            effectiveGroupOpacity = (isShimmer ? SHIMMER_OPACITY : 1) * (1 - (elapsed / DIR_HALF_MS));
             direction = dirChange.oldDir;
           } else {
             // re-accelerate in new direction
-            effectiveGroupOpacity = (isShimmer ? SHIMMER_OPACITY : 1) * ((t - 0.5) * 2);
+            effectiveGroupOpacity =
+              (isShimmer ? SHIMMER_OPACITY : 1) * ((elapsed - DIR_HALF_MS) / DIR_HALF_MS);
             direction = dirChange.newDir;
+          }
+          // Mid-crossing: shimmer keeps faint motion; otherwise stall particles briefly
+          if (!shimmer && elapsed >= 280 && elapsed <= 320) {
+            durMs = Math.max(durMs, 45_000);
+          }
+          if (shimmer && elapsed >= 270 && elapsed <= 330) {
+            effectiveGroupOpacity = Math.max(effectiveGroupOpacity, SHIMMER_OPACITY);
           }
         } else {
           this.dirChanging.delete(flowId);
@@ -474,40 +484,6 @@ export class SvgRenderer implements FlowRenderer {
     }
   }
 
-  // ── smooth_speed (ANIM-2) ─────────────────────────────────────────────────
-
-  private resolveSmoothedDur(flowId: string, targetMs: number, smooth: boolean): number {
-    if (!smooth) {
-      this.currentDurMs.set(flowId, targetMs);
-      this.targetDurMs.set(flowId, targetMs);
-      return targetMs;
-    }
-    const prev = this.targetDurMs.get(flowId);
-    if (prev !== targetMs) {
-      this.speedTransitionStart.set(flowId, performance.now());
-      this.targetDurMs.set(flowId, targetMs);
-    }
-    const current = this.currentDurMs.get(flowId) ?? targetMs;
-    const start = this.speedTransitionStart.get(flowId);
-    if (start === undefined) {
-      this.currentDurMs.set(flowId, targetMs);
-      return targetMs;
-    }
-    const elapsed = performance.now() - start;
-    const TRANSITION_MS = 500;
-    if (elapsed >= TRANSITION_MS) {
-      this.currentDurMs.set(flowId, targetMs);
-      this.speedTransitionStart.delete(flowId);
-      return targetMs;
-    }
-    // ease-in-out: t = 3t²-2t³
-    const t = elapsed / TRANSITION_MS;
-    const eased = t * t * (3 - 2 * t);
-    const interpolated = current + (targetMs - current) * eased;
-    this.currentDurMs.set(flowId, interpolated);
-    return interpolated;
-  }
-
   // ── burst state ───────────────────────────────────────────────────────────
 
   private updateBurstState(
@@ -565,16 +541,12 @@ export class SvgRenderer implements FlowRenderer {
     dom.fluidGradient = undefined;
   }
 
-  /** Resolve effective particle count, respecting explicit override and burst */
-  private frameTimeSamples: number[] = [];
-  private lastFrameForAdaptive = 0;
-
   private sampleFrameTime(): void {
     const now = performance.now();
     if (this.lastFrameForAdaptive > 0) {
       const delta = now - this.lastFrameForAdaptive;
       this.frameTimeSamples.push(delta);
-      if (this.frameTimeSamples.length > 10) this.frameTimeSamples.shift();
+      if (this.frameTimeSamples.length > 60) this.frameTimeSamples.shift();
     }
     this.lastFrameForAdaptive = now;
   }
@@ -584,6 +556,56 @@ export class SvgRenderer implements FlowRenderer {
     return this.frameTimeSamples.reduce((a, b) => a + b, 0) / this.frameTimeSamples.length;
   }
 
+  /** ANIM-2: at most once per second, tune adaptive particle counts for all eligible flows */
+  private runAdaptivePassIfDue(now: number): void {
+    if (!this.config || now - this.lastAdaptivePassAt < 1000) return;
+    if (this.frameTimeSamples.length < 30) return;
+
+    this.lastAdaptivePassAt = now;
+    const targetFps = this.config.animation?.fps ?? 60;
+    const budgetMs = 1000 / targetFps;
+    const avgMs = this.avgFrameMs();
+    const debug = isDebugEnabled();
+
+    const over = avgMs > budgetMs * 1.2;
+    const under = avgMs < budgetMs * 0.8;
+
+    for (const flow of this.config.flows) {
+      if (flow.animation?.particle_count !== undefined) continue;
+      const style = this.animStyle(flow);
+      if (style !== 'dots' && style !== 'trail') continue;
+
+      const profile = this.profileFor(flow);
+      const rawMag = Math.abs(this.latestValues.get(flow.id) ?? 0);
+      const params = resolveSpeedCurveParams(flow, profile);
+      const burstMultiplier = this.updateBurstState(flow.id, rawMag, params, profile);
+
+      const base = Math.max(
+        1,
+        Math.round(profile.particle_count_curve ? profile.particle_count_curve(rawMag) : DEFAULT_PARTICLE_COUNT),
+      );
+      const burstMax = this.config.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
+      const configured = Math.min(burstMax, Math.max(1, Math.round(base * burstMultiplier)));
+
+      let current = this.adaptiveCount.get(flow.id) ?? configured;
+      if (over && current > 1) {
+        current -= 1;
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.log('[FlowMe] adaptive count:', flow.id, current, 'avg frame:', avgMs);
+        }
+      } else if (under && current < configured) {
+        current += 1;
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.log('[FlowMe] adaptive count:', flow.id, current, 'avg frame:', avgMs);
+        }
+      }
+      this.adaptiveCount.set(flow.id, Math.min(current, configured));
+    }
+  }
+
+  /** Resolve effective particle count, respecting explicit override and burst */
   private resolveParticleCount(
     flow: FlowConfig,
     profile: FlowProfile,
@@ -591,8 +613,6 @@ export class SvgRenderer implements FlowRenderer {
     burstMultiplier: number,
   ): number {
     const anim = flow.animation ?? {};
-    const targetFps = this.config?.animation?.fps ?? 60;
-    const budgetMs = 1000 / targetFps;
 
     // When particle_count is explicitly set, skip adaptive logic
     if (anim.particle_count !== undefined) return anim.particle_count;
@@ -604,29 +624,9 @@ export class SvgRenderer implements FlowRenderer {
     const burstMax = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
     const configured = Math.min(burstMax, Math.max(1, Math.round(base * burstMultiplier)));
 
-    // P3-4: adaptive particle count — reduce when over frame budget
     const style = this.animStyle(flow);
     if (style === 'dots' || style === 'trail') {
-      const current = this.adaptiveCount.get(flow.id) ?? configured;
-      const avgMs = this.avgFrameMs();
-      const now = performance.now();
-      const lastChange = this.lastAdaptiveChange.get(flow.id) ?? 0;
-      const CHANGE_INTERVAL_MS = 1000;
-      if (now - lastChange > CHANGE_INTERVAL_MS) {
-        let next = current;
-        if (avgMs > budgetMs * 1.2 && current > 1) {
-          next = current - 1;
-          rlog('adaptive:', flow.id, 'reducing particles', current, '→', next, '(avg frame', avgMs.toFixed(1), 'ms)');
-        } else if (avgMs < budgetMs * 0.8 && current < configured) {
-          next = current + 1;
-          rlog('adaptive:', flow.id, 'restoring particles', current, '→', next);
-        }
-        if (next !== current) {
-          this.adaptiveCount.set(flow.id, next);
-          this.lastAdaptiveChange.set(flow.id, now);
-        }
-      }
-      return this.adaptiveCount.get(flow.id) ?? configured;
+      return Math.min(this.adaptiveCount.get(flow.id) ?? configured, configured);
     }
 
     return configured;
@@ -836,7 +836,7 @@ export class SvgRenderer implements FlowRenderer {
       if (!dom || dom.particles.length === 0) continue;
 
       const count = dom.particles.length;
-      const durMs = this.currentDurMs.get(flow.id) ?? 2000;
+      const durMs = this.durInterp.currentDurMs.get(flow.id) ?? 2000;
       const durS = durMs / 1000;
       const anim = flow.animation ?? {};
 
@@ -1122,11 +1122,25 @@ export class SvgRenderer implements FlowRenderer {
       }
     }
 
+    const svgPath = dom.path as SVGPathElement;
+    let pathLen = 0;
+    try {
+      pathLen = svgPath.getTotalLength();
+    } catch {
+      pathLen = 0;
+    }
+
     for (let i = 0; i < dom.pulseCircles.length; i++) {
       const p = dom.pulseCircles[i]!;
       const progress = (i + 0.5) / dom.pulseCircles.length;
-      const pt = pointAtProgress(points, progress);
-      const px = percentToPixel(pt, size);
+      let px: { x: number; y: number };
+      if (pathLen > 0) {
+        const pt = svgPath.getPointAtLength(progress * pathLen);
+        px = { x: pt.x, y: pt.y };
+      } else {
+        const pt = pointAtProgress(points, progress);
+        px = percentToPixel(pt, size);
+      }
       p.circle.setAttribute('cx', px.x.toFixed(2));
       p.circle.setAttribute('cy', px.y.toFixed(2));
       p.circle.setAttribute('stroke', color);

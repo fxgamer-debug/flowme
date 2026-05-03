@@ -26,3 +26,8 @@ export function dlog(...args: unknown[]): void {
   if (!_debugEnabled) return;
   console.warn(TAG, ...args);
 }
+
+/** Whether the card was configured with `debug: true` (for adaptive logs, etc.). */
+export function isDebugEnabled(): boolean {
+  return _debugEnabled;
+}

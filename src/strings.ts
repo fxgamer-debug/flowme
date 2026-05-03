@@ -1,6 +1,7 @@
 export const STRINGS = {
   card: {
     connectionLost: 'Connection lost',
+    reconnected: 'Reconnected',
     actionFailed: 'Action failed — please retry',
     loading: 'Loading...',
     invalidConfigurationTitle: 'flowme: invalid configuration',

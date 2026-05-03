@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.0] — Animation quality pass
+
+### Changed
+
+- **ANIM-1 — Smooth speed interpolation**: Flow duration changes ease over 500ms (quadratic ease-in-out) from a fixed start value toward the target; deltas under 50ms snap to avoid jitter. Direction reversals use a 600ms crossfade (300ms decelerate + 300ms re-accelerate); non-shimmer flows briefly stall motion at the midpoint, shimmer flows keep faint motion.
+- **ANIM-2 — Adaptive particle count**: Rolling average uses up to 60 frame samples; adaptation runs at most once per second for all eligible flows (implicit `particle_count` only). When `debug: true`, adaptations log with `[FlowMe] adaptive count:`.
+- **ANIM-3 — Reconnect continuity**: Subscribes to `hass.connection` `ready` / `disconnected`; on reconnect pushes updated sensor values without restarting renderers and shows a short “Reconnected” toast when returning after a disconnect.
+- **ANIM-4 — Curved pulse placement**: Pulse rings sample the rendered SVG path (`getPointAtLength`) so `line_style: curve` / `smooth` matches the visible line.
+- **Houdini**: Registered `--flowme-dur` (ms) with `animation: … calc(var(--flowme-dur) * 1ms)` and `transition: --flowme-dur 500ms ease-in-out`; small changes snap without transition.
+
 ## [1.22.1] — Pathfinding worker inline, domain selector, rename UX
 
 ### Fixed

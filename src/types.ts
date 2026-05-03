@@ -516,11 +516,25 @@ export interface HassState {
   last_updated: string;
 }
 
+/** HA core websocket client — optional in tests / minimal mocks. */
+export interface HassConnection {
+  addEventListener(
+    type: 'ready' | 'disconnected' | 'reconnect-error',
+    listener: (...args: unknown[]) => void,
+  ): void;
+  removeEventListener(
+    type: 'ready' | 'disconnected' | 'reconnect-error',
+    listener: (...args: unknown[]) => void,
+  ): void;
+}
+
 export interface HomeAssistant {
   states: Record<string, HassState>;
   themes?: unknown;
   language?: string;
   locale?: unknown;
+  /** Home Assistant websocket connection — used for reconnect continuity (v1.23+). */
+  connection?: HassConnection;
   /** Service dispatcher — not always present in tests, hence optional. */
   callService?: (
     domain: string,

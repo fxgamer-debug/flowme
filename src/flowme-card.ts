@@ -5,6 +5,7 @@ import { createRef, ref, type Ref } from 'lit/directives/ref.js';
 import type {
   FlowConfig,
   FlowmeConfig,
+  HassConnection,
   HomeAssistant,
   NodeConfig,
   OpacityConfig,
@@ -24,7 +25,7 @@ import { dlog, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.22.1';
+const CARD_VERSION = '1.23.0';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -82,6 +83,17 @@ function buildVisibilityVars(visibility?: VisibilityConfig): string {
 export class FlowmeCard extends LitElement {
   private _hass?: HomeAssistant;
   private _lastLanguage?: string;
+  /** WebSocket disconnected since last successful `ready` — drives reconnect toast (ANIM-3). */
+  private _connectionAwaitingReconnect = false;
+  private _boundHaConnection: HassConnection | null = null;
+
+  private readonly onHaConnectionReady = (): void => {
+    this.onReconnect();
+  };
+
+  private readonly onHaConnectionDisconnected = (): void => {
+    this._connectionAwaitingReconnect = true;
+  };
 
   @property({ attribute: false })
   get hass(): HomeAssistant | undefined {
@@ -136,13 +148,45 @@ export class FlowmeCard extends LitElement {
           this.syncWeatherBackground();
         }
       }
+      const conn = value.connection as HassConnection | undefined;
+      this.bindHaConnection(conn);
     } else {
       dlog('hass setter called with undefined');
+      this.bindHaConnection(undefined);
       if (prev) {
         this.showToast(t('card.connectionLost'));
       }
     }
     this.requestUpdate('hass', prev);
+  }
+
+  /** ANIM-3: subscribe once per hass.connection instance */
+  private bindHaConnection(conn: HassConnection | undefined): void {
+    if (this._boundHaConnection === conn) return;
+    if (this._boundHaConnection) {
+      this._boundHaConnection.removeEventListener('ready', this.onHaConnectionReady);
+      this._boundHaConnection.removeEventListener('disconnected', this.onHaConnectionDisconnected);
+      this._boundHaConnection = null;
+    }
+    if (conn) {
+      conn.addEventListener('ready', this.onHaConnectionReady);
+      conn.addEventListener('disconnected', this.onHaConnectionDisconnected);
+      this._boundHaConnection = conn;
+    }
+  }
+
+  /**
+   * ANIM-3: after websocket reconnect — refresh renderer values without tearing
+   * down SVG/Houdini; optional brief toast.
+   */
+  private onReconnect(): void {
+    if (this.hass && this.config && this.renderer) {
+      this.pushAllValuesToRenderer();
+    }
+    if (this._connectionAwaitingReconnect) {
+      this._connectionAwaitingReconnect = false;
+      this.showToast(t('card.reconnected'), 1500);
+    }
   }
 
   @state() private config?: FlowmeConfig;
@@ -210,6 +254,7 @@ export class FlowmeCard extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.bindHaConnection(undefined);
     this.teardownRenderer();
     if (this.transitionTimer !== null) {
       window.clearTimeout(this.transitionTimer);

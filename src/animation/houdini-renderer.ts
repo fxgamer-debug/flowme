@@ -45,6 +45,8 @@ function registerPropertiesOnce(): void {
     ['--flowme-line', '<number>', '2'],
     ['--flowme-amp', '<number>', '4'],
     ['--flowme-direction', '<number>', '1'],
+    /** Cycle duration in milliseconds (ANIM-1 — transition for smooth speed changes) */
+    ['--flowme-dur', '<number>', '2000'],
   ];
   for (const [name, syntax, initialValue] of defs) {
     try {
@@ -100,6 +102,8 @@ export class HoudiniRenderer implements FlowRenderer {
   private flowsById = new Map<string, FlowConfig>();
   private latestValues = new Map<string, number>();
   private applyUpdate = debounce(() => this.flushUpdates(), 120);
+  /** Last applied duration (ms) per flow — for <50ms snap vs CSS transition (ANIM-1) */
+  private lastDurMsByFlow = new Map<string, number>();
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     this.container = container;
@@ -126,7 +130,9 @@ export class HoudiniRenderer implements FlowRenderer {
       el.style.inset = '0';
       el.style.pointerEvents = 'none';
       (el.style as unknown as { background: string }).background = 'paint(flowme-painter)';
-      el.style.animation = `${ANIMATION_NAME} 2s linear infinite`;
+      el.style.setProperty('--flowme-dur', '2000');
+      el.style.transition = '--flowme-dur 500ms cubic-bezier(0.42, 0, 0.58, 1)';
+      el.style.animation = `${ANIMATION_NAME} calc(var(--flowme-dur) * 1ms) linear infinite`;
       el.style.opacity = '0';
       wrapper.appendChild(el);
       this.flowDivs.set(flow.id, { el });
@@ -159,6 +165,7 @@ export class HoudiniRenderer implements FlowRenderer {
     this.flowDivs.clear();
     this.flowsById.clear();
     this.latestValues.clear();
+    this.lastDurMsByFlow.clear();
     this.container = null;
     this.config = null;
   }
@@ -239,8 +246,21 @@ export class HoudiniRenderer implements FlowRenderer {
     style.setProperty('--flowme-line', String(DEFAULT_LINE_WIDTH));
     style.setProperty('--flowme-amp', String(amp));
     style.setProperty('--flowme-direction', String(direction));
-    // CSS animation-duration drives the --flowme-progress oscillation
-    style.animation = `${ANIMATION_NAME} ${(durMs / 1000).toFixed(3)}s linear infinite`;
+    // ANIM-1: transition --flowme-dur smooths speed changes; snap tiny deltas
+    const prevDur = this.lastDurMsByFlow.get(flowId) ?? durMs;
+    const rounded = Math.round(durMs);
+    if (Math.abs(durMs - prevDur) < 50) {
+      style.transition = 'none';
+      style.setProperty('--flowme-dur', String(rounded));
+      const el = div.el;
+      requestAnimationFrame(() => {
+        el.style.transition = '--flowme-dur 500ms cubic-bezier(0.42, 0, 0.58, 1)';
+      });
+    } else {
+      style.setProperty('--flowme-dur', String(rounded));
+    }
+    this.lastDurMsByFlow.set(flowId, durMs);
+    style.animation = `${ANIMATION_NAME} calc(var(--flowme-dur) * 1ms) linear infinite`;
   }
 
   private profileFor(flow: FlowConfig): FlowProfile {

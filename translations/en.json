@@ -89,6 +89,7 @@
   },
   "card": {
     "connectionLost": "Connection lost",
+    "reconnected": "Reconnected",
     "actionFailed": "Action failed — please retry",
     "loading": "Loading..."
   },
