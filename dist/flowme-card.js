@@ -8724,7 +8724,7 @@ var Ls = Object.defineProperty, Os = Object.getOwnPropertyDescriptor, j = (t, e,
     (r = t[s]) && (o = (n ? r(e, i, o) : r(o)) || o);
   return n && o && Ls(e, i, o), o;
 };
-const zs = "1.23.8", xi = 5e3;
+const zs = "1.23.9", xi = 5e3;
 console.info(
   `%c flowme %c v${zs} `,
   "color: white; background: #4ADE80; font-weight: 700;",

@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.9] — Patch: fix timer type for TypeScript compatibility
+
+### Fixed
+
+- **Ripple / CI**: Ripple stagger timers stored as `number[]` so `tsc` with Vitest/Node-augmented globals agrees with DOM `window.setTimeout` return type (unblocks `type-check:tests` and release workflow).
+
 ## [1.23.8] — Editor layout timing, glow floor, ripple bursts
 
 ### Fixed
