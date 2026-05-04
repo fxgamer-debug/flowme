@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.11] — Editor canvas layout after v1.23.10
+
+### Fixed
+
+- **Editor canvas**: Restored `flowme-card` `setConfig()` to tear down the flow renderer only when Home Assistant passes a **new config object** (`rendererReadyFor !== config`), matching v1.23.9 behaviour. v1.23.10’s unconditional `teardownRenderer()` before assigning `config` was scoped to the card but correlated with editor layout glitches; the editor now also runs `recalcFit()` after each `setConfig` once Lit has rendered (`updateComplete`), so scale/pan stay aligned when the background URL is unchanged (early return from `loadBackgroundImage`) and when the stage size was not ready on the first fit pass.
+
 ## [1.23.10] — Flow endpoints editor + preview reinit
 
 ### Added

@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.10';
+const CARD_VERSION = '1.23.11';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -229,16 +229,17 @@ export class FlowmeCard extends LitElement {
       setDebugEnabled(config.debug ?? false);
       dlog('setConfig called:', JSON.parse(JSON.stringify(raw ?? null)));
       dlog('setConfig validated → flows=', config.flows.length, 'nodes=', config.nodes.length, 'overlays=', config.overlays?.length ?? 0);
-      const needsReinit = !this.rendererReadyFor || this.rendererReadyFor !== config;
-      if (isDebugEnabled()) {
-        // eslint-disable-next-line no-console -- gated by config.debug
-        console.log('[FlowMe] setConfig called, reinitialising renderer:', needsReinit);
-      }
-      // Always tear down so preview/editor updates re-run fluid/particle init even when
-      // HA reuses object identity or only animation fields change.
-      this.teardownRenderer();
       this.config = config;
       this.errorMessage = undefined;
+      const willTeardown =
+        this.rendererReadyFor !== undefined && this.rendererReadyFor !== config;
+      if (isDebugEnabled()) {
+        // eslint-disable-next-line no-console -- gated by config.debug
+        console.log('[FlowMe] setConfig: tear down renderer for new config object:', willTeardown);
+      }
+      if (willTeardown) {
+        this.teardownRenderer();
+      }
       // seed both layers with the default image on first load — no crossfade
       const initial = config.background.default;
       this.bgLayerA = initial;

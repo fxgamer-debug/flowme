@@ -424,6 +424,10 @@ export class FlowmeCardEditor extends LitElement {
       // can use the correct aspect ratio.
       const bgUrl = this.config?.background?.default;
       if (bgUrl) this.loadBackgroundImage(bgUrl);
+      // After paint, re-run fit so the first frame after open uses a laid-out stage
+      // (recalcFit can no-op if image or stage is not ready yet). When loadBackgroundImage
+      // returns early for the same URL, this is the main path that corrects scale/pan.
+      void this.updateComplete.then(() => this.recalcFit());
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);
     }

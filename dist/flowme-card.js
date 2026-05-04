@@ -4628,7 +4628,7 @@ let P = class extends ie {
     try {
       this.config = be(t), ht(this.config.debug ?? !1), this._ownCommit ? this._ownCommit = !1 : (this.savedConfig = this.config, this.undoStack.clear()), this.errorMessage = "";
       const e = this.config?.background?.default;
-      e && this.loadBackgroundImage(e);
+      e && this.loadBackgroundImage(e), this.updateComplete.then(() => this.recalcFit());
     } catch (e) {
       this.errorMessage = e instanceof Error ? e.message : String(e);
     }
@@ -8845,7 +8845,7 @@ var Ls = Object.defineProperty, Os = Object.getOwnPropertyDescriptor, j = (t, e,
     (r = t[s]) && (o = (n ? r(e, i, o) : r(o)) || o);
   return n && o && Ls(e, i, o), o;
 };
-const zs = "1.23.10", $i = 5e3;
+const zs = "1.23.11", $i = 5e3;
 console.info(
   `%c flowme %c v${zs} `,
   "color: white; background: #4ADE80; font-weight: 700;",
@@ -8922,9 +8922,9 @@ let W = class extends ie {
   setConfig(t) {
     try {
       const e = be(t);
-      ht(e.debug ?? !1), E("setConfig called:", JSON.parse(JSON.stringify(t ?? null))), E("setConfig validated → flows=", e.flows.length, "nodes=", e.nodes.length, "overlays=", e.overlays?.length ?? 0);
-      const i = !this.rendererReadyFor || this.rendererReadyFor !== e;
-      Ae() && console.log("[FlowMe] setConfig called, reinitialising renderer:", i), this.teardownRenderer(), this.config = e, this.errorMessage = void 0;
+      ht(e.debug ?? !1), E("setConfig called:", JSON.parse(JSON.stringify(t ?? null))), E("setConfig validated → flows=", e.flows.length, "nodes=", e.nodes.length, "overlays=", e.overlays?.length ?? 0), this.config = e, this.errorMessage = void 0;
+      const i = this.rendererReadyFor !== void 0 && this.rendererReadyFor !== e;
+      Ae() && console.log("[FlowMe] setConfig: tear down renderer for new config object:", i), i && this.teardownRenderer();
       const n = e.background.default;
       this.bgLayerA = n, this.bgLayerB = "", this.activeLayer = "A", this.lastAppliedBgUrl = n;
     } catch (e) {
