@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.12] — Editor flow connectors + single scene coordinates
+
+### Fixed
+
+- **Editor canvas**: Flow connector paths, hit areas, and the node-effects SVG now use the same coordinate system as node/waypoint/overlay handles: `viewBox` and `polylineToSvgPathStyled` are based on `imageNaturalW` × `imageNaturalH` (not a fixed 0…100 space), with a shared `pct2px()` mapping percent config to scene pixels. Suggest-path preview and multi-select node drag use the same image-size basis. **NodeEffectsLayerController** accepts optional `viewBoxUserWidth` / `viewBoxUserHeight` from the editor so effect circles align when the SVG uses natural dimensions.
+
 ## [1.23.11] — Editor canvas layout after v1.23.10
 
 ### Fixed

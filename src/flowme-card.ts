@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.11';
+const CARD_VERSION = '1.23.12';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console

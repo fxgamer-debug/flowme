@@ -92,7 +92,7 @@ import type { Point } from './pathfinding/types.js';
 import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
 import { setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
-import { NodeEffectsLayerController } from './node-effects-layer.js';
+import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 import PathfindingWorker from './pathfinding/pathfinding.worker.ts?worker&inline';
 
@@ -295,7 +295,7 @@ export class FlowmeCardEditor extends LitElement {
     void this.updateComplete.then(() => {
       const fxSvg = this.editorFxSvgRef.value;
       if (fxSvg && this.config && this.hass) {
-        this.editorNodeFx.sync(fxSvg, this.config, this.hass, performance.now());
+        this.editorNodeFx.sync(fxSvg, this.config, this.hass, performance.now(), this.editorNodeFxHooks());
       }
       this.ensureEditorNodeFxRaf();
     });
@@ -315,7 +315,7 @@ export class FlowmeCardEditor extends LitElement {
       this._editorFxRaf = requestAnimationFrame(tick);
       const svg = this.editorFxSvgRef.value;
       if (svg && this.config && this.hass) {
-        this.editorNodeFx.sync(svg, this.config, this.hass, performance.now());
+        this.editorNodeFx.sync(svg, this.config, this.hass, performance.now(), this.editorNodeFxHooks());
       }
     };
     this._editorFxRaf = requestAnimationFrame(tick);
@@ -402,6 +402,32 @@ export class FlowmeCardEditor extends LitElement {
       this.panX = newFitPanX;
       this.panY = newFitPanY;
     }
+  }
+
+  /**
+   * Percent (0–100) → pixel offsets in the canvas-content scene (the box sized
+   * imageNaturalW × imageNaturalH). Parent `.canvas-content` applies pan/scale;
+   * do not multiply scale here.
+   */
+  private pct2px(pct: Pick<NodePosition, 'x' | 'y'>): { x: number; y: number } {
+    return {
+      x: (pct.x / 100) * this.imageNaturalW,
+      y: (pct.y / 100) * this.imageNaturalH,
+    };
+  }
+
+  private editorNodeFxHooks(): NodeEffectsSyncHooks {
+    return {
+      getLayoutMetrics: (svg) => {
+        const r = svg.getBoundingClientRect();
+        return {
+          widthPx: Math.max(1, r.width),
+          heightPx: Math.max(1, r.height),
+          viewBoxUserWidth: this.imageNaturalW,
+          viewBoxUserHeight: this.imageNaturalH,
+        };
+      },
+    };
   }
 
   setConfig(config: unknown): void {
@@ -518,12 +544,16 @@ export class FlowmeCardEditor extends LitElement {
                 : nothing}
               ${imageReady
                 ? html`
-                    <svg class="connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <svg
+                      class="connectors"
+                      viewBox=${`0 0 ${this.imageNaturalW} ${this.imageNaturalH}`}
+                      preserveAspectRatio="none"
+                    >
                       ${this.config.flows.map((f) => this.renderFlowConnector(f))}
                     </svg>
                     <svg
                       class="node-effects-editor"
-                      viewBox="0 0 100 100"
+                      viewBox=${`0 0 ${this.imageNaturalW} ${this.imageNaturalH}`}
                       preserveAspectRatio="none"
                       ${ref(this.editorFxSvgRef)}
                     ></svg>
@@ -727,6 +757,7 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderFlowConnector(flow: FlowConfig): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
+    if (!this.imageLayoutReady || this.imageNaturalW <= 0 || this.imageNaturalH <= 0) return nothing;
     const nodes = new Map(this.config.nodes.map((n) => [n.id, n]));
     const from = nodes.get(flow.from_node);
     const to = nodes.get(flow.to_node);
@@ -734,10 +765,9 @@ export class FlowmeCardEditor extends LitElement {
     const points: NodePosition[] = [from.position, ...flow.waypoints, to.position];
     const isSelected = flow.id === this.selectedFlowId;
 
-    // Build the same SVG path the renderer uses so the editor line matches
-    // the animated card line exactly. The connectors SVG has viewBox 0 0 100 100
-    // so we use size { width: 100, height: 100 } to keep percent coords as-is.
-    const CONNECTOR_SIZE = { width: 100, height: 100 };
+    // Same path logic as the card renderer; map percentages into the connectors
+    // SVG viewBox (0 … imageNaturalW × imageNaturalH) so lines align with handles.
+    const CONNECTOR_SIZE = { width: this.imageNaturalW, height: this.imageNaturalH };
     const d = polylineToSvgPathStyled(points, CONNECTOR_SIZE, flow.line_style ?? 'corner');
     if (!d) return nothing;
 
@@ -749,13 +779,15 @@ export class FlowmeCardEditor extends LitElement {
       const a = points[i];
       const b = points[i + 1];
       if (!a || !b) continue;
+      const pa = this.pct2px(a);
+      const pb = this.pct2px(b);
       hitSegments.push(svg`
         <line
           class="segment-hit"
-          x1=${a.x}
-          y1=${a.y}
-          x2=${b.x}
-          y2=${b.y}
+          x1=${pa.x}
+          y1=${pa.y}
+          x2=${pb.x}
+          y2=${pb.y}
           data-flow-id=${flow.id}
           data-segment-index=${i}
           @click=${this.onSegmentClick}
@@ -781,7 +813,9 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderWaypointHandles(flow: FlowConfig): TemplateResult[] {
     return flow.waypoints.map(
-      (wp, index) => html`
+      (wp, index) => {
+        const p = this.pct2px(wp);
+        return html`
         <div
           class="waypoint"
           role="button"
@@ -789,7 +823,7 @@ export class FlowmeCardEditor extends LitElement {
           aria-label=${t('aria.waypointHandle', index, flow.id)}
           data-flow-id=${flow.id}
           data-waypoint-index=${index}
-          style=${`left: ${wp.x}%; top: ${wp.y}%;`}
+          style=${`left: ${p.x}px; top: ${p.y}px;`}
           @pointerdown=${this.onHandlePointerDown}
           @pointermove=${this.onHandlePointerMove}
           @pointerup=${this.onHandlePointerUp}
@@ -797,7 +831,8 @@ export class FlowmeCardEditor extends LitElement {
           @contextmenu=${this.onWaypointContextMenu}
           @click=${this.stopClick}
         ></div>
-      `,
+      `;
+      },
     );
   }
 
@@ -805,6 +840,9 @@ export class FlowmeCardEditor extends LitElement {
     const selected = overlay.id === this.selectedOverlayId;
     const w = overlay.size?.width ?? 14;
     const h = overlay.size?.height ?? 8;
+    const posPx = this.pct2px(overlay.position);
+    const wpx = (w / 100) * this.imageNaturalW;
+    const hpx = (h / 100) * this.imageNaturalH;
     const editing = this.inlineRename?.kind === 'overlay' && this.inlineRename.id === overlay.id;
     return html`
       <div
@@ -814,7 +852,7 @@ export class FlowmeCardEditor extends LitElement {
         aria-label=${t('aria.overlayHandle', overlay.id)}
         aria-selected=${selected ? 'true' : 'false'}
         data-overlay-id=${overlay.id}
-        style=${`left: ${overlay.position.x}%; top: ${overlay.position.y}%; width: ${w}%; height: ${h}%;`}
+        style=${`left: ${posPx.x}px; top: ${posPx.y}px; width: ${wpx}px; height: ${hpx}px;`}
         @pointerdown=${this.onHandlePointerDown}
         @pointermove=${this.onHandlePointerMove}
         @pointerup=${this.onHandlePointerUp}
@@ -873,6 +911,7 @@ export class FlowmeCardEditor extends LitElement {
     const selectionIndex = isInSelection ? Array.from(this.selectedNodeIds).indexOf(node.id) : -1;
     const isHidden = node.visible === false;
     const editing = this.inlineRename?.kind === 'node' && this.inlineRename.id === node.id;
+    const posPx = this.pct2px(node.position);
     return html`
       <div
         class=${`handle ${isSingleSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${isInSelection ? 'in-selection' : ''} ${isHidden ? 'handle-hidden' : ''}`}
@@ -881,7 +920,7 @@ export class FlowmeCardEditor extends LitElement {
         aria-label=${t('aria.nodeHandle', node.label ?? node.id, node.position.x, node.position.y)}
         aria-selected=${isInSelection ? 'true' : 'false'}
         data-node-id=${node.id}
-        style=${`left: ${node.position.x}%; top: ${node.position.y}%;`}
+        style=${`left: ${posPx.x}px; top: ${posPx.y}px;`}
         @pointerdown=${this.onHandlePointerDown}
         @pointermove=${this.onHandlePointerMove}
         @pointerup=${this.onHandlePointerUp}
@@ -3351,24 +3390,33 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderSuggestPreview(): TemplateResult | typeof nothing {
     if (!this.suggestPreview || !this.config) return nothing;
+    if (!this.imageLayoutReady || this.imageNaturalW <= 0 || this.imageNaturalH <= 0) return nothing;
     const fromNode = this.config.nodes.find((n) => n.id === this.suggestPreview!.fromNodeId);
     const toNode = this.config.nodes.find((n) => n.id === this.suggestPreview!.toNodeId);
     if (!fromNode || !toNode) return nothing;
+    const w = this.imageNaturalW;
+    const h = this.imageNaturalH;
     const points: Point[] = [
       fromNode.position,
       ...this.suggestPreview.waypoints,
       toNode.position,
     ];
-    const polyline = points.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+    const polyline = points
+      .map((p) => {
+        const px = this.pct2px(p);
+        return `${px.x.toFixed(2)},${px.y.toFixed(2)}`;
+      })
+      .join(' ');
     return html`
-      <svg class="suggest-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <svg class="suggest-overlay" viewBox=${`0 0 ${w} ${h}`} preserveAspectRatio="none">
         <polyline points=${polyline} />
       </svg>
-      ${this.suggestPreview.waypoints.map(
-        (wp) => html`
-          <div class="suggest-marker" style=${`left: ${wp.x}%; top: ${wp.y}%;`}></div>
-        `,
-      )}
+      ${this.suggestPreview.waypoints.map((wp) => {
+        const m = this.pct2px(wp);
+        return html`
+          <div class="suggest-marker" style=${`left: ${m.x}px; top: ${m.y}px;`}></div>
+        `;
+      })}
     `;
   }
 
@@ -3792,16 +3840,13 @@ export class FlowmeCardEditor extends LitElement {
     if (target.kind === 'node') {
       this.config = moveNode(this.config, target.id, snapped);
     } else if (target.kind === 'node-bulk') {
-      // Bulk move: delta in screen pixels → card-space pixels → percentage
-      const canvas = this.canvasRef.value;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      const stageW = rect.width - 16;
-      const stageH = rect.height - 8;
-      // screen delta / scale = card-space delta; card-space / stageSize * 100 = %
-      const dxPct = ((event.clientX - target.startPx.x) / this.scale / stageW) * 100;
-      const dyPct = ((event.clientY - target.startPx.y) / this.scale / stageH) * 100;
+      // Bulk move: screen Δ / scale → card-space px; % uses image natural size (same as pointerToPercent).
+      const iw = this.imageNaturalW > 0 ? this.imageNaturalW : 1;
+      const ih = this.imageNaturalH > 0 ? this.imageNaturalH : 1;
+      const dxCard = (event.clientX - target.startPx.x) / this.scale;
+      const dyCard = (event.clientY - target.startPx.y) / this.scale;
+      const dxPct = (dxCard / iw) * 100;
+      const dyPct = (dyCard / ih) * 100;
       const moves = new Map<string, NodePosition>();
       for (const [id, startPos] of target.startPositions) {
         const x = this.dragShiftHeld ? snapToGrid(startPos.x + dxPct) : startPos.x + dxPct;

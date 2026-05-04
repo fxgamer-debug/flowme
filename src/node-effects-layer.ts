@@ -1,9 +1,10 @@
 /**
  * SVG overlay for node_effect visuals + optional DOM hooks for the real node dots (v1.23.3).
- * viewBox 0–100 — matches node position percentages.
+ * Default viewBox 0–100; editor can pass `viewBoxUserWidth` / `viewBoxUserHeight` in layout metrics
+ * (e.g. image natural size) so positions match the card/config percentage space.
  */
 
-import type { FlowmeConfig, HomeAssistant, NodeConfig, NodeEffectConfig } from './types.js';
+import type { FlowmeConfig, HomeAssistant, NodeConfig, NodeEffectConfig, NodePosition } from './types.js';
 import { getProfile, NEUTRAL_NODE_COLOR, resolveFlowColor } from './flow-profiles/index.js';
 import { parseSensorValue } from './utils.js';
 
@@ -33,7 +34,14 @@ export function resolveNodeColourForEffect(node: NodeConfig, config: FlowmeConfi
   return NEUTRAL_NODE_COLOR;
 }
 
-export type NodeEffectsLayoutMetrics = { widthPx: number; heightPx: number };
+export type NodeEffectsLayoutMetrics = {
+  widthPx: number;
+  heightPx: number;
+  /** SVG viewBox user-space width (default 100). Editor uses image natural width. */
+  viewBoxUserWidth?: number;
+  /** SVG viewBox user-space height (default 100). */
+  viewBoxUserHeight?: number;
+};
 
 /** Card passes these so glow/badge/alert style the real `.node-dot`; editor omits hooks (SVG-only). */
 export type NodeEffectsSyncHooks = {
@@ -48,15 +56,32 @@ function layoutMetrics(svg: SVGSVGElement): NodeEffectsLayoutMetrics {
   return { widthPx: Math.max(1, r.width), heightPx: Math.max(1, r.height) };
 }
 
-/** Map node radius (px) into viewBox 0–100 circle radius (min of x/y scale). */
+function viewBoxUserSize(m: NodeEffectsLayoutMetrics): { vbW: number; vbH: number } {
+  return {
+    vbW: m.viewBoxUserWidth ?? 100,
+    vbH: m.viewBoxUserHeight ?? 100,
+  };
+}
+
+/** Map node radius (px) into SVG user units (min of x/y scale). */
 function nodeRadiusSvgUnits(nodeRpx: number, m: NodeEffectsLayoutMetrics): number {
-  const sx = 100 / m.widthPx;
-  const sy = 100 / m.heightPx;
+  const { vbW, vbH } = viewBoxUserSize(m);
+  const sx = vbW / m.widthPx;
+  const sy = vbH / m.heightPx;
   return Math.min(nodeRpx * sx, nodeRpx * sy);
 }
 
 function strokeWidthSvgPx(px: number, m: NodeEffectsLayoutMetrics): number {
-  return Math.max(0.04, px * Math.min(100 / m.widthPx, 100 / m.heightPx));
+  const { vbW, vbH } = viewBoxUserSize(m);
+  return Math.max(0.04, px * Math.min(vbW / m.widthPx, vbH / m.heightPx));
+}
+
+function percentToSvgXY(pos: NodePosition, m: NodeEffectsLayoutMetrics): { cx: number; cy: number } {
+  const { vbW, vbH } = viewBoxUserSize(m);
+  return {
+    cx: (pos.x / 100) * vbW,
+    cy: (pos.y / 100) * vbH,
+  };
 }
 
 function rippleOwnerAttr(nodeId: string): string {
@@ -149,8 +174,7 @@ export class NodeEffectsLayerController {
 
       const nodeRpx = node.size ?? defaultRpx;
       const rSvg = nodeRadiusSvgUnits(nodeRpx, m);
-      const cx = node.position.x;
-      const cy = node.position.y;
+      const { cx, cy } = percentToSvgXY(node.position, m);
       const colour = resolveNodeColourForEffect(node, config);
 
       const g = document.createElementNS(SVG_NS, 'g');
@@ -159,7 +183,7 @@ export class NodeEffectsLayerController {
 
       switch (fx.type) {
         case 'glow':
-          this.appendGlow(g, node, fx, hass, node.entity, colour, nodeRpx, hooks);
+          this.appendGlow(g, node, fx, hass, node.entity, colour, nodeRpx, hooks, m);
           break;
         case 'badge':
           this.appendBadge(g, fx, hass, node.entity, colour, node.id, cx, cy, nodeRpx, m, hooks);
@@ -185,7 +209,8 @@ export class NodeEffectsLayerController {
     entityId: string,
     colour: string,
     nodeRpx: number,
-    hooks?: NodeEffectsSyncHooks,
+    hooks: NodeEffectsSyncHooks | undefined,
+    m: NodeEffectsLayoutMetrics,
   ): void {
     const raw = parseReading(hass, entityId);
     const peak = fx.peak_value ?? 10000;
@@ -202,13 +227,14 @@ export class NodeEffectsLayerController {
       return;
     }
 
+    const { cx, cy } = percentToSvgXY(node.position, m);
     const ring = document.createElementNS(SVG_NS, 'circle');
-    ring.setAttribute('cx', String(node.position.x));
-    ring.setAttribute('cy', String(node.position.y));
-    ring.setAttribute('r', String(nodeRpx / 100));
+    ring.setAttribute('cx', String(cx));
+    ring.setAttribute('cy', String(cy));
+    ring.setAttribute('r', String(nodeRadiusSvgUnits(nodeRpx, m)));
     ring.setAttribute('fill', 'none');
     ring.setAttribute('stroke', c);
-    ring.setAttribute('stroke-width', String(0.08));
+    ring.setAttribute('stroke-width', String(strokeWidthSvgPx(2, m)));
     ring.setAttribute('opacity', String(opacity));
     ring.setAttribute(
       'style',
