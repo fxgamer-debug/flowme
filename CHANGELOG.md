@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.16] — Stable mount size before flow geometry (preview)
+
+### Fixed
+
+- **Lovelace card preview**: Flow lines could stay slightly scaled or shifted on first open even after v1.23.15’s double **`requestAnimationFrame`**, because the preview iframe can **keep reflowing** after those frames. **`awaitStableSize()`** in **`utils.ts`** uses **`ResizeObserver`** and waits until **`contentRect`** width/height match **two consecutive** callbacks (non-zero) before **`SvgRenderer`** / **`HoudiniRenderer`** run their post-init **`onResize()`** / **`rebuildPaths()`**. A **2000 ms** timeout falls back to **`getBoundingClientRect()`** so init never hangs.
+- **Debug** (`debug: true`): logs **`init start dims`**, **`stable dims`**, and **`post-resize dims`** (`offsetWidth` / `offsetHeight`) around stabilisation.
+
+### Removed
+
+- **`awaitDoubleRaf()`** (replaced by **`awaitStableSize()`** for renderer init).
+
 ## [1.23.15] — Preview flow geometry after layout
 
 ### Fixed

@@ -1,14 +1,51 @@
 import type { FlowConfig, FlowProfile, NodePosition, SpeedCurveOverride, ValueGradientConfig } from './types.js';
 
 /**
- * Resolve after two consecutive animation frames so layout can settle after the
- * mount node is inserted (e.g. Lovelace card preview before first paint).
+ * Resolve when `ResizeObserver` reports the **same** non-zero `contentRect`
+ * width/height for **two** consecutive callbacks — HA's preview iframe can keep
+ * reflowing past two rAFs; this waits for dimensions to stop changing.
+ *
+ * If layout never stabilises before `timeoutMs`, resolves with the current
+ * `getBoundingClientRect()` so init never hangs.
  */
-export function awaitDoubleRaf(): Promise<void> {
+export function awaitStableSize(el: Element, timeoutMs = 2000): Promise<DOMRectReadOnly> {
   return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
+    let lastW = 0;
+    let lastH = 0;
+    let stableCount = 0;
+    const STABLE_NEEDED = 2;
+    let settled = false;
+    const timeout = { handle: undefined as ReturnType<typeof setTimeout> | undefined };
+
+    const finish = (rect: DOMRectReadOnly): void => {
+      if (settled) return;
+      settled = true;
+      if (timeout.handle !== undefined) window.clearTimeout(timeout.handle);
+      ro.disconnect();
+      resolve(rect);
+    };
+
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width === lastW && height === lastH && width > 0 && height > 0) {
+        stableCount++;
+        if (stableCount >= STABLE_NEEDED) {
+          finish(entry.contentRect);
+        }
+      } else {
+        stableCount = 0;
+        lastW = width;
+        lastH = height;
+      }
     });
+
+    ro.observe(el);
+
+    timeout.handle = window.setTimeout(() => {
+      finish(el.getBoundingClientRect());
+    }, timeoutMs);
   });
 }
 

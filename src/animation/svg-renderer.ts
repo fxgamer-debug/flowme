@@ -6,7 +6,7 @@ import type {
 } from '../types.js';
 import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
-  awaitDoubleRaf,
+  awaitStableSize,
   debounce,
   percentToPixel,
   polylineToSvgPathStyled,
@@ -174,10 +174,9 @@ export class SvgRenderer implements FlowRenderer {
     if (isDebugEnabled()) {
       // eslint-disable-next-line no-console -- gated by config.debug
       console.log(
-        '[FlowMe Renderer] init dims:',
+        '[FlowMe Renderer] init start dims:',
         container.offsetWidth,
         container.offsetHeight,
-        container.getBoundingClientRect(),
       );
     }
     this.container = container;
@@ -200,10 +199,17 @@ export class SvgRenderer implements FlowRenderer {
     this.resizeObserver = new ResizeObserver(() => this.onResize());
     this.resizeObserver.observe(container);
     this.startFpsLoop();
-    // Preview pane: mount may not have final layout until after paint — rebuild
-    // paths once dimensions are trustworthy so flow lines match node positions.
-    await awaitDoubleRaf();
+    // Lovelace preview can reflow after several frames — wait for stable size.
+    await awaitStableSize(container);
+    if (isDebugEnabled()) {
+      // eslint-disable-next-line no-console -- gated by config.debug
+      console.log('[FlowMe Renderer] stable dims:', container.offsetWidth, container.offsetHeight);
+    }
     this.onResize();
+    if (isDebugEnabled()) {
+      // eslint-disable-next-line no-console -- gated by config.debug
+      console.log('[FlowMe Renderer] post-resize dims:', container.offsetWidth, container.offsetHeight);
+    }
   }
 
   /** Same flow ids as at init — refresh paths and particle layout without destroy/init. */
