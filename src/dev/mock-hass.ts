@@ -26,8 +26,6 @@ export const WEATHER_STATES = [
   'partlycloudy-night',
 ] as const;
 
-export type WeatherState = (typeof WEATHER_STATES)[number];
-
 export interface MockHassState {
   entity_id: string;
   state: string;

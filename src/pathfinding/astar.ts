@@ -12,9 +12,6 @@ export const TURN_PENALTY = 50;
 
 export type Cell = readonly [col: number, row: number];
 
-/** 0: none / 1: +x / 2: −x / 3: +y / 4: −y. Stored to spot turns cheaply. */
-const DIR_NONE = 0;
-
 interface FrontierEntry {
   col: number;
   row: number;
@@ -90,6 +87,7 @@ export function findPath(
   const cameFromRow = new Int16Array(total);
   cameFromCol.fill(-1);
   cameFromRow.fill(-1);
+  /** 0: unset / 1: +x / 2: −x / 3: +y / 4: −y — used for {@link TURN_PENALTY} on direction changes. */
   const cameDir = new Uint8Array(total);
   const closed = new Uint8Array(total);
 
@@ -168,6 +166,3 @@ function reconstruct(
   if (path[0]?.[0] === -1) path.shift();
   return path;
 }
-
-// marker used by reconstruct when we hit the sentinel
-export const START_DIR = DIR_NONE;

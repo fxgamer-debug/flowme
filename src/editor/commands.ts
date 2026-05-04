@@ -169,21 +169,6 @@ export function setNodeLabel(
   return next;
 }
 
-export function setNodeEntity(
-  config: FlowmeConfig,
-  nodeId: string,
-  entity: string | undefined,
-): FlowmeConfig {
-  const next = cloneConfig(config);
-  for (const n of next.nodes) {
-    if (n.id === nodeId) {
-      if (entity && entity.length) n.entity = entity;
-      else delete n.entity;
-    }
-  }
-  return next;
-}
-
 export function moveWaypoint(
   config: FlowmeConfig,
   flowId: string,
@@ -256,16 +241,6 @@ export function addFlow(
 export function deleteFlow(config: FlowmeConfig, flowId: string): FlowmeConfig {
   const next = cloneConfig(config);
   next.flows = next.flows.filter((f) => f.id !== flowId);
-  return next;
-}
-
-export function setFlowEntity(
-  config: FlowmeConfig,
-  flowId: string,
-  entity: string,
-): FlowmeConfig {
-  const next = cloneConfig(config);
-  for (const f of next.flows) if (f.id === flowId) f.entity = entity;
   return next;
 }
 

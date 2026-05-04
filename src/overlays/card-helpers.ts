@@ -56,9 +56,3 @@ export async function createOverlayCardElement(
   if (!helpers) return null;
   return helpers.createCardElement(config);
 }
-
-/** For tests: reset the cache. */
-export function __resetCardHelpersCache(): void {
-  cachedHelpers = null;
-  pending = null;
-}

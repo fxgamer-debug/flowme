@@ -2,6 +2,26 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.24] — Dead code audit and cleanup
+
+### Removed
+
+- **`clearPathCache`** — exported from **`pathfinding/index.ts`** but never called; path cache remains keyed by URL in-session.
+- **`WorkerRequest` / `WorkerResponse`** — obsolete pathfinding worker message types; current **`pathfinding.worker.ts`** uses **`PathfindingWorkerMessage`** only.
+- **`setNodeEntity` / `setFlowEntity`** — duplicate **`editor/commands.ts`** exports; the editor updates entities via local **`pushPatch`** helpers only.
+- **`StringKey`** — unused `typeof STRINGS` alias in **`strings.ts`**.
+- **`START_DIR`** — stray **`astar.ts`** export (never imported).
+- **`__resetCardHelpersCache`** — test-helper export never referenced.
+- **`loadTranslation` / `Translation`** — **`i18n`** helpers were only used internally; **`Translation`** is module-private.
+- **`WeatherState`** — unused alias in **`dev/mock-hass.ts`**.
+- **`resolveNodeColourForEffect` / `NodeEffectsLayoutMetrics`** exports — kept module-internal (**`node-effects-layer.ts`**).
+- **Lint**: ESLint runs on **`src`** and **`tests`**; **`no-unused-vars`** is **`off`** so **`@typescript-eslint/no-unused-vars`** is the single unused-binding rule (recommended for TypeScript).
+
+### Verification
+
+- **`ts-prune`**, **`npm run check`** (type-check, type-check:tests, lint, test, build): clean before release.
+- **AUDIT** spot-checks: no **`sirbu`/`dumitra`** in **`src/`** (tests retain negative assertions); native overlay/camera/switch/rubber-band/pulse-animation/spark/**pulse node effect** / Romanian strings / **`DEBUG_WATCH_ENTITIES`** / **`awaitDoubleRaf`** absent from **`src/`** as intended; **`suggestNodeIds`** exists only in historical changelog prose.
+
 ## [1.23.17] — CI: `awaitStableSize` timer typing
 
 ### Fixed
@@ -1866,7 +1886,7 @@ From v1.0.0 onward, `main` is protected: all changes land via PR. The direct-to-
 - Extended SVG renderer to support all four shapes (dot, square, wave, pulse). Wave is rendered as an animated dashed stroked path; pulse renders as stationary expanding circles at evenly spaced anchor points.
 - **Editor overhaul** (`src/flowme-card-editor.ts` + `src/editor/`):
   - `UndoStack` — 100-deep undo/redo with a command description for each patch; push one patch per drag (on pointer-up).
-  - `editor/commands.ts` — pure functions for moveNode, addNode, deleteNode, moveWaypoint, insertWaypoint, deleteWaypoint, setNodeLabel, setNodeEntity, addFlow, deleteFlow, setFlowEntity.
+  - `editor/commands.ts` — pure functions for moveNode, addNode, deleteNode, moveWaypoint, insertWaypoint, deleteWaypoint, setNodeLabel, addFlow, deleteFlow.
   - `flowme-editor-toolbar` — Add node, Add flow, Suggest path (disabled until v0.3), Undo, Redo, Preview toggle, Save.
   - Waypoint handles that drag along the canvas; Shift-drag snaps to 8% grid. Shift-click on a flow segment inserts a waypoint at that point. Right-click deletes nodes (with confirm) and waypoints (immediate).
   - Keyboard: ⌘Z / Ctrl+Z = undo, ⌘⇧Z / Ctrl+Shift+Z / Ctrl+Y = redo.

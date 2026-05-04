@@ -1,6 +1,6 @@
 {
   "name": "flowme",
-  "version": "1.23.17",
+  "version": "1.24",
   "description": "Home Assistant custom Lovelace card: animated flow visualisation over a user-supplied background image.",
   "type": "module",
   "main": "dist/flowme-card.js",
@@ -12,7 +12,7 @@
     "build": "vite build",
     "type-check": "tsc --noEmit",
     "type-check:tests": "tsc -p tsconfig.test.json",
-    "lint": "eslint src",
+    "lint": "eslint src tests --max-warnings 0",
     "lint:fix": "eslint src --fix",
     "test": "vitest run",
     "test:watch": "vitest",

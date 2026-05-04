@@ -18,7 +18,7 @@ function parseReading(hass: HomeAssistant | undefined, entityId: string | undefi
 }
 
 /** Resolve node colour — mirrors FlowmeCard grouping logic (simplified). */
-export function resolveNodeColourForEffect(node: NodeConfig, config: FlowmeConfig): string {
+function resolveNodeColourForEffect(node: NodeConfig, config: FlowmeConfig): string {
   const domain = config.domain;
   const profile = getProfile(domain);
   if (node.color) return node.color;
@@ -34,7 +34,7 @@ export function resolveNodeColourForEffect(node: NodeConfig, config: FlowmeConfi
   return NEUTRAL_NODE_COLOR;
 }
 
-export type NodeEffectsLayoutMetrics = {
+type NodeEffectsLayoutMetrics = {
   widthPx: number;
   heightPx: number;
   /** SVG viewBox user-space width (default 100). Editor uses image natural width. */

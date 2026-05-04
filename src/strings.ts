@@ -478,5 +478,3 @@ export const STRINGS = {
       `type: ${type} was removed in v1.0.9. Replace with type: custom and a card: block. See documentation.`,
   },
 } as const;
-
-export type StringKey = typeof STRINGS;

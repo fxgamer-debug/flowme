@@ -25,6 +25,8 @@ export default tseslint.config(
       },
     },
     rules: {
+      /** Base rule duplicates `@typescript-eslint/no-unused-vars` for `.ts` — leave off. */
+      'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'error',

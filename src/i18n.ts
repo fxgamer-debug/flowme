@@ -4,11 +4,11 @@ type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
-export type Translation = DeepPartial<typeof STRINGS>;
+type Translation = DeepPartial<typeof STRINGS>;
 
 let activeTranslation: Translation = {};
 
-export function loadTranslation(translation: Translation): void {
+function loadTranslation(translation: Translation): void {
   activeTranslation = translation;
 }
 

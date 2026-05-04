@@ -70,16 +70,6 @@ export async function loadDownscaledRgbaForPathfinding(
   }
 }
 
-export function clearPathCache(url?: string): void {
-  if (url) {
-    for (const key of gridCache.keys()) {
-      if (key.startsWith(`${url}|`)) gridCache.delete(key);
-    }
-    return;
-  }
-  gridCache.clear();
-}
-
 // -- internals --
 
 function getGrid(cacheKey: string, url: string, cellSize: number): Promise<CostGrid | null> {

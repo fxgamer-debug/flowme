@@ -8927,7 +8927,7 @@ var Hs = Object.defineProperty, Ts = Object.getOwnPropertyDescriptor, V = (t, e,
     (r = t[s]) && (n = (o ? r(e, i, n) : r(n)) || n);
   return o && n && Hs(e, i, n), n;
 };
-const Gs = "1.23.17", Ci = 5e3;
+const Gs = "1.24", Ci = 5e3;
 console.info(
   `%c flowme %c v${Gs} `,
   "color: white; background: #4ADE80; font-weight: 700;",
