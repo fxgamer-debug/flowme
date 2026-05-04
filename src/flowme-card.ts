@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.13';
+const CARD_VERSION = '1.23.14';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -369,49 +369,60 @@ export class FlowmeCard extends LitElement {
     super.disconnectedCallback();
   }
 
-  override willUpdate(changed: PropertyValues): void {
+  /**
+   * Start (or restart) the flow renderer when `config` is set and the mount
+   * node exists. Runs from {@link willUpdate} when the mount ref already
+   * points at a live element from a prior render, and from {@link updated}
+   * after the first paint so `ref()` is populated — avoiding a dependency on
+   * the next `hass` update (HA preview can delay hass by several seconds).
+   */
+  private beginRendererInitIfNeeded(): void {
     if (!this.config) return;
     const mount = this.rendererMount.value;
+    if (!mount || this.rendererReadyFor === this.config) return;
 
-    if (mount && this.rendererReadyFor !== this.config) {
-      if (isDebugEnabled()) {
-        // eslint-disable-next-line no-console -- gated by config.debug
-        console.log('[FlowMe] renderer init start:', performance.now());
-      }
-      this.teardownRenderer();
-      this.renderer = createRenderer();
-      this.rendererReadyFor = this.config;
-      const activeConfig = this.config;
-      void this.renderer.init(mount, activeConfig)
-        .then(() => {
-          if (isDebugEnabled()) {
-            // eslint-disable-next-line no-console -- gated by config.debug
-            console.log('[FlowMe] renderer init complete:', performance.now());
-          }
-          // After init, push current hass values (including gradient colours)
-          // so flows render immediately without waiting for the next hass change.
-          if (this.hass) this.pushAllValuesToRenderer();
-          else this.syncRendererAriaLabels();
-        })
-        .catch((err) => {
-          dlog('renderer init failed — falling back to SVG renderer', err);
-          this.teardownRenderer();
-          this.renderer = new SvgRenderer();
-          this.rendererReadyFor = activeConfig;
-          void this.renderer.init(mount, activeConfig)
-            .then(() => {
-              if (isDebugEnabled()) {
-                // eslint-disable-next-line no-console -- gated by config.debug
-                console.log('[FlowMe] renderer init complete:', performance.now());
-              }
-              if (this.hass) this.pushAllValuesToRenderer();
-              else this.syncRendererAriaLabels();
-            })
-            .catch((err2) => {
-              console.error('[flowme] SVG renderer init also failed', err2);
-            });
-        });
+    if (isDebugEnabled()) {
+      // eslint-disable-next-line no-console -- gated by config.debug
+      console.log('[FlowMe] renderer init start:', performance.now());
     }
+    this.teardownRenderer();
+    this.renderer = createRenderer();
+    this.rendererReadyFor = this.config;
+    const activeConfig = this.config;
+    void this.renderer.init(mount, activeConfig)
+      .then(() => {
+        if (isDebugEnabled()) {
+          // eslint-disable-next-line no-console -- gated by config.debug
+          console.log('[FlowMe] renderer init complete:', performance.now());
+        }
+        // After init, push current hass values (including gradient colours)
+        // so flows render immediately without waiting for the next hass change.
+        if (this.hass) this.pushAllValuesToRenderer();
+        else this.syncRendererAriaLabels();
+      })
+      .catch((err) => {
+        dlog('renderer init failed — falling back to SVG renderer', err);
+        this.teardownRenderer();
+        this.renderer = new SvgRenderer();
+        this.rendererReadyFor = activeConfig;
+        void this.renderer.init(mount, activeConfig)
+          .then(() => {
+            if (isDebugEnabled()) {
+              // eslint-disable-next-line no-console -- gated by config.debug
+              console.log('[FlowMe] renderer init complete:', performance.now());
+            }
+            if (this.hass) this.pushAllValuesToRenderer();
+            else this.syncRendererAriaLabels();
+          })
+          .catch((err2) => {
+            console.error('[flowme] SVG renderer init also failed', err2);
+          });
+      });
+  }
+
+  override willUpdate(changed: PropertyValues): void {
+    if (!this.config) return;
+    this.beginRendererInitIfNeeded();
 
     if (changed.has('hass') && this.renderer) {
       if (this.hass) this.pushAllValuesToRenderer();
@@ -425,6 +436,9 @@ export class FlowmeCard extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
+    // First paint: `ref(rendererMount)` is set only after commit — run init here
+    // if `willUpdate` saw a null mount (no prior render).
+    this.beginRendererInitIfNeeded();
     const svg = this.nodeFxSvgRef.value;
     if (svg && this.config) {
       this.nodeFx.sync(svg, this.config, this.hass, performance.now(), this.nodeEffectHooks());

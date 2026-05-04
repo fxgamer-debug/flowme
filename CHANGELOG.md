@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.14] — Preview init without waiting for hass
+
+### Fixed
+
+- **`flowme-card` / Lovelace preview**: Full renderer `init()` no longer waits for the next Home Assistant **`hass`** push. Lit runs `willUpdate` **before** `render()`, so the `.renderer-mount` **ref was empty on the first update** and init only ran on a later cycle — in the editor preview, HA often delivers **`hass` seconds later**, which matched the observed delay. Init is now also triggered from **`updated()`** (after DOM commit) whenever **config** is set and the mount node exists, so static flows and paths appear as soon as the card paints; live values still follow via **`pushAllValuesToRenderer`** when **`hass`** is available.
+
 ## [1.23.13] — HA preview performance (editor)
 
 ### Fixed
