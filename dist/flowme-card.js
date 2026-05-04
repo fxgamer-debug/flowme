@@ -1687,15 +1687,15 @@ function Di(t, e = 2e3) {
     let o = 0, n = 0, s = 0;
     const r = 2;
     let l = !1;
-    const a = { handle: void 0 }, d = (h) => {
-      l || (l = !0, a.handle !== void 0 && window.clearTimeout(a.handle), p.disconnect(), i(h));
+    const a = { id: void 0 }, d = (h) => {
+      l || (l = !0, a.id !== void 0 && window.clearTimeout(a.id), p.disconnect(), i(h));
     }, p = new ResizeObserver((h) => {
       const u = h[0];
       if (!u) return;
       const { width: f, height: g } = u.contentRect;
       f === o && g === n && f > 0 && g > 0 ? (s++, s >= r && d(u.contentRect)) : (s = 0, o = f, n = g);
     });
-    p.observe(t), a.handle = window.setTimeout(() => {
+    p.observe(t), a.id = window.setTimeout(() => {
       d(t.getBoundingClientRect());
     }, e);
   });
@@ -8927,7 +8927,7 @@ var Hs = Object.defineProperty, Ts = Object.getOwnPropertyDescriptor, V = (t, e,
     (r = t[s]) && (n = (o ? r(e, i, n) : r(n)) || n);
   return o && n && Hs(e, i, n), n;
 };
-const Gs = "1.23.16", Ci = 5e3;
+const Gs = "1.23.17", Ci = 5e3;
 console.info(
   `%c flowme %c v${Gs} `,
   "color: white; background: #4ADE80; font-weight: 700;",

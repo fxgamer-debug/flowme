@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.17] — CI: `awaitStableSize` timer typing
+
+### Fixed
+
+- **`awaitStableSize()`** (`utils.ts`): Store the fallback **`setTimeout`** handle as an explicit DOM **`number`** (with `as number`) and clear via a small **`timer`** ref object. Vitest / Node type merges were making **`ReturnType<typeof setTimeout>`** resolve to **`NodeJS.Timeout`**, which broke **`tsc -p tsconfig.test.json`** (`number` not assignable to `Timeout`).
+
 ## [1.23.16] — Stable mount size before flow geometry (preview)
 
 ### Fixed

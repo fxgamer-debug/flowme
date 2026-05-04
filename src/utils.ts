@@ -15,12 +15,13 @@ export function awaitStableSize(el: Element, timeoutMs = 2000): Promise<DOMRectR
     let stableCount = 0;
     const STABLE_NEEDED = 2;
     let settled = false;
-    const timeout = { handle: undefined as ReturnType<typeof setTimeout> | undefined };
+    /** DOM timer id — object ref so `finish` can clear before `const` assignment order issues; typed `number` for Vitest/Node `setTimeout` merges. */
+    const timer = { id: undefined as number | undefined };
 
     const finish = (rect: DOMRectReadOnly): void => {
       if (settled) return;
       settled = true;
-      if (timeout.handle !== undefined) window.clearTimeout(timeout.handle);
+      if (timer.id !== undefined) window.clearTimeout(timer.id);
       ro.disconnect();
       resolve(rect);
     };
@@ -43,9 +44,9 @@ export function awaitStableSize(el: Element, timeoutMs = 2000): Promise<DOMRectR
 
     ro.observe(el);
 
-    timeout.handle = window.setTimeout(() => {
+    timer.id = window.setTimeout(() => {
       finish(el.getBoundingClientRect());
-    }, timeoutMs);
+    }, timeoutMs) as number;
   });
 }
 
