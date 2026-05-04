@@ -50,6 +50,31 @@ export function awaitStableSize(el: Element, timeoutMs = 2000): Promise<DOMRectR
   });
 }
 
+/**
+ * When `awaitStableSize` times out with 0×0 (slow HA preview mount), wait until
+ * `ResizeObserver` reports positive content dimensions. No timeout — the container
+ * eventually lays out when the shell becomes visible.
+ */
+export function waitForNonZeroContentSize(el: Element): Promise<void> {
+  return new Promise((resolve) => {
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        ro.disconnect();
+        resolve();
+      }
+    });
+    ro.observe(el);
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) {
+      ro.disconnect();
+      resolve();
+    }
+  });
+}
+
 export function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;

@@ -1,6 +1,13 @@
 import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition } from '../types.js';
 import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
-import { awaitStableSize, debounce, percentToPixel, resolveSpeedCurveParams, sigmoidSpeedCurve } from '../utils.js';
+import {
+  awaitStableSize,
+  debounce,
+  percentToPixel,
+  resolveSpeedCurveParams,
+  sigmoidSpeedCurve,
+  waitForNonZeroContentSize,
+} from '../utils.js';
 import type { FlowRenderer } from './types.js';
 import { dlog } from '../debug-log.js';
 // Vite inlines the worklet source as a string at build time.
@@ -138,7 +145,10 @@ export class HoudiniRenderer implements FlowRenderer {
     this.rebuildPaths();
     this.resizeObserver = new ResizeObserver(() => this.rebuildPaths());
     this.resizeObserver.observe(container);
-    await awaitStableSize(container);
+    const rect = await awaitStableSize(container);
+    if (rect.width === 0 || rect.height === 0) {
+      await waitForNonZeroContentSize(container);
+    }
     dlog('Houdini stable dims:', container.offsetWidth, container.offsetHeight);
     this.rebuildPaths();
     dlog('Houdini post-resize dims:', container.offsetWidth, container.offsetHeight);

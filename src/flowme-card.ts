@@ -25,8 +25,10 @@ import { dlog, peekDebugFromRaw, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
-/** Version string (card load banner + debug logs). */
-const CARD_VERSION = '2.1.3';
+/** Version string (module load banner + debug logs). */
+const CARD_VERSION = '2.1.4';
+// eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
+console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
 
 
@@ -75,7 +77,6 @@ function buildVisibilityVars(visibility?: VisibilityConfig): string {
 
 @customElement('flowme-card')
 export class FlowmeCard extends LitElement {
-  private _loadVersionLogged = false;
   private _hass?: HomeAssistant;
   private _lastLanguage?: string;
   /** WebSocket disconnected since last successful `ready` — drives reconnect toast (ANIM-3). */
@@ -335,15 +336,6 @@ export class FlowmeCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (!this._loadVersionLogged) {
-      this._loadVersionLogged = true;
-      // Intentional: one load banner per card (not gated by `debug`); see v2.1.3 CHANGELOG.
-      // eslint-disable-next-line no-console -- version visibility for operators
-      console.info(
-        `%cFlowMe v${CARD_VERSION} loaded`,
-        'color: #FF6B00; font-weight: bold;',
-      );
-    }
     this.syncPauseWhenHiddenListener();
     dlog('connectedCallback — shadowRoot present?', !!this.shadowRoot, 'config present?', !!this.config, 'hass present?', !!this._hass);
   }
@@ -751,7 +743,6 @@ export class FlowmeCard extends LitElement {
     return {
       type: 'custom:flowme-card',
       domain: 'energy',
-      diagram_domain: 'energy',
       background: {
         default: '',
       },

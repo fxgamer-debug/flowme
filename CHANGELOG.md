@@ -2,6 +2,19 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.4]
+
+### Fixed
+
+- **Zero-size preview (Water / HVAC no particles):** `SvgRenderer` and `HoudiniRenderer` now wait for **non-zero** container size after `awaitStableSize()` (which can time out at 0×0). If dimensions are still zero, they **`waitForNonZeroContentSize()`** via `ResizeObserver` (no extra timeout) before the first `onResize()` / `rebuildPaths()`, so flows never initialise with empty geometry on first load.
+- **Editor domain dropdown:** The diagram `<select>` uses **`?selected`** on each `<option>` instead of `.value` on the `<select>`, so Lit reliably reflects the saved **`domain`** after options render.
+- **Card domain validation:** Missing or invalid top-level **`domain`** defaults to **`energy`** (unknown YAML keys such as legacy **`diagram_domain`** remain ignored).
+
+### Changed
+
+- **Removed `diagram_domain`:** Only **`domain`** is read and written; the v2.1.3 duplicate field is removed from types, validation, editor commits, and **`getStubConfig`**.
+- **Version banner:** **`console.info`** for FlowMe version runs **once at module load** (same bundle/page), not in **`connectedCallback()`**, so opening the editor or changing domain does not repeat the line.
+
 ## [2.1.3]
 
 ### Fixed

@@ -7,6 +7,7 @@ import type {
 import { ensureRenderableStrokeColour, getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
   awaitStableSize,
+  waitForNonZeroContentSize,
   debounce,
   percentToPixel,
   polylineToSvgPathStyled,
@@ -193,7 +194,10 @@ export class SvgRenderer implements FlowRenderer {
     this.resizeObserver.observe(container);
     this.startFpsLoop();
     // Lovelace preview can reflow after several frames — wait for stable size.
-    await awaitStableSize(container);
+    const rect = await awaitStableSize(container);
+    if (rect.width === 0 || rect.height === 0) {
+      await waitForNonZeroContentSize(container);
+    }
     rlog('stable dims:', container.offsetWidth, container.offsetHeight);
     this.onResize();
     rlog('post-resize dims:', container.offsetWidth, container.offsetHeight);

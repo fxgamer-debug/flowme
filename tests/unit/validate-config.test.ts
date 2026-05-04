@@ -23,18 +23,11 @@ describe('validateConfig — happy path', () => {
     expect(cfg.flows).toHaveLength(0);
   });
 
-  it('accepts diagram_domain without domain (Lovelace mirror key)', () => {
-    const raw = { ...minimalConfig() } as Record<string, unknown>;
-    delete raw['domain'];
-    raw['diagram_domain'] = 'hvac';
-    const cfg = validateConfig(raw);
-    expect(cfg.domain).toBe('hvac');
-  });
-
-  it('prefers diagram_domain over domain when both are set', () => {
-    const raw = { ...minimalConfig(), domain: 'energy', diagram_domain: 'generic' };
-    const cfg = validateConfig(raw);
-    expect(cfg.domain).toBe('generic');
+  it('defaults card domain to energy when key is missing or invalid', () => {
+    const noDomain = { ...minimalConfig() } as Record<string, unknown>;
+    delete noDomain['domain'];
+    expect(validateConfig(noDomain).domain).toBe('energy');
+    expect(validateConfig({ ...minimalConfig(), domain: 'martian' }).domain).toBe('energy');
   });
 
   it('accepts pause_when_hidden', () => {
@@ -238,12 +231,6 @@ describe('validateConfig — schema failures', () => {
   it('rejects wrong card type', () => {
     expect(() => validateConfig({ ...minimalConfig(), type: 'custom:other' })).toThrow(
       /custom:flowme-card/,
-    );
-  });
-
-  it('rejects unknown domain', () => {
-    expect(() => validateConfig({ ...minimalConfig(), domain: 'martian' })).toThrow(
-      /domain/,
     );
   });
 

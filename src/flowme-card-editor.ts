@@ -2823,6 +2823,7 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderDomainSelectorPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
+    const domainSelected = this.config.domain ?? 'energy';
     return html`
       <details class="panel domain-settings-panel" open>
         <summary>${t('editor.stateA.domainSummary')}</summary>
@@ -2831,13 +2832,16 @@ export class FlowmeCardEditor extends LitElement {
             <span class="field-label">${t('editor.stateA.domain')}</span>
             <select
               id="flowme-domain-select"
-              .value=${this.config.domain ?? 'energy'}
               @change=${(e: Event) => {
                 const v = (e.target as HTMLSelectElement).value;
                 this.onDomainChange(v);
               }}
             >
-              ${FLOW_DOMAINS.map((d) => html`<option value=${d}>${this.domainOptionLabel(d)}</option>`)}
+              ${FLOW_DOMAINS.map(
+                (d) => html`
+                  <option value=${d} ?selected=${domainSelected === d}>${this.domainOptionLabel(d)}</option>
+                `,
+              )}
             </select>
           </label>
         </div>
@@ -4261,12 +4265,8 @@ export class FlowmeCardEditor extends LitElement {
     // asynchronously (microtask / setTimeout) the flag remains true until
     // setConfig consumes and clears it — never reset it here.
     this._ownCommit = true;
-    const configForHa: FlowmeConfig = {
-      ...config,
-      diagram_domain: config.domain,
-    };
     const event = new CustomEvent('config-changed', {
-      detail: { config: configForHa },
+      detail: { config },
       bubbles: true,
       composed: true,
     });
