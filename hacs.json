@@ -1,5 +1,6 @@
 {
   "name": "FlowMe",
   "filename": "flowme-card.js",
-  "content_in_root": false
+  "content_in_root": false,
+  "thumbnail": "https://raw.githubusercontent.com/fxgamer-debug/flowme/main/assets/thumbnail.svg"
 }
