@@ -163,14 +163,16 @@ overlays:
 
 FlowMe includes built-in profiles for:
 
-| Domain   | Roles (examples)        | Units   |
-| -------- | ------------------------- | ------- |
-| energy   | Solar, Grid, Battery, Load | W       |
-| water    | Supply, Drain, Storage, Transfer | L/min |
-| network  | Upload, Download, Local, External | Mbps |
-| hvac     | Supply air, Return air, Fresh, Exhaust | CFM |
-| gas      | Inlet, Outlet, Bypass, Vent | m³/h   |
-| generic  | Flow 1–4                  | configurable |
+| Domain   | Roles                              | Units        |
+| -------- | ---------------------------------- | ------------ |
+| energy   | Solar, Grid, Battery, Load         | sensor unit  |
+| water    | Supply, Drain, Storage, Transfer | sensor unit  |
+| network  | Upload, Download, Local, External | sensor unit  |
+| hvac     | Supply air, Return air, Fresh, Exhaust | sensor unit  |
+| gas      | Inlet, Outlet, Bypass, Vent      | sensor unit  |
+| generic  | Flow 1–4                           | sensor unit  |
+
+FlowMe reads `unit_of_measurement` directly from the HA sensor and displays it as-is. The speed curve for each domain is calibrated to watts (energy), litres per minute (water), and Mbps (network) but accepts any sensor unit — adjust peak_value in the speed curve config to match your sensor’s scale.
 
 ---
 

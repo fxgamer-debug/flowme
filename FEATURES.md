@@ -198,9 +198,20 @@ Only `type: custom` is supported. Each overlay has `id`, `position`, optional `s
 
 ## Domains
 
-Each domain defines `unit_label`, `threshold`, `p50`, `peak`, sigmoid `speed_curve`, optional `particle_count_curve`, `wave_amplitude_curve`, `unit_scale` for kW→W style conversion, `describe()` formatting, and **shape** (`dot`, `square`, `wave`, `pulse`, `gradient`) for legacy profile visuals. Role colours come from `DOMAIN_COLOUR_PROFILES` + optional card `domain_colors`.
+Built-in profiles by domain:
 
-Calibration is tuned for typical residential ranges per domain (see `src/flow-profiles/*.ts`).
+| Domain   | Roles                              | Units        |
+| -------- | ---------------------------------- | ------------ |
+| energy   | Solar, Grid, Battery, Load         | sensor unit  |
+| water    | Supply, Drain, Storage, Transfer | sensor unit  |
+| network  | Upload, Download, Local, External | sensor unit  |
+| hvac     | Supply air, Return air, Fresh, Exhaust | sensor unit  |
+| gas      | Inlet, Outlet, Bypass, Vent      | sensor unit  |
+| generic  | Flow 1–4                           | sensor unit  |
+
+FlowMe reads `unit_of_measurement` directly from the HA sensor and displays it as-is. The speed curve for each domain is calibrated to watts (energy), litres per minute (water), and Mbps (network) but accepts any sensor unit — adjust peak_value in the speed curve config to match your sensor’s scale.
+
+Each domain defines `unit_label` (for internal curve math and `describe()`), `threshold`, `p50`, `peak`, sigmoid `speed_curve`, optional `particle_count_curve`, `wave_amplitude_curve`, `unit_scale` for kW→W style conversion, `describe()` formatting, and **shape** (`dot`, `square`, `wave`, `pulse`, `gradient`) for legacy profile visuals. Role colours come from `DOMAIN_COLOUR_PROFILES` + optional card `domain_colors`. Calibration defaults are tuned for typical residential ranges (see `src/flow-profiles/*.ts`).
 
 ---
 
