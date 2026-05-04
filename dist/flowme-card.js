@@ -9575,7 +9575,7 @@ let U = class extends ne {
     return e >= 1e3 || e >= 100 ? t.toFixed(0) : e >= 10 ? t.toFixed(1) : t.toFixed(2);
   }
   teardownRenderer() {
-    this.renderer && (this.renderer.destroy(), this.renderer = null), this.rendererReadyFor = void 0;
+    this.renderer && (this.renderer.destroy(), this.renderer = null), this.rendererReadyFor = void 0, this._documentVisibilityPauseActive = !1;
   }
 };
 U.styles = vt`
