@@ -143,6 +143,12 @@ export class HoudiniRenderer implements FlowRenderer {
     this.resizeObserver.observe(container);
   }
 
+  applyConfig(config: FlowmeConfig): void {
+    this.config = config;
+    this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
+    this.rebuildPaths();
+  }
+
   updateFlow(flowId: string, value: number): void {
     if (!this.flowsById.has(flowId)) return;
     this.latestValues.set(flowId, value);

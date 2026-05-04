@@ -2,6 +2,18 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.13] — HA preview performance (editor)
+
+### Fixed
+
+- **`flowme-card` preview pane**: `setConfig()` no longer tears down the flow renderer on every validated config object. When the **set of flow ids is unchanged**, the SVG/Houdini renderer receives **`applyConfig()`** instead — refreshes paths and reapplies animation state without a full `init()`.
+- **Background layers**: `background.default` is only reapplied when that URL **actually changes**, avoiding unnecessary layer resets on each editor keystroke.
+- **Debug timing** (`debug: true`): logs `setConfig start`, `teardown complete`, `renderer init start`, `renderer init complete`, and `first paint` (rAF×2) to profile preview latency.
+
+### Notes
+
+- **Fluid** stroke fade-in (`600ms`) remains confined to `animation_style: fluid` inside `applyFluid` (not used for dots/dash/arrow/trail/none).
+
 ## [1.23.12] — Editor flow connectors + single scene coordinates
 
 ### Fixed

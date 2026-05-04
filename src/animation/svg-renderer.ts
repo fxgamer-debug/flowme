@@ -192,6 +192,18 @@ export class SvgRenderer implements FlowRenderer {
     this.startFpsLoop();
   }
 
+  /** Same flow ids as at init — refresh paths and particle layout without destroy/init. */
+  applyConfig(config: FlowmeConfig): void {
+    if (!this.svg) return;
+    this.config = config;
+    this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
+    this.onResize();
+    for (const flow of config.flows) {
+      const v = this.latestValues.get(flow.id) ?? 0;
+      this.applyFlow(flow.id, v);
+    }
+  }
+
   updateFlow(flowId: string, value: number): void {
     if (!this.flowsById.has(flowId)) return;
     this.latestValues.set(flowId, value);
@@ -1473,6 +1485,7 @@ export class SvgRenderer implements FlowRenderer {
     dom.lineStroke.removeAttribute('stroke-dasharray');
     if (glowFilter) dom.lineStroke.setAttribute('filter', glowFilter);
 
+    // Fluid-only one-shot stroke fade-in (dots/dash/arrow/trail/none skip this block)
     if (!dom.fluidInitialised) {
       dom.fluidInitialised = true;
       dom.lineStroke.setAttribute('opacity', '0');

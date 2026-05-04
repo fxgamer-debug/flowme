@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.12';
+const CARD_VERSION = '1.23.13';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -221,31 +221,117 @@ export class FlowmeCard extends LitElement {
    */
   private warnedMissing = new Set<string>();
 
-  setConfig(raw: unknown): void {
-    try {
-      const config = validateConfig(raw);
-      // Gate all diagnostic logging behind the config flag. Call this
-      // before any dlog() so even the "setConfig called" log is gated.
-      setDebugEnabled(config.debug ?? false);
-      dlog('setConfig called:', JSON.parse(JSON.stringify(raw ?? null)));
-      dlog('setConfig validated → flows=', config.flows.length, 'nodes=', config.nodes.length, 'overlays=', config.overlays?.length ?? 0);
-      this.config = config;
-      this.errorMessage = undefined;
-      const willTeardown =
-        this.rendererReadyFor !== undefined && this.rendererReadyFor !== config;
-      if (isDebugEnabled()) {
-        // eslint-disable-next-line no-console -- gated by config.debug
-        console.log('[FlowMe] setConfig: tear down renderer for new config object:', willTeardown);
-      }
-      if (willTeardown) {
-        this.teardownRenderer();
-      }
-      // seed both layers with the default image on first load — no crossfade
-      const initial = config.background.default;
-      this.bgLayerA = initial;
+  /**
+   * Full SVG/Houdini rebuild is only needed when the set of flow ids changes.
+   * Other edits use {@link FlowRenderer.applyConfig} so the HA editor preview
+   * stays responsive (otherwise every keystroke costs a full renderer init).
+   */
+  private needsRendererReinit(prev: FlowmeConfig, next: FlowmeConfig): boolean {
+    const prevIds = new Set(prev.flows.map((f) => f.id));
+    const nextIds = new Set(next.flows.map((f) => f.id));
+    if (prevIds.size !== nextIds.size) return true;
+    for (const id of prevIds) {
+      if (!nextIds.has(id)) return true;
+    }
+    return false;
+  }
+
+  /** Avoid resetting background layers when `background.default` is unchanged (editor spam). */
+  private updateBackgroundLayersAfterConfig(prev: FlowmeConfig | undefined, next: FlowmeConfig): void {
+    const nextDefault = next.background?.default ?? '';
+    if (!prev) {
+      this.bgLayerA = nextDefault;
       this.bgLayerB = '';
       this.activeLayer = 'A';
-      this.lastAppliedBgUrl = initial;
+      this.lastAppliedBgUrl = nextDefault;
+      return;
+    }
+    if (prev.background?.default === next.background?.default) {
+      return;
+    }
+    this.bgLayerA = nextDefault;
+    this.bgLayerB = '';
+    this.activeLayer = 'A';
+    this.lastAppliedBgUrl = nextDefault;
+  }
+
+  private logFirstPaint(): void {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (isDebugEnabled()) {
+          // eslint-disable-next-line no-console -- gated by config.debug
+          console.log('[FlowMe] first paint:', performance.now());
+        }
+      });
+    });
+  }
+
+  setConfig(raw: unknown): void {
+    const t0 = performance.now();
+    if (isDebugEnabled()) {
+      // eslint-disable-next-line no-console -- gated by config.debug
+      console.log('[FlowMe] setConfig start:', t0);
+    }
+    try {
+      const newConfig = validateConfig(raw);
+      // Gate all diagnostic logging behind the config flag. Call this
+      // before any dlog() so even the "setConfig called" log is gated.
+      setDebugEnabled(newConfig.debug ?? false);
+      dlog('setConfig called:', JSON.parse(JSON.stringify(raw ?? null)));
+      dlog(
+        'setConfig validated → flows=',
+        newConfig.flows.length,
+        'nodes=',
+        newConfig.nodes.length,
+        'overlays=',
+        newConfig.overlays?.length ?? 0,
+      );
+
+      const prev = this.config;
+      const mustRebuildRenderer =
+        !!prev && !!this.renderer && this.needsRendererReinit(prev, newConfig);
+      const canPatchInPlace =
+        !!this.renderer &&
+        !!prev &&
+        !mustRebuildRenderer &&
+        typeof this.renderer.applyConfig === 'function';
+
+      if (canPatchInPlace) {
+        this.config = newConfig;
+        this.errorMessage = undefined;
+        this.updateBackgroundLayersAfterConfig(prev, newConfig);
+        this.renderer!.applyConfig!(newConfig);
+        this.rendererReadyFor = newConfig;
+        if (this.hass) this.pushAllValuesToRenderer();
+        else this.syncRendererAriaLabels();
+        if (isDebugEnabled()) {
+          const t1 = performance.now();
+          // eslint-disable-next-line no-console -- gated by config.debug
+          console.log('[FlowMe] teardown complete:', t1, '(skipped — applyConfig)');
+          // eslint-disable-next-line no-console -- gated by config.debug
+          console.log('[FlowMe] renderer init start:', t1, '(skipped — applyConfig)');
+          // eslint-disable-next-line no-console -- gated by config.debug
+          console.log('[FlowMe] renderer init complete:', t1, '(skipped — applyConfig)');
+        }
+        this.logFirstPaint();
+        return;
+      }
+
+      if (this.renderer && mustRebuildRenderer) {
+        this.teardownRenderer();
+        if (isDebugEnabled()) {
+          // eslint-disable-next-line no-console -- gated by config.debug
+          console.log('[FlowMe] teardown complete:', performance.now());
+        }
+      } else if (isDebugEnabled()) {
+        // eslint-disable-next-line no-console -- gated by config.debug
+        console.log('[FlowMe] teardown complete:', performance.now(), '(skipped)');
+      }
+
+      this.config = newConfig;
+      this.errorMessage = undefined;
+      this.updateBackgroundLayersAfterConfig(prev, newConfig);
+      this.logFirstPaint();
     } catch (err) {
       const message = err instanceof FlowmeConfigError ? err.message : String(err);
       this.config = undefined;
@@ -288,6 +374,10 @@ export class FlowmeCard extends LitElement {
     const mount = this.rendererMount.value;
 
     if (mount && this.rendererReadyFor !== this.config) {
+      if (isDebugEnabled()) {
+        // eslint-disable-next-line no-console -- gated by config.debug
+        console.log('[FlowMe] renderer init start:', performance.now());
+      }
       this.teardownRenderer();
       this.renderer = createRenderer();
       this.rendererReadyFor = this.config;
@@ -296,7 +386,7 @@ export class FlowmeCard extends LitElement {
         .then(() => {
           if (isDebugEnabled()) {
             // eslint-disable-next-line no-console -- gated by config.debug
-            console.log('[FlowMe] renderer init complete, time:', performance.now());
+            console.log('[FlowMe] renderer init complete:', performance.now());
           }
           // After init, push current hass values (including gradient colours)
           // so flows render immediately without waiting for the next hass change.
@@ -312,7 +402,7 @@ export class FlowmeCard extends LitElement {
             .then(() => {
               if (isDebugEnabled()) {
                 // eslint-disable-next-line no-console -- gated by config.debug
-                console.log('[FlowMe] renderer init complete, time:', performance.now());
+                console.log('[FlowMe] renderer init complete:', performance.now());
               }
               if (this.hass) this.pushAllValuesToRenderer();
               else this.syncRendererAriaLabels();
