@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.3]
+
+### Fixed
+
+- **Domain change not persisting in the editor:** The State A domain `<select>` now calls `onDomainChange()` with deep-cloned `prev` / `next` and `pushPatch(…, 'Change domain')`, matching other State A edits. Commits to Home Assistant also include **`diagram_domain`** (same value as `domain`) so the diagram type survives Lovelace round-trips when the UI layer mishandles a top-level `domain` key. `validateConfig` reads **`diagram_domain` first**, then `domain`, so configs stored with either key load correctly.
+
+### Changed
+
+- **Version banner restored:** On first connect, each card instance logs once via **`console.info`** with styled FlowMe orange (`FlowMe v… loaded`), regardless of the card **`debug`** flag — intentional visibility for load diagnostics (same idea as other popular custom cards).
+
 ## [2.1.2]
 
 ### Fixed

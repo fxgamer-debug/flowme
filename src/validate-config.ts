@@ -566,7 +566,18 @@ export function validateConfig(raw: unknown): FlowmeConfig {
   if (c['type'] !== 'custom:flowme-card') {
     fail('type', t('validation.typeMustBeFlowme', String(c['type'])));
   }
-  if (!FLOW_DOMAINS.includes(c['domain'] as never)) {
+  // `diagram_domain` is the Lovelace-persisted key (some HA paths mishandle top-level
+  // `domain` on custom cards). Prefer it when both are set; accept `domain` alone for
+  // older configs.
+  const rawDiagram = c['diagram_domain'];
+  const rawDomain = c['domain'];
+  let cardDomain: FlowmeConfig['domain'] | undefined;
+  if (typeof rawDiagram === 'string' && FLOW_DOMAINS.includes(rawDiagram as never)) {
+    cardDomain = rawDiagram as FlowmeConfig['domain'];
+  } else if (typeof rawDomain === 'string' && FLOW_DOMAINS.includes(rawDomain as never)) {
+    cardDomain = rawDomain as FlowmeConfig['domain'];
+  }
+  if (cardDomain === undefined) {
     fail('domain', t('validation.mustBeOneOf', FLOW_DOMAINS.join(', ')));
   }
 
@@ -629,7 +640,7 @@ export function validateConfig(raw: unknown): FlowmeConfig {
 
   const config: FlowmeConfig = {
     type: 'custom:flowme-card',
-    domain: c['domain'] as FlowmeConfig['domain'],
+    domain: cardDomain,
     background,
     nodes,
     flows,

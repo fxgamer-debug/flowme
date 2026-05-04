@@ -426,6 +426,11 @@ export interface BackgroundConfig {
 export interface FlowmeConfig {
   type: 'custom:flowme-card';
   domain: FlowDomain;
+  /**
+   * Mirror of `domain` written by the editor for Lovelace persistence when the UI layer
+   * mishandles top-level `domain` (v2.1.3+). Resolved by `validateConfig` together with `domain`.
+   */
+  diagram_domain?: FlowDomain;
   background: BackgroundConfig;
   nodes: NodeConfig[];
   flows: FlowConfig[];
@@ -445,7 +450,8 @@ export interface FlowmeConfig {
   domain_colors?: DomainColors;
   /**
    * Enable verbose debug logging to the browser console. Default false.
-   * When false, zero console output is produced during normal operation.
+   * When false, optional diagnostics are silent; a one-time load **`console.info`**
+   * still identifies the card version (v2.1.3+).
    * v1.0.9+.
    */
   debug?: boolean;

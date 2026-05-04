@@ -52,7 +52,6 @@ import {
   renameOverlayId,
   renameWeatherState,
   setBackgroundDefault,
-  setCardDomain,
   setDefault,
   setDomainColor,
   setFlowColor,
@@ -2832,13 +2831,10 @@ export class FlowmeCardEditor extends LitElement {
             <span class="field-label">${t('editor.stateA.domain')}</span>
             <select
               id="flowme-domain-select"
-              .value=${this.config.domain}
+              .value=${this.config.domain ?? 'energy'}
               @change=${(e: Event) => {
-                if (!this.config) return;
-                const v = (e.target as HTMLSelectElement).value as FlowDomain;
-                const prev = this.config;
-                const next = setCardDomain(prev, v);
-                this.pushPatch(prev, next, `set domain ${v}`);
+                const v = (e.target as HTMLSelectElement).value;
+                this.onDomainChange(v);
               }}
             >
               ${FLOW_DOMAINS.map((d) => html`<option value=${d}>${this.domainOptionLabel(d)}</option>`)}
@@ -2847,6 +2843,21 @@ export class FlowmeCardEditor extends LitElement {
         </div>
       </details>
     `;
+  }
+
+  /** Deep copy so undo / validation never shares references with `this.config`. */
+  private deepCloneConfig(c: FlowmeConfig): FlowmeConfig {
+    return JSON.parse(JSON.stringify(c)) as FlowmeConfig;
+  }
+
+  private onDomainChange(value: string): void {
+    if (!this.config) return;
+    const d = value as FlowDomain;
+    if (!FLOW_DOMAINS.includes(d)) return;
+    const prev = this.deepCloneConfig(this.config);
+    const next = this.deepCloneConfig(this.config);
+    next.domain = d;
+    this.pushPatch(prev, next, 'Change domain');
   }
 
   private domainOptionLabel(d: FlowDomain): string {
@@ -4250,8 +4261,12 @@ export class FlowmeCardEditor extends LitElement {
     // asynchronously (microtask / setTimeout) the flag remains true until
     // setConfig consumes and clears it — never reset it here.
     this._ownCommit = true;
+    const configForHa: FlowmeConfig = {
+      ...config,
+      diagram_domain: config.domain,
+    };
     const event = new CustomEvent('config-changed', {
-      detail: { config },
+      detail: { config: configForHa },
       bubbles: true,
       composed: true,
     });

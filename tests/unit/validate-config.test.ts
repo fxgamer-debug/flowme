@@ -23,6 +23,20 @@ describe('validateConfig — happy path', () => {
     expect(cfg.flows).toHaveLength(0);
   });
 
+  it('accepts diagram_domain without domain (Lovelace mirror key)', () => {
+    const raw = { ...minimalConfig() } as Record<string, unknown>;
+    delete raw['domain'];
+    raw['diagram_domain'] = 'hvac';
+    const cfg = validateConfig(raw);
+    expect(cfg.domain).toBe('hvac');
+  });
+
+  it('prefers diagram_domain over domain when both are set', () => {
+    const raw = { ...minimalConfig(), domain: 'energy', diagram_domain: 'generic' };
+    const cfg = validateConfig(raw);
+    expect(cfg.domain).toBe('generic');
+  });
+
   it('accepts pause_when_hidden', () => {
     const cfg = validateConfig({ ...minimalConfig(), pause_when_hidden: false });
     expect(cfg.pause_when_hidden).toBe(false);

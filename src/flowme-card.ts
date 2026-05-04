@@ -25,8 +25,8 @@ import { dlog, peekDebugFromRaw, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
-/** Version string for HA diagnostics / debug logs only (no console banner — keep dashboard silent). */
-const CARD_VERSION = '2.1.2';
+/** Version string (card load banner + debug logs). */
+const CARD_VERSION = '2.1.3';
 const DEFAULT_TRANSITION_MS = 5000;
 
 
@@ -75,6 +75,7 @@ function buildVisibilityVars(visibility?: VisibilityConfig): string {
 
 @customElement('flowme-card')
 export class FlowmeCard extends LitElement {
+  private _loadVersionLogged = false;
   private _hass?: HomeAssistant;
   private _lastLanguage?: string;
   /** WebSocket disconnected since last successful `ready` — drives reconnect toast (ANIM-3). */
@@ -334,6 +335,15 @@ export class FlowmeCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    if (!this._loadVersionLogged) {
+      this._loadVersionLogged = true;
+      // Intentional: one load banner per card (not gated by `debug`); see v2.1.3 CHANGELOG.
+      // eslint-disable-next-line no-console -- version visibility for operators
+      console.info(
+        `%cFlowMe v${CARD_VERSION} loaded`,
+        'color: #FF6B00; font-weight: bold;',
+      );
+    }
     this.syncPauseWhenHiddenListener();
     dlog('connectedCallback — shadowRoot present?', !!this.shadowRoot, 'config present?', !!this.config, 'hass present?', !!this._hass);
   }
@@ -741,6 +751,7 @@ export class FlowmeCard extends LitElement {
     return {
       type: 'custom:flowme-card',
       domain: 'energy',
+      diagram_domain: 'energy',
       background: {
         default: '',
       },
