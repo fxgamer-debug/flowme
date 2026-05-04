@@ -166,6 +166,9 @@ export class SvgRenderer implements FlowRenderer {
   private flowPathSyncedDirection = new Map<string, number>();
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
+    if (this.svg) {
+      this.destroy();
+    }
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
     this.container = container;
     this.config = config;

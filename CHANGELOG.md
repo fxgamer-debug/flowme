@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.10] — Flow endpoints editor + preview reinit
+
+### Added
+
+- **Flow inspector**: Editable **From node** and **To node** dropdowns (after route legend, before entity). Changing endpoints clears waypoints, runs auto path suggest (main-thread, same as toolbar fallback), applies suggested path in **one** undo step, and keeps the flow selected. Validates that from ≠ to.
+
+### Fixed
+
+- **Card preview / HA card**: `setConfig()` always tears down the flow renderer so fluid and particle animations reinitialise immediately on config edits (no stale `fluidInitialised`). Debug logs when `debug: true`: `setConfig` / `renderer init complete`. **SvgRenderer.init** clears any previous SVG if re-entered.
+
 ## [1.23.9] — Patch: fix timer type for TypeScript compatibility
 
 ### Fixed

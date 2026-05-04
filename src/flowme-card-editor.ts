@@ -167,6 +167,9 @@ export class FlowmeCardEditor extends LitElement {
   @state() private redoLabel = '';
   @state() private suggestPreview: SuggestPreview | null = null;
   @state() private suggestBusy = false;
+  /** Flow id while inspector endpoint auto-route runs (shows same busy UX as Suggest Path). */
+  @state() private flowEndpointPathfindingFlowId: string | null = null;
+  @state() private flowEndpointError: string | null = null;
   private _pathWorker?: Worker;
   private _pathWorkerPending = false;
   private _pathPendingSelection: { fromId: string; toId: string } | null = null;
@@ -267,6 +270,9 @@ export class FlowmeCardEditor extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
+    if (changed.has('selectedFlowId')) {
+      this.flowEndpointError = null;
+    }
     const pendingInspectorFocus = this._pendingInspectorLabelFocus;
     if (pendingInspectorFocus) this._pendingInspectorLabelFocus = false;
 
@@ -1183,9 +1189,51 @@ export class FlowmeCardEditor extends LitElement {
           <h3>${t('editor.inspector.flowHeading', flow.id)}</h3>
           <fieldset class="inspector-fieldset">
             <legend class="inspector-legend">${t('editor.inspector.routeAndSensor')}</legend>
-            <div class="row">
-              <span>${flow.from_node} → ${flow.to_node}</span>
+            <div class="field-row flow-endpoint-row">
+              <label for=${`flow-from-${flow.id}`}>${t('editor.inspector.fromNode')}</label>
+              <select
+                id=${`flow-from-${flow.id}`}
+                class="flow-endpoint-select"
+                ?disabled=${this.flowEndpointPathfindingFlowId === flow.id}
+                .value=${flow.from_node}
+                @change=${(e: Event) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  this.onFlowFromNodeChange(flow.id, v);
+                }}
+              >
+                ${this.config.nodes.map(
+                  (n) =>
+                    html`<option value=${n.id} ?selected=${n.id === flow.from_node}>${n.label ?? n.id}</option>`,
+                )}
+              </select>
             </div>
+            <div class="field-row flow-endpoint-row">
+              <label for=${`flow-to-${flow.id}`}>${t('editor.inspector.toNode')}</label>
+              <select
+                id=${`flow-to-${flow.id}`}
+                class="flow-endpoint-select"
+                ?disabled=${this.flowEndpointPathfindingFlowId === flow.id}
+                .value=${flow.to_node}
+                @change=${(e: Event) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  this.onFlowToNodeChange(flow.id, v);
+                }}
+              >
+                ${this.config.nodes.map(
+                  (n) =>
+                    html`<option value=${n.id} ?selected=${n.id === flow.to_node}>${n.label ?? n.id}</option>`,
+                )}
+              </select>
+            </div>
+            ${this.flowEndpointPathfindingFlowId === flow.id
+              ? html`<p class="hint-sub flow-endpoint-busy">
+                  ${t('editor.toolbar.suggestPathFinding')}
+                  <span class="suggest-path-spinner" aria-hidden="true"></span>
+                </p>`
+              : nothing}
+            ${this.flowEndpointError && this.selectedFlowId === flow.id
+              ? html`<p class="flow-endpoint-error">${this.flowEndpointError}</p>`
+              : nothing}
             <label>
               ${t('editor.inspector.entity')}
               ${this.renderEntityPicker(
@@ -3232,6 +3280,71 @@ export class FlowmeCardEditor extends LitElement {
     this.suggestPreview = null;
   };
 
+  private onFlowFromNodeChange(flowId: string, value: string): void {
+    if (!this.config) return;
+    const flow = this.config.flows.find((f) => f.id === flowId);
+    if (!flow) return;
+    void this.applyFlowEndpointChange(flowId, value, flow.to_node);
+  }
+
+  private onFlowToNodeChange(flowId: string, value: string): void {
+    if (!this.config) return;
+    const flow = this.config.flows.find((f) => f.id === flowId);
+    if (!flow) return;
+    void this.applyFlowEndpointChange(flowId, flow.from_node, value);
+  }
+
+  /** Main-thread pathfinding (same as toolbar fallback) — single undo with endpoints + waypoints. */
+  private async resolveWaypointsForEndpoints(fromId: string, toId: string): Promise<NodePosition[]> {
+    if (!this.config) return [];
+    const fromNode = this.config.nodes.find((n) => n.id === fromId);
+    const toNode = this.config.nodes.find((n) => n.id === toId);
+    if (!fromNode || !toNode) return [];
+    const imageUrl = this.config.background?.default ?? '';
+    if (!imageUrl) return [];
+    try {
+      const pathResult = await suggestPath({
+        imageUrl,
+        from: fromNode.position,
+        to: toNode.position,
+      });
+      if (!pathResult.edgesUsable) return [];
+      return (pathResult.waypoints ?? []).map((w) => ({ x: w.x, y: w.y }));
+    } catch {
+      return [];
+    }
+  }
+
+  private async applyFlowEndpointChange(flowId: string, nextFrom: string, nextTo: string): Promise<void> {
+    if (!this.config) return;
+    if (nextFrom === nextTo) {
+      this.flowEndpointError = t('editor.inspector.fromToSameError');
+      return;
+    }
+    const prev = this.config;
+    const flow = prev.flows.find((f) => f.id === flowId);
+    if (!flow) return;
+
+    this.flowEndpointError = null;
+    this.flowEndpointPathfindingFlowId = flowId;
+    let waypoints: NodePosition[] = [];
+    try {
+      waypoints = await this.resolveWaypointsForEndpoints(nextFrom, nextTo);
+    } finally {
+      this.flowEndpointPathfindingFlowId = null;
+    }
+
+    const next: FlowmeConfig = {
+      ...prev,
+      flows: prev.flows.map((f) =>
+        f.id === flowId ? { ...f, from_node: nextFrom, to_node: nextTo, waypoints } : f,
+      ),
+    };
+
+    this.pushPatch(prev, next, 'Change flow endpoints');
+    this.selectedFlowId = flowId;
+  }
+
   private renderSuggestPreview(): TemplateResult | typeof nothing {
     if (!this.suggestPreview || !this.config) return nothing;
     const fromNode = this.config.nodes.find((n) => n.id === this.suggestPreview!.fromNodeId);
@@ -4599,6 +4712,31 @@ export class FlowmeCardEditor extends LitElement {
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
+    }
+    .flow-endpoint-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .flow-endpoint-row label {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+    .flow-endpoint-select {
+      width: 100%;
+      max-width: 100%;
+    }
+    .flow-endpoint-busy {
+      margin: 4px 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .flow-endpoint-error {
+      color: var(--error-color, #f44336);
+      font-size: 12px;
+      margin: 0 0 8px;
     }
     .field-label {
       min-width: 5rem;

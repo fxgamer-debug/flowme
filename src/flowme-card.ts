@@ -21,12 +21,12 @@ import { interpolateGradientColor, parseAspectRatio, parseSensorValue, resolveNi
 import { renderOverlayHost } from './overlays/render.js';
 import type { FlowmeCustomOverlay } from './overlays/custom-overlay.js';
 import './overlays/custom-overlay.js';
-import { dlog, setDebugEnabled } from './debug-log.js';
+import { dlog, isDebugEnabled, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '1.23.9';
+const CARD_VERSION = '1.23.10';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -229,11 +229,16 @@ export class FlowmeCard extends LitElement {
       setDebugEnabled(config.debug ?? false);
       dlog('setConfig called:', JSON.parse(JSON.stringify(raw ?? null)));
       dlog('setConfig validated → flows=', config.flows.length, 'nodes=', config.nodes.length, 'overlays=', config.overlays?.length ?? 0);
+      const needsReinit = !this.rendererReadyFor || this.rendererReadyFor !== config;
+      if (isDebugEnabled()) {
+        // eslint-disable-next-line no-console -- gated by config.debug
+        console.log('[FlowMe] setConfig called, reinitialising renderer:', needsReinit);
+      }
+      // Always tear down so preview/editor updates re-run fluid/particle init even when
+      // HA reuses object identity or only animation fields change.
+      this.teardownRenderer();
       this.config = config;
       this.errorMessage = undefined;
-      if (this.rendererReadyFor && this.rendererReadyFor !== config) {
-        this.teardownRenderer();
-      }
       // seed both layers with the default image on first load — no crossfade
       const initial = config.background.default;
       this.bgLayerA = initial;
@@ -288,6 +293,10 @@ export class FlowmeCard extends LitElement {
       const activeConfig = this.config;
       void this.renderer.init(mount, activeConfig)
         .then(() => {
+          if (isDebugEnabled()) {
+            // eslint-disable-next-line no-console -- gated by config.debug
+            console.log('[FlowMe] renderer init complete, time:', performance.now());
+          }
           // After init, push current hass values (including gradient colours)
           // so flows render immediately without waiting for the next hass change.
           if (this.hass) this.pushAllValuesToRenderer();
@@ -300,6 +309,10 @@ export class FlowmeCard extends LitElement {
           this.rendererReadyFor = activeConfig;
           void this.renderer.init(mount, activeConfig)
             .then(() => {
+              if (isDebugEnabled()) {
+                // eslint-disable-next-line no-console -- gated by config.debug
+                console.log('[FlowMe] renderer init complete, time:', performance.now());
+              }
               if (this.hass) this.pushAllValuesToRenderer();
               else this.syncRendererAriaLabels();
             })

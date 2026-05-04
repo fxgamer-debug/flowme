@@ -29,7 +29,10 @@
       "waypoints": "Waypoints",
       "speedCurve": "Speed curve",
       "valueGradient": "Value gradient",
-      "fluidIgnoresParticleShape": "Fluid style uses a flowing gradient along the line — particle shape is ignored."
+      "fluidIgnoresParticleShape": "Fluid style uses a flowing gradient along the line — particle shape is ignored.",
+      "fromNode": "From node",
+      "toNode": "To node",
+      "fromToSameError": "From and To must be different nodes"
     },
     "nodeEffect": {
       "section": "Node effect",
