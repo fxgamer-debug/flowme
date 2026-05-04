@@ -1,5 +1,17 @@
 import type { FlowConfig, FlowProfile, NodePosition, SpeedCurveOverride, ValueGradientConfig } from './types.js';
 
+/**
+ * Resolve after two consecutive animation frames so layout can settle after the
+ * mount node is inserted (e.g. Lovelace card preview before first paint).
+ */
+export function awaitDoubleRaf(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 export function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;

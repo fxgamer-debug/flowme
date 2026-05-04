@@ -1,6 +1,7 @@
 import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition } from '../types.js';
 import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
+  awaitDoubleRaf,
   debounce,
   percentToPixel,
   resolveSpeedCurveParams,
@@ -141,6 +142,8 @@ export class HoudiniRenderer implements FlowRenderer {
     this.rebuildPaths();
     this.resizeObserver = new ResizeObserver(() => this.rebuildPaths());
     this.resizeObserver.observe(container);
+    await awaitDoubleRaf();
+    this.rebuildPaths();
   }
 
   applyConfig(config: FlowmeConfig): void {

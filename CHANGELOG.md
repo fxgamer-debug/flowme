@@ -2,6 +2,13 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.23.15] — Preview flow geometry after layout
+
+### Fixed
+
+- **Lovelace card preview (first editor open)**: Flow lines could appear at the wrong scale or position while nodes looked correct. The card runs renderer **`init()`** as soon as the mount node exists; the mount’s **`getBoundingClientRect()`** can still reflect pre-layout size (or `containerSize()` previously clamped zeros to **1×1**, skewing aspect ratio). **`SvgRenderer`** and **`HoudiniRenderer`** now **`await` two animation frames** at the end of **`init()`**, then **rebuild paths** (`onResize` / `rebuildPaths()`) so `pushAllValuesToRenderer` runs after **`init()` resolves** with geometry based on the settled layout.
+- **Debug** (`debug: true`): logs **`[FlowMe Renderer] init dims:`** with `offsetWidth`, `offsetHeight`, and **`getBoundingClientRect()`** when the renderer starts.
+
 ## [1.23.14] — Preview init without waiting for hass
 
 ### Fixed

@@ -6,6 +6,7 @@ import type {
 } from '../types.js';
 import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
+  awaitDoubleRaf,
   debounce,
   percentToPixel,
   polylineToSvgPathStyled,
@@ -170,6 +171,15 @@ export class SvgRenderer implements FlowRenderer {
       this.destroy();
     }
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
+    if (isDebugEnabled()) {
+      // eslint-disable-next-line no-console -- gated by config.debug
+      console.log(
+        '[FlowMe Renderer] init dims:',
+        container.offsetWidth,
+        container.offsetHeight,
+        container.getBoundingClientRect(),
+      );
+    }
     this.container = container;
     this.config = config;
     this.prefersReducedMotionFlag = prefersReducedMotion();
@@ -190,6 +200,10 @@ export class SvgRenderer implements FlowRenderer {
     this.resizeObserver = new ResizeObserver(() => this.onResize());
     this.resizeObserver.observe(container);
     this.startFpsLoop();
+    // Preview pane: mount may not have final layout until after paint — rebuild
+    // paths once dimensions are trustworthy so flow lines match node positions.
+    await awaitDoubleRaf();
+    this.onResize();
   }
 
   /** Same flow ids as at init — refresh paths and particle layout without destroy/init. */
