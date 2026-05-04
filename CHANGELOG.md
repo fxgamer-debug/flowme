@@ -2,6 +2,14 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.1]
+
+### Fixed
+
+- **HVAC / Generic preview:** Flow lines could disappear when flow IDs did not match domain colour patterns — domain colour resolution now falls back to the **first role’s** default for HVAC, water, network, and gas (energy unchanged: unmatched IDs still use profile +/- defaults). **Generic** slot colours always resolve to a solid hex by flow index.
+- **Colour hygiene:** `resolveFlowColor` ignores empty `color` / `color_positive` / `color_negative` strings and guarantees a valid `#rgb` / `#rrggbb` via `ensureRenderableStrokeColour` (defaults to white). SVG gradient overlays and stroke colours use the same guard.
+- **Node effects:** Per-flow index is passed into `resolveFlowColor` so generic domain slots align with the card renderer.
+
 ## [2.1]
 
 ### Added

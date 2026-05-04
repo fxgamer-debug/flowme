@@ -99,9 +99,35 @@ function matchByPatterns(flowId: string, profile: DomainColourProfile): string |
 }
 
 /**
+ * When no flow id pattern matches (HVAC, water, network, gas), use the first
+ * role’s colour so every flow id still maps to a real hex. Respects
+ * `domain_colors` for that role key. v2.1.1+.
+ */
+function firstRoleDefaultColour(
+  profile: DomainColourProfile,
+  domainColors?: DomainColors,
+): string {
+  const r0 = profile.roles[0];
+  if (!r0) return '#FFFFFF';
+  const o = domainColors?.[r0.key];
+  const fromOverride = typeof o === 'string' && o.trim() !== '' ? o.trim() : undefined;
+  return (fromOverride ?? r0.default) || '#FFFFFF';
+}
+
+function roleColour(
+  role: DomainColourRole,
+  domainColors: DomainColors | undefined,
+): string {
+  const o = domainColors?.[role.key];
+  const fromOverride = typeof o === 'string' && o.trim() !== '' ? o.trim() : undefined;
+  return (fromOverride ?? role.default) || '#FFFFFF';
+}
+
+/**
  * Card-level default colour from domain profile + flow id patterns + `domain_colors` overrides.
- * Returns `undefined` when nothing matches so callers fall through to profile defaults
- * (except `generic`, which always picks a slot by flow index).
+ * Returns `undefined` for `energy` when no id pattern matches (so `resolveFlowColor` can
+ * use profile positive/negative defaults). Other domains return a solid hex, using the
+ * first role when no pattern matches. `generic` always maps by flow index. v2.1.1+.
  */
 export function resolveDomainFlowDefaultColour(
   domain: FlowDomain | undefined,
@@ -131,21 +157,24 @@ export function resolveDomainFlowDefaultColour(
     if (!matchedKey) {
       const idx = Math.abs(flowIndex ?? 0) % profile.roles.length;
       const role = profile.roles[idx]!;
-      const resolved = domainColors?.[role.key] ?? role.default;
-      dlog('colour resolution:', flowId, 'domain:', dom, 'matched role:', 'none', 'resolved:', resolved);
+      const resolved = roleColour(role, domainColors);
+      dlog('colour resolution:', flowId, 'domain:', dom, 'matched role:', 'none (by index)', 'resolved:', resolved);
       return resolved;
     }
   } else {
     matchedKey = matchByPatterns(flowId, profile);
     if (!matchedKey) {
-      dlog('colour resolution:', flowId, 'domain:', dom, 'matched role:', 'none', 'resolved:', undefined);
-      return undefined;
+      const resolved = firstRoleDefaultColour(profile, domainColors);
+      dlog('colour resolution:', flowId, 'domain:', dom, 'matched role:', 'first', 'resolved:', resolved);
+      return resolved;
     }
   }
 
   const role = profile.roles.find((r) => r.key === matchedKey);
-  if (!role) return undefined;
-  const resolved = domainColors?.[role.key] ?? role.default;
+  if (!role) {
+    return firstRoleDefaultColour(profile, domainColors);
+  }
+  const resolved = roleColour(role, domainColors);
   dlog('colour resolution:', flowId, 'domain:', dom, 'matched role:', matchedKey, 'resolved:', resolved);
   return resolved;
 }

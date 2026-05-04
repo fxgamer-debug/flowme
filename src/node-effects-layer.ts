@@ -26,8 +26,9 @@ function resolveNodeColourForEffect(node: NodeConfig, config: FlowmeConfig): str
   if (flowsTouching.length === 0) return profile.default_color_positive;
   const colours = new Set<string>();
   for (const f of flowsTouching) {
+    const fi = config.flows.findIndex((x) => x.id === f.id);
     const p = getProfile(f.domain ?? domain);
-    const c = resolveFlowColor(f, p, f.domain ?? domain, 1, config.domain_colors, 0);
+    const c = resolveFlowColor(f, p, f.domain ?? domain, 1, config.domain_colors, fi >= 0 ? fi : 0);
     colours.add(c);
   }
   if (colours.size === 1) return [...colours][0]!;

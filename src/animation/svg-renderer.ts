@@ -4,7 +4,7 @@ import type {
   FlowmeConfig,
   FlowProfile,
 } from '../types.js';
-import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
+import { ensureRenderableStrokeColour, getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
   awaitStableSize,
   debounce,
@@ -608,8 +608,12 @@ export class SvgRenderer implements FlowRenderer {
     const gradientColor = this.gradientColors.get(flowId);
     const gradMode = flow.value_gradient?.mode ?? 'flow';
     // particleColor is used by dot/arrow/trail styles; lineColor for the path line
-    const particleColor = gradientColor && gradMode !== 'line' ? gradientColor : baseColor;
-    const lineColor = gradientColor && gradMode !== 'flow' ? gradientColor : baseColor;
+    const particleColor = ensureRenderableStrokeColour(
+      gradientColor && gradMode !== 'line' ? gradientColor : baseColor,
+    );
+    const lineColor = ensureRenderableStrokeColour(
+      gradientColor && gradMode !== 'flow' ? gradientColor : baseColor,
+    );
     // `color` is the legacy single-color variable used by most branches
     const color = particleColor;
 

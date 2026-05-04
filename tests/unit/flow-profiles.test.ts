@@ -10,6 +10,7 @@ import {
   getProfile,
   flowProfiles,
   defaultDomainFlowColor,
+  ensureRenderableStrokeColour,
   resolveFlowColor,
   NEUTRAL_NODE_COLOR,
 } from '../../src/flow-profiles/index.js';
@@ -411,9 +412,9 @@ describe('defaultDomainFlowColor (v1.0.7 energy id-pattern defaults)', () => {
     expect(defaultDomainFlowColor('energy', 'consumption')).toBe('#FF8C1E');
   });
 
-  it('returns undefined for non-energy domains (preserves profile defaults)', () => {
-    expect(defaultDomainFlowColor('water', 'solar1')).toBeUndefined();
-    expect(defaultDomainFlowColor('network', 'grid')).toBeUndefined();
+  it('non-energy domains use first-role colour when no id pattern matches (v2.1.1+)', () => {
+    expect(defaultDomainFlowColor('water', 'solar1')).toBe('#60CFFF');
+    expect(defaultDomainFlowColor('network', 'grid')).toBe('#32DC50');
     expect(defaultDomainFlowColor(undefined, 'solar1')).toBeUndefined();
   });
 
@@ -421,6 +422,10 @@ describe('defaultDomainFlowColor (v1.0.7 energy id-pattern defaults)', () => {
     expect(defaultDomainFlowColor('water', 'cold_supply')).toBe('#60CFFF');
     expect(defaultDomainFlowColor('water', 'sewer_drain')).toBe('#0077AA');
     expect(defaultDomainFlowColor('network', 'download_usage')).toBe('#1EB4FF');
+  });
+
+  it('HVAC: unmatched flow id uses first role (supply) colour (v2.1.1)', () => {
+    expect(defaultDomainFlowColor('hvac', 'grid_power_like_energy_example')).toBe('#FF4500');
   });
 
   it('v1.0.8 domainColors parameter overrides built-in defaults', () => {
@@ -444,6 +449,16 @@ describe('defaultDomainFlowColor (v1.0.7 energy id-pattern defaults)', () => {
     // Substrings inside other words should NOT match (word-boundary aware).
     expect(defaultDomainFlowColor('energy', 'solarium_temperature')).toBeUndefined();
     expect(defaultDomainFlowColor('energy', 'overload_count')).toBeUndefined();
+  });
+});
+
+describe('ensureRenderableStrokeColour (v2.1.1)', () => {
+  it('keeps valid #rgb / #rrggbb and otherwise returns white', () => {
+    expect(ensureRenderableStrokeColour('#F00')).toBe('#F00');
+    expect(ensureRenderableStrokeColour('#FF0000')).toBe('#FF0000');
+    expect(ensureRenderableStrokeColour('')).toBe('#FFFFFF');
+    expect(ensureRenderableStrokeColour('#GGG')).toBe('#FFFFFF');
+    expect(ensureRenderableStrokeColour(undefined)).toBe('#FFFFFF');
   });
 });
 
@@ -487,9 +502,9 @@ describe('resolveFlowColor (v1.0.7 unified colour resolution)', () => {
     expect(resolveFlowColor(flow, energyProfile, 'energy', -1)).toBe(energyProfile.default_color_negative);
   });
 
-  it('does not apply id-pattern defaults outside the energy domain', () => {
+  it('non-energy domains: unmatched id uses first domain role colour, not profile fallback', () => {
     const flow = flowFixture({ id: 'solar1' });
-    expect(resolveFlowColor(flow, waterProfile, 'water', 1)).toBe(waterProfile.default_color_positive);
+    expect(resolveFlowColor(flow, waterProfile, 'water', 1)).toBe('#60CFFF');
   });
 });
 

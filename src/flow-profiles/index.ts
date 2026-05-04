@@ -31,6 +31,7 @@ export const NEUTRAL_NODE_COLOR = '#CCCCCC';
 
 /**
  * Per-domain default colour from flow id patterns and optional `domain_colors:` overrides.
+ * Non-energy domains without a matching pattern use the first role colour (v2.1.1+).
  * @see resolveDomainFlowDefaultColour
  */
 export function defaultDomainFlowColor(
@@ -48,15 +49,29 @@ export function defaultDomainFlowColor(
  *   1. `flow.color_positive` / `flow.color_negative` — direction-specific
  *      explicit overrides.
  *   2. `flow.color` — single-colour shorthand applied to both directions.
- *   3. `defaultDomainFlowColor(domain, flow.id, domainColors)` — built-in
- *      residential defaults (solar/grid/battery/load), overrideable by the
- *      card-level `domain_colors:` block (v1.0.8+).
+ *   3. `defaultDomainFlowColor(domain, flow.id, domainColors)` — pattern-based
+ *      defaults per domain (energy: solar/grid/…; other domains: first-role
+ *      fallback when the id matches nothing), overrideable by `domain_colors:` (v1.0.8+).
  *   4. `profile.default_color_positive` / `profile.default_color_negative`
  *      — profile-level fallback.
  *
  * `direction` is +1 (forward) or -1 (reverse, after `flow.reverse` and
  * the sign of the sensor value have been combined). v1.0.7+.
  */
+/** Accepts `#rgb` / `#rrggbb`; anything else falls back so SVG/CSS never see invalid colours. v2.1.1+ */
+const HEX_STROKE = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+
+export function ensureRenderableStrokeColour(c: string | undefined | null): string {
+  if (typeof c === 'string' && HEX_STROKE.test(c.trim())) {
+    return c.trim();
+  }
+  return '#FFFFFF';
+}
+
+function nonEmptyColour(s: string | undefined): string | undefined {
+  return typeof s === 'string' && s.trim() !== '' ? s.trim() : undefined;
+}
+
 export function resolveFlowColor(
   flow: Pick<FlowConfig, 'id' | 'color' | 'color_positive' | 'color_negative'>,
   profile: FlowProfile,
@@ -65,12 +80,20 @@ export function resolveFlowColor(
   domainColors?: DomainColors,
   flowIndex?: number,
 ): string {
-  const universal =
-    flow.color ?? resolveDomainFlowDefaultColour(domain, flow.id, domainColors, flowIndex);
+  const explicit = nonEmptyColour(flow.color);
+  const domainHue = resolveDomainFlowDefaultColour(domain, flow.id, domainColors, flowIndex);
+  const universal = explicit ?? domainHue;
+
+  let resolved: string | undefined;
   if (direction >= 0) {
-    return flow.color_positive ?? universal ?? profile.default_color_positive;
+    resolved =
+      nonEmptyColour(flow.color_positive) ?? universal ?? profile.default_color_positive;
+  } else {
+    resolved =
+      nonEmptyColour(flow.color_negative) ?? universal ?? profile.default_color_negative;
   }
-  return flow.color_negative ?? universal ?? profile.default_color_negative;
+
+  return ensureRenderableStrokeColour(resolved);
 }
 
 export {
