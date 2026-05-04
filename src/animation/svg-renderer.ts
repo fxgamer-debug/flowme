@@ -12,9 +12,9 @@ import {
   percentToPixel,
   polylineToSvgPathStyled,
   prefersReducedMotion,
-  resolveSpeedCurveParams,
-  sigmoidSpeedCurve,
-  type ResolvedSpeedCurveParams,
+  calcAnimDuration,
+  resolveAnimTiming,
+  type ResolvedAnimTiming,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
 import { dlog } from '../debug-log.js';
@@ -517,21 +517,18 @@ export class SvgRenderer implements FlowRenderer {
     }
 
     const profile = this.profileFor(flow);
-    const params = resolveSpeedCurveParams(flow, profile);
-    const threshold = DEBUG ? 0 : params.threshold;
+    const timing = resolveAnimTiming(flow, profile, this.config);
     const magnitude = Math.abs(value);
 
-    // shimmer: keep a faint animation even below threshold
     const shimmer = anim.shimmer === true;
-    const isShimmer = shimmer && magnitude < threshold && magnitude > 0;
-    const visible = DEBUG || magnitude >= threshold || isShimmer;
-
-    if (!visible) {
+    const thresholdHint = timing.peak * 0.001;
+    const isShimmer = shimmer && magnitude <= thresholdHint && magnitude > 0;
+    if (flow.visible === false) {
       this.setGroupOpacity(dom, 0);
       return;
     }
 
-    const rawSpeed = DEBUG ? DEBUG_DUR_MS : sigmoidSpeedCurve(magnitude, params);
+    const rawSpeed = DEBUG ? DEBUG_DUR_MS : calcAnimDuration(value, timing.peak, timing.minDur, timing.maxDur);
     const speedMultiplier = flow.speed_multiplier ?? 1;
     let durMs = Math.max(50, rawSpeed * speedMultiplier);
     if (isShimmer) durMs = durMs / SHIMMER_SPEED_FACTOR;
@@ -615,7 +612,7 @@ export class SvgRenderer implements FlowRenderer {
 
     this.syncFlowPathGeometry(flow, dom, direction);
 
-    const burstMultiplier = this.updateBurstState(flowId, magnitude, params, profile);
+    const burstMultiplier = this.updateBurstState(flowId, magnitude, timing, profile);
 
     rlog('applyFlow:', flowId, 'style=', style, 'dur=', durMs, 'dir=', direction, 'color=', color);
 
@@ -664,10 +661,10 @@ export class SvgRenderer implements FlowRenderer {
   private updateBurstState(
     flowId: string,
     magnitude: number,
-    params: ResolvedSpeedCurveParams,
+    timing: ResolvedAnimTiming,
     profile: FlowProfile,
   ): number {
-    const peak = params.peak;
+    const peak = timing.peak;
     const ratio = this.config?.defaults?.burst_trigger_ratio ?? BURST_TRIGGER_RATIO;
     const sustainMs = this.config?.defaults?.burst_sustain_ms ?? BURST_SUSTAIN_MS;
     const trigger = peak * ratio;
@@ -753,8 +750,8 @@ export class SvgRenderer implements FlowRenderer {
 
       const profile = this.profileFor(flow);
       const rawMag = Math.abs(this.latestValues.get(flow.id) ?? 0);
-      const params = resolveSpeedCurveParams(flow, profile);
-      const burstMultiplier = this.updateBurstState(flow.id, rawMag, params, profile);
+      const timing = resolveAnimTiming(flow, profile, this.config);
+      const burstMultiplier = this.updateBurstState(flow.id, rawMag, timing, profile);
 
       const base = Math.max(
         1,

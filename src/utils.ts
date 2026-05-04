@@ -1,4 +1,4 @@
-import type { FlowConfig, FlowProfile, NodePosition, SpeedCurveOverride, ValueGradientConfig } from './types.js';
+import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition, SpeedCurveOverride, ValueGradientConfig } from './types.js';
 
 /**
  * Resolve when `ResizeObserver` reports the **same** non-zero `contentRect`
@@ -289,85 +289,90 @@ export function parseSensorValue(raw: string | number | null | undefined): numbe
   return Number.isFinite(n) ? n : 0;
 }
 
-/** v1.0.6 universal sigmoid speed-curve constants. Every profile shares
- *  the same shape function and only varies the per-domain
- *  `threshold` / `p50` / `peak` calibration. Picked so a residential
- *  dashboard reads as: low values feel like a slow trickle (~9 s per
- *  cycle), the median residential reading feels medium-paced (~3 – 4 s),
- *  saturation feels rapid (~2 s, asymptoting toward 0.7 s but never
- *  reaching — the asymptote is what burst-density mode compensates for). */
-export const UNIVERSAL_MAX_DURATION_MS = 9000;
-export const UNIVERSAL_MIN_DURATION_MS = 700;
-export const UNIVERSAL_STEEPNESS = 1.5;
+/** Default slowest / fastest one-cycle animation durations (v2.2+ linear speed curve). */
+export const DEFAULT_ANIM_MAX_DURATION_MS = 10_000;
+export const DEFAULT_ANIM_MIN_DURATION_MS = 500;
 
 /**
- * Resolved sigmoid curve parameters — what the renderer actually feeds
- * into `sigmoidSpeedCurve`. Built by layering, in order:
- *   1. The per-flow `speed_curve_override` (highest precedence).
- *   2. The legacy per-flow `flow.threshold` shortcut (threshold only).
- *   3. The active profile's `threshold` / `p50` / `peak`.
- *   4. The universal constants for `max_duration` / `min_duration` /
- *      `steepness` when neither override nor profile fixes them.
+ * Linear speed curve: map sensor magnitude to cycle duration from maxDur (slow, near zero)
+ * down to minDur (fast, at/above peak). Values ≥ peak animate at minDur.
  */
-export interface ResolvedSpeedCurveParams {
-  threshold: number;
-  p50: number;
-  peak: number;
-  max_duration: number;
-  min_duration: number;
-  steepness: number;
-}
-
-/**
- * Universal sigmoid speed curve. Maps a sensor magnitude to a one-cycle
- * animation duration in milliseconds:
- *
- *   v      = max(|value|, threshold)               // floor away the log10(0) singularity
- *   ratio  = log10(v / p50)                        // log-distance from median, signed
- *   factor = 1 / (1 + exp(-steepness * ratio))     // logistic, 0.5 at v == p50
- *   ms     = max_duration - factor * (max_duration - min_duration)
- *
- * Asymptotic behaviour matches the spec — values > peak keep getting
- * faster but never reach `min_duration`, which is what burst-mode
- * particle density compensates for at saturation. Values < threshold
- * are clamped (the renderer hides them via the visibility check first
- * anyway).
- */
-export function sigmoidSpeedCurve(
+export function calcAnimDuration(
   value: number,
-  params: ResolvedSpeedCurveParams,
+  peakValue: number,
+  minDur: number,
+  maxDur: number,
 ): number {
-  const { threshold, p50, max_duration, min_duration, steepness } = params;
-  const magnitude = Math.abs(value);
-  // Defensive — degenerate calibrations (non-positive p50 / threshold)
-  // collapse the curve to its slowest duration.
-  if (!(p50 > 0) || !(threshold > 0)) return max_duration;
-  const v = Math.max(magnitude, threshold);
-  const ratio = Math.log10(v / p50);
-  const factor = 1 / (1 + Math.exp(-steepness * ratio));
-  return max_duration - factor * (max_duration - min_duration);
+  const lo = Math.min(minDur, maxDur);
+  const hi = Math.max(minDur, maxDur);
+  if (!(Number.isFinite(lo) && Number.isFinite(hi)) || hi <= 0 || lo <= 0) {
+    return Math.max(50, DEFAULT_ANIM_MIN_DURATION_MS);
+  }
+  if (!(peakValue > 0) || !Number.isFinite(peakValue)) {
+    return hi;
+  }
+  const pct = Math.min(1, Math.abs(value) / peakValue);
+  if (pct < 0.001) {
+    return hi;
+  }
+  const dur = hi - pct * (hi - lo);
+  if (!Number.isFinite(dur) || dur <= 0) {
+    return lo;
+  }
+  return Math.min(Math.max(dur, lo), hi);
+}
+
+/** Effective peak + duration bounds for a flow (v2.2). */
+export interface ResolvedAnimTiming {
+  peak: number;
+  minDur: number;
+  maxDur: number;
 }
 
 /**
- * Build the effective {@link ResolvedSpeedCurveParams} for a flow. The
- * fallback chain is documented on `ResolvedSpeedCurveParams`. This
- * helper is the *only* place override layering happens — both renderers
- * call it and any future renderer should as well.
+ * Resolve peak (for pct-of-peak) and min/max animation duration (ms).
+ * Precedence: per-flow `peak_value`, `speed_curve_override.peak`, `defaults.peak_value`, profile.peak.
+ * Durations: flow.animation → speed_curve_override → card.animation → defaults.
  */
-export function resolveSpeedCurveParams(
-  flow: Pick<FlowConfig, 'threshold' | 'speed_curve_override'>,
-  profile: Pick<FlowProfile, 'threshold' | 'p50' | 'peak'>,
-): ResolvedSpeedCurveParams {
+export function resolveAnimTiming(
+  flow: Pick<FlowConfig, 'peak_value' | 'speed_curve_override' | 'animation'>,
+  profile: Pick<FlowProfile, 'peak'>,
+  card: Pick<FlowmeConfig, 'animation' | 'defaults'> | null | undefined,
+): ResolvedAnimTiming {
   const o: SpeedCurveOverride = flow.speed_curve_override ?? {};
-  // Legacy `flow.threshold` is honoured as a shortcut for
-  // `speed_curve_override.threshold`. Override field still wins.
-  const threshold = o.threshold ?? flow.threshold ?? profile.threshold;
-  const p50 = o.p50 ?? profile.p50;
-  const peak = o.peak ?? profile.peak;
-  const max_duration = o.max_duration ?? UNIVERSAL_MAX_DURATION_MS;
-  const min_duration = o.min_duration ?? UNIVERSAL_MIN_DURATION_MS;
-  const steepness = o.steepness ?? UNIVERSAL_STEEPNESS;
-  return { threshold, p50, peak, max_duration, min_duration, steepness };
+  const g = card?.animation;
+  const defaults = card?.defaults;
+
+  const peakFlow =
+    typeof flow.peak_value === 'number' && flow.peak_value > 0 ? flow.peak_value : undefined;
+  const peakOverride = typeof o.peak === 'number' && o.peak > 0 ? o.peak : undefined;
+  const peakDefault =
+    typeof defaults?.peak_value === 'number' && defaults.peak_value > 0 ? defaults.peak_value : undefined;
+  const profilePeak = profile.peak > 0 ? profile.peak : 1;
+  const peak = peakFlow ?? peakOverride ?? peakDefault ?? profilePeak;
+
+  let minDur =
+    flow.animation?.min_duration ??
+    o.min_duration ??
+    g?.min_duration ??
+    DEFAULT_ANIM_MIN_DURATION_MS;
+  let maxDur =
+    flow.animation?.max_duration ??
+    o.max_duration ??
+    g?.max_duration ??
+    DEFAULT_ANIM_MAX_DURATION_MS;
+
+  if (!(minDur > 0) || !(maxDur > minDur) || maxDur > 60_000) {
+    minDur = DEFAULT_ANIM_MIN_DURATION_MS;
+    maxDur = DEFAULT_ANIM_MAX_DURATION_MS;
+  }
+  maxDur = Math.min(maxDur, 60_000);
+  if (minDur >= maxDur) {
+    minDur = DEFAULT_ANIM_MIN_DURATION_MS;
+    maxDur = DEFAULT_ANIM_MAX_DURATION_MS;
+  }
+
+  return { peak, minDur, maxDur };
 }
 
 /**

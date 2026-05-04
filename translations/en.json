@@ -32,7 +32,11 @@
       "fluidIgnoresParticleShape": "Fluid style uses a flowing gradient along the line — particle shape is ignored.",
       "fromNode": "From node",
       "toNode": "To node",
-      "fromToSameError": "From and To must be different nodes"
+      "fromToSameError": "From and To must be different nodes",
+      "minDuration": "Min duration (ms)",
+      "maxDuration": "Max duration (ms)",
+      "peakValue": "Peak value",
+      "peakValueHelper": "Override domain default peak value for speed calculation"
     },
     "nodeEffect": {
       "section": "Node effect",
@@ -73,7 +77,17 @@
         "gas": "Gas",
         "generic": "Generic"
       },
-      "pauseWhenHidden": "Pause when tab hidden"
+      "pauseWhenHidden": "Pause when tab hidden",
+      "animationSpeed": "Animation speed",
+      "slowestSpeed": "Slowest speed (ms)",
+      "fastestSpeed": "Fastest speed (ms)",
+      "slowestSpeedHelper": "Animation speed when sensor value is near zero",
+      "fastestSpeedHelper": "Animation speed at peak sensor value",
+      "peakAirflow": "Peak airflow",
+      "peakM3h": "m³/h",
+      "peakCfm": "CFM",
+      "peakOr": "or",
+      "domainPeakDefault": "Domain default peak"
     },
     "suggestBar": {
       "message": "Suggested path ready — accept or cancel"

@@ -353,9 +353,12 @@ describe('validateConfig — speed_curve_override (v1.0.6)', () => {
     expect(() => validateConfig(flowWith({ peak: 0 }))).toThrow(/peak/);
   });
 
-  it('rejects durations below 50 ms', () => {
-    expect(() => validateConfig(flowWith({ max_duration: 10 }))).toThrow(/max_duration/);
+  it('rejects non-positive animation durations (v2.2+ allows small positive values)', () => {
+    expect(() => validateConfig(flowWith({ max_duration: 0 }))).toThrow(/max_duration/);
     expect(() => validateConfig(flowWith({ min_duration: 0 }))).toThrow(/min_duration/);
+    const okSmall = validateConfig(flowWith({ max_duration: 10, min_duration: 5 }));
+    expect(okSmall.flows[0]?.speed_curve_override?.max_duration).toBe(10);
+    expect(okSmall.flows[0]?.speed_curve_override?.min_duration).toBe(5);
   });
 
   it('rejects min_duration ≥ max_duration when both are set', () => {

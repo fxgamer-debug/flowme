@@ -200,6 +200,9 @@ function validateFlow(
   if (typeof f['color_positive'] === 'string') flow.color_positive = f['color_positive'] as string;
   if (typeof f['color_negative'] === 'string') flow.color_negative = f['color_negative'] as string;
   if (typeof f['threshold'] === 'number') flow.threshold = f['threshold'] as number;
+  if (f['peak_value'] !== undefined) {
+    flow.peak_value = validatePositiveNumber(f['peak_value'], `${path}.peak_value`);
+  }
   if (typeof f['reverse'] === 'boolean') flow.reverse = f['reverse'] as boolean;
   if (typeof f['speed_multiplier'] === 'number') {
     const sm = f['speed_multiplier'] as number;
@@ -235,11 +238,11 @@ function validateFlow(
 /**
  * Validate the per-flow `speed_curve_override` block (v1.0.6+). Every
  * field is independently optional so users can override only the bits
- * they care about and inherit the rest from the profile / universal
+ * they care about and inherit the rest from the profile / card
  * defaults. All numeric fields must be finite; `threshold`, `p50` and
- * `peak` must be > 0 (the sigmoid uses log10(v / p50) so zero collapses
- * the curve); `max_duration` and `min_duration` must be ≥ 50 ms; and
- * `min_duration` must be < `max_duration` when both are set.
+ * `peak` must be > 0 if set; `max_duration` and `min_duration` must be
+ * positive, ≤ 60_000 ms; and `min_duration` must be < `max_duration` when
+ * both are set.
  */
 function validateSpeedCurveOverride(raw: unknown, path: string): SpeedCurveOverride {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -259,8 +262,8 @@ function validateSpeedCurveOverride(raw: unknown, path: string): SpeedCurveOverr
   function readDuration(key: keyof SpeedCurveOverride): number | undefined {
     const v = o[key as string];
     if (v === undefined) return undefined;
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < 50) {
-      fail(`${path}.${key as string}`, t('validation.durationMin50'));
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+      fail(`${path}.${key as string}`, t('validation.durationPositive'));
     }
     return v as number;
   }
@@ -331,6 +334,9 @@ function validateDefaults(raw: unknown): FlowmeDefaults {
   if (d['burst_max_particles'] !== undefined) out.burst_max_particles = validatePositiveNumber(d['burst_max_particles'], 'defaults.burst_max_particles');
   if (d['dot_radius'] !== undefined) out.dot_radius = validatePositiveNumber(d['dot_radius'], 'defaults.dot_radius');
   if (d['line_width'] !== undefined) out.line_width = validatePositiveNumber(d['line_width'], 'defaults.line_width');
+  if (d['peak_value'] !== undefined) {
+    out.peak_value = validatePositiveNumber(d['peak_value'], 'defaults.peak_value');
+  }
   return out;
 }
 
@@ -464,6 +470,32 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
   if (wf !== undefined) out.wave_frequency = wf;
   const wa = readPositiveFloat('wave_amplitude');
   if (wa !== undefined) out.wave_amplitude = wa;
+
+  let minF: number | undefined;
+  let maxF: number | undefined;
+  if (o['min_duration'] !== undefined) {
+    const v = o['min_duration'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) <= 0) {
+      fail(`${path}.min_duration`, t('validation.durationPositive'));
+    }
+    if ((v as number) > 60_000) fail(`${path}.min_duration`, t('validation.mustBeAtMost', 60_000));
+    minF = v as number;
+    out.min_duration = minF;
+  }
+  if (o['max_duration'] !== undefined) {
+    const v = o['max_duration'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) <= 0) {
+      fail(`${path}.max_duration`, t('validation.durationPositive'));
+    }
+    if ((v as number) > 60_000) fail(`${path}.max_duration`, t('validation.mustBeAtMost', 60_000));
+    maxF = v as number;
+    out.max_duration = maxF;
+  }
+  if (minF !== undefined && maxF !== undefined && minF >= maxF) {
+    dlog(`${path}: min_duration >= max_duration — dropping both`);
+    delete out.min_duration;
+    delete out.max_duration;
+  }
   return out;
 }
 
@@ -525,6 +557,31 @@ function validateAnimationConfig(raw: unknown): AnimationConfig {
   if (o['smooth_speed'] !== undefined) {
     if (typeof o['smooth_speed'] !== 'boolean') fail('animation.smooth_speed', t('validation.mustBeBoolean'));
     out.smooth_speed = o['smooth_speed'] as boolean;
+  }
+  let minG: number | undefined;
+  let maxG: number | undefined;
+  if (o['min_duration'] !== undefined) {
+    const v = o['min_duration'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) <= 0) {
+      fail('animation.min_duration', t('validation.durationPositive'));
+    }
+    if ((v as number) > 60_000) fail('animation.min_duration', t('validation.mustBeAtMost', 60_000));
+    minG = v as number;
+    out.min_duration = minG;
+  }
+  if (o['max_duration'] !== undefined) {
+    const v = o['max_duration'];
+    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) <= 0) {
+      fail('animation.max_duration', t('validation.durationPositive'));
+    }
+    if ((v as number) > 60_000) fail('animation.max_duration', t('validation.mustBeAtMost', 60_000));
+    maxG = v as number;
+    out.max_duration = maxG;
+  }
+  if (minG !== undefined && maxG !== undefined && minG >= maxG) {
+    dlog('animation: min_duration >= max_duration — resetting to defaults (500 / 10000 ms)');
+    delete out.min_duration;
+    delete out.max_duration;
   }
   return out;
 }

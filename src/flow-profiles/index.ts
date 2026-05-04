@@ -104,3 +104,10 @@ export {
   gasProfile,
   genericProfile,
 };
+
+export {
+  calcAnimDuration,
+  resolveAnimTiming,
+  DEFAULT_ANIM_MIN_DURATION_MS,
+  DEFAULT_ANIM_MAX_DURATION_MS,
+} from '../utils.js';

@@ -660,7 +660,30 @@ export function setAnimationConfig(
   patch: Partial<AnimationConfig>,
 ): FlowmeConfig {
   const next = cloneConfig(config);
-  next.animation = { ...next.animation, ...patch };
+  const base: AnimationConfig = { ...next.animation };
+  for (const key of Object.keys(patch) as (keyof AnimationConfig)[]) {
+    const v = patch[key];
+    if (v === undefined) delete base[key];
+    else Object.assign(base, { [key]: v });
+  }
+  if (Object.keys(base).length === 0) delete next.animation;
+  else next.animation = base;
+  return next;
+}
+
+export function setFlowPeakValue(
+  config: FlowmeConfig,
+  flowId: string,
+  peak: number | undefined,
+): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    if (peak === undefined || !Number.isFinite(peak)) delete out.peak_value;
+    else out.peak_value = peak;
+    return out;
+  });
   return next;
 }
 

@@ -2,6 +2,15 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2]
+
+### Added
+
+- **Linear animation speed:** Flow duration is derived from `|value| / peak` (no sigmoid). Near-zero values use the slowest duration; at or above `peak` the cycle uses the fastest. Per-flow and domain **peak** overrides apply as before; **no** minimum threshold hides particles based on speed alone.
+- **Configurable duration bounds:** Card `animation.min_duration` / `max_duration` (defaults 500 ms / 10 000 ms) and per-flow `animation` and legacy `speed_curve_override` min/max, with validation (positive, `min < max`, cap 60 s).
+- **Editor — animation & peak:** State A (defaults) includes global slowest/fastest duration; domain default **peak**; HVAC shows linked **m³/h** and **CFM** inputs (stored as m³/h; 1 CFM = 1.699 m³/h). Flow inspector: **peak value** and per-flow min/max duration overrides.
+- **Domain default peaks (residential):** energy 5000 W, water 25 L/min, network 100 Mbps, HVAC 600 m³/h, gas 5 m³/h, generic 100 (dimensionless).
+
 ## [2.1.4]
 
 ### Fixed

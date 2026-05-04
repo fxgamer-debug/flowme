@@ -87,24 +87,19 @@ export interface NodeConfig {
 }
 
 /**
- * Per-flow override of the unified sigmoid speed curve (v1.0.6+). Every
- * field is independently optional — unset fields fall back to the active
- * profile's calibration, then to the universal constants
- * (`UNIVERSAL_MAX_DURATION_MS`, `UNIVERSAL_MIN_DURATION_MS`,
- * `UNIVERSAL_STEEPNESS`). See `utils.ts → resolveSpeedCurveParams`.
+ * Per-flow override for peak / animation duration bounds (v2.2+ linear curve).
+ * Legacy `threshold` / `p50` / `steepness` keys are ignored at runtime but may
+ * remain in old YAML.
  */
 export interface SpeedCurveOverride {
-  /** Visibility cut-off and sigmoid lower-bound clamp (in profile units). */
   threshold?: number;
-  /** Median value — the sigmoid midpoint. Half the duration span at v == p50. */
   p50?: number;
-  /** Asymptote anchor (also drives burst-mode trigger at 0.9 × peak). */
+  /** Peak sensor magnitude for linear speed mapping (same unit as profile). */
   peak?: number;
-  /** Slowest visible duration (ms). Default 9000. */
+  /** Slowest cycle duration (ms). */
   max_duration?: number;
-  /** Fastest visible duration (ms). Default 700. */
+  /** Fastest cycle duration (ms). */
   min_duration?: number;
-  /** Sigmoid steepness `k`. Default 1.5 — higher is sharper. */
   steepness?: number;
 }
 
@@ -139,6 +134,10 @@ export interface FlowConfig {
    * that set `threshold:` directly continue to work unchanged.
    */
   threshold?: number;
+  /**
+   * Override domain/profile peak for animation speed (same unit as the active domain). v2.2+.
+   */
+  peak_value?: number;
   /** Flip direction interpretation (useful when a sensor reports reverse sign). */
   reverse?: boolean;
   /** Speed tweak: 0.1 through 5.0, applied after the curve. 1.0 is profile default. */
@@ -155,10 +154,7 @@ export interface FlowConfig {
    * v1.0.11+.
    */
   line_style?: LineStyle;
-  /**
-   * Per-flow override of the sigmoid speed-curve parameters (v1.0.6+).
-   * See `SpeedCurveOverride`.
-   */
+  /** Per-flow peak / duration overrides. See `SpeedCurveOverride`. */
   speed_curve_override?: SpeedCurveOverride;
   /**
    * Per-flow animation style and particle configuration (v1.0.12+).
@@ -273,6 +269,10 @@ export interface FlowAnimationConfig {
    * wave_lateral — max perpendicular offset in px. Default: 8.
    */
   wave_amplitude?: number;
+  /** Fastest one-cycle duration at peak value (ms). v2.2+. Default from card.animation or 500. */
+  min_duration?: number;
+  /** Slowest one-cycle duration near zero (ms). v2.2+. Default from card.animation or 10000. */
+  max_duration?: number;
 }
 
 /**
@@ -291,6 +291,10 @@ export interface AnimationConfig {
    * re-accelerate in new direction over 300ms. Default: true.
    */
   smooth_speed?: boolean;
+  /** Global fastest cycle duration at peak (ms). v2.2+. Default 500. */
+  min_duration?: number;
+  /** Global slowest cycle duration near zero (ms). v2.2+. Default 10000. */
+  max_duration?: number;
 }
 
 export const OVERLAY_TYPES = ['custom'] as const;
@@ -351,6 +355,10 @@ export interface FlowmeDefaults {
   dot_radius?: number;
   /** Flow line stroke width in px. Default: 2. */
   line_width?: number;
+  /**
+   * Override domain default peak for animation speed (profile base units; HVAC: m³/h). v2.2+.
+   */
+  peak_value?: number;
 }
 
 /**
@@ -477,63 +485,23 @@ export interface FlowProfile {
   default_color_negative: string;
   shape: FlowShape;
   glow: boolean;
-  /** Unit label, e.g. 'W', 'L/min', 'Mbps'. This is the profile's *base*
-   *  unit — every number the `speed_curve`, `threshold`/`p50`/`peak` and
-   *  `describe` see is in this unit. */
+  /** Unit label for display (`describe`). Sensor values may use `unit_scale` before display. */
   unit_label: string;
   /**
-   * Optional multiplicative scaling table from a sensor's reported
-   * `unit_of_measurement` to the profile's base unit. When set, the card
-   * auto-converts kW / MW / mW → W (etc.) before pushing the value to the
-   * renderer so users don't have to add a `value_multiplier` to every flow.
-   *
-   * Example (energy): `{ W: 1, kW: 1000, MW: 1_000_000, mW: 1e-3 }`. A
-   * sensor reporting `2.5` with `unit_of_measurement: 'kW'` is scaled to
-   * `2500` before `speed_curve(2500)` runs. Unknown / missing units leave
-   * the value untouched (assumed to already be in the base unit — keeps
-   * backward compat with v1.0.2 configs).
-   *
-   * Keys are matched case-insensitively.
+   * Optional multiplicative scaling from HA `unit_of_measurement` to the
+   * profile base unit for display and animation input consistency.
    */
   unit_scale?: Readonly<Record<string, number>>;
   /**
-   * Visibility cut-off (in `unit_label`). Magnitudes below this hide the
-   * flow entirely, and the sigmoid curve clamps `v` up to `threshold`
-   * before computing duration so we never log10(0). v1.0.6+.
-   */
-  threshold: number;
-  /**
-   * Median value — the sigmoid midpoint. At `v == p50` the duration sits
-   * exactly halfway between `max_duration` and `min_duration`. Picked
-   * per-domain so the *typical* residential reading lands at "medium
-   * pace". v1.0.6+.
-   */
-  p50: number;
-  /**
-   * Asymptote anchor and burst trigger (in `unit_label`). The sigmoid
-   * approaches `min_duration` as `v` grows past `p50`; sustained
-   * magnitudes ≥ 0.9 × `peak` enter burst-density mode. Should reflect
-   * the *typical residential peak* for the domain, not the absolute
-   * physical maximum. v1.0.6+.
+   * Typical residential peak for this domain (same unit as scaled sensor values).
+   * Linear animation duration uses |value|/peak (v2.2+).
    */
   peak: number;
   /**
    * When a flow stays above 90% of `peak` for ≥ 5 s, particle count is
-   * multiplied by this factor (capped at 20 particles). Lets flows look
-   * visibly more intense at saturation when the sigmoid is asymptoting
-   * and they can no longer get any faster. Defaults to 1.5. Set to 1 to
-   * disable burst mode for a profile. v1.0.5+.
+   * multiplied by this factor (capped at 20 particles).
    */
   burst_density_multiplier?: number;
-  /**
-   * Map a sensor value (in the profile's base unit) to a one-cycle
-   * animation duration in milliseconds. Implemented by every profile via
-   * the universal sigmoid (`sigmoidSpeedCurve` in `utils.ts`) using this
-   * profile's `threshold` / `p50` / `peak` — domains may *not* deviate
-   * from the unified shape function in v1.0.6+; per-flow overrides are
-   * the supported escape hatch. v1.0.6+.
-   */
-  speed_curve: (value: number) => number;
   /**
    * Particle count per flow as a function of value. Used by shapes that
    * encode intensity via density rather than speed (e.g. network packets).

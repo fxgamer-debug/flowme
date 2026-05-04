@@ -30,7 +30,14 @@ import {
   FLOW_DIRECTIONS,
 } from './types.js';
 import { validateConfig } from './validate-config.js';
-import { interpolateGradientColor, polylineToSvgPathStyled, resolveSpeedCurveParams, sigmoidSpeedCurve } from './utils.js';
+import {
+  calcAnimDuration,
+  DEFAULT_ANIM_MAX_DURATION_MS,
+  DEFAULT_ANIM_MIN_DURATION_MS,
+  interpolateGradientColor,
+  polylineToSvgPathStyled,
+  resolveAnimTiming,
+} from './utils.js';
 import { getProfile, resolveFlowColor } from './flow-profiles/index.js';
 import { UndoStack } from './editor/undo-stack.js';
 import {
@@ -58,6 +65,7 @@ import {
   setFlowLineStyle,
   setFlowOpacity,
   setFlowSpeedCurveOverride,
+  setFlowPeakValue,
   setFlowVisible,
   setNodeLabel,
   setNodeOpacity,
@@ -1259,6 +1267,88 @@ export class FlowmeCardEditor extends LitElement {
                 { includeDomains: ['sensor', 'input_number', 'number'] },
               )}
             </label>
+            ${(() => {
+              const gMin = this.config.animation?.min_duration ?? DEFAULT_ANIM_MIN_DURATION_MS;
+              const gMax = this.config.animation?.max_duration ?? DEFAULT_ANIM_MAX_DURATION_MS;
+              const domPeak = getProfile(flow.domain ?? this.config.domain).peak;
+              return html`
+                <label>
+                  ${t('editor.inspector.peakValue')}
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="${domPeak}"
+                    .value=${flow.peak_value !== undefined ? String(flow.peak_value) : ''}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const raw = (e.target as HTMLInputElement).value.trim();
+                      const prev = this.config;
+                      if (raw === '') {
+                        const next = setFlowPeakValue(prev, flow.id, undefined);
+                        this.pushPatch(prev, next, `clear peak_value ${flow.id}`);
+                        return;
+                      }
+                      const v = parseFloat(raw);
+                      if (!Number.isFinite(v) || v <= 0) return;
+                      const next = setFlowPeakValue(prev, flow.id, v);
+                      this.pushPatch(prev, next, `set peak_value ${flow.id}`);
+                    }}
+                  />
+                  <span class="hint-sub">${t('editor.inspector.peakValueHelper')}</span>
+                </label>
+                <label>
+                  ${t('editor.inspector.minDuration')}
+                  <input
+                    type="number"
+                    min="1"
+                    max="60000"
+                    step="100"
+                    placeholder=${t('editor.inspector.animMinMsPlaceholder', gMin)}
+                    .value=${flow.animation?.min_duration !== undefined ? String(flow.animation.min_duration) : ''}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const raw = (e.target as HTMLInputElement).value.trim();
+                      const prev = this.config;
+                      if (raw === '') {
+                        const next = setFlowAnimation(prev, flow.id, { min_duration: undefined });
+                        this.pushPatch(prev, next, `clear flow min_duration ${flow.id}`);
+                        return;
+                      }
+                      const v = parseInt(raw, 10);
+                      if (!Number.isFinite(v) || v <= 0) return;
+                      const next = setFlowAnimation(prev, flow.id, { min_duration: v });
+                      this.pushPatch(prev, next, `set flow min_duration ${flow.id}`);
+                    }}
+                  />
+                </label>
+                <label>
+                  ${t('editor.inspector.maxDuration')}
+                  <input
+                    type="number"
+                    min="2"
+                    max="60000"
+                    step="500"
+                    placeholder=${t('editor.inspector.animMaxMsPlaceholder', gMax)}
+                    .value=${flow.animation?.max_duration !== undefined ? String(flow.animation.max_duration) : ''}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const raw = (e.target as HTMLInputElement).value.trim();
+                      const prev = this.config;
+                      if (raw === '') {
+                        const next = setFlowAnimation(prev, flow.id, { max_duration: undefined });
+                        this.pushPatch(prev, next, `clear flow max_duration ${flow.id}`);
+                        return;
+                      }
+                      const v = parseInt(raw, 10);
+                      if (!Number.isFinite(v) || v <= 0) return;
+                      const next = setFlowAnimation(prev, flow.id, { max_duration: v });
+                      this.pushPatch(prev, next, `set flow max_duration ${flow.id}`);
+                    }}
+                  />
+                </label>
+              `;
+            })()}
           </fieldset>
           ${this.renderWaypointList(flow)}
           <label>
@@ -1372,11 +1462,11 @@ export class FlowmeCardEditor extends LitElement {
   private renderSpeedCurveSection(flow: FlowConfig): TemplateResult {
     if (!this.config) return html``;
     const profile = getProfile(flow.domain ?? this.config.domain);
-    const params = resolveSpeedCurveParams(flow, profile);
+    const timing = resolveAnimTiming(flow, profile, this.config);
     const override: SpeedCurveOverride = flow.speed_curve_override ?? {};
 
     const numInput = (
-      key: keyof SpeedCurveOverride,
+      key: keyof Pick<SpeedCurveOverride, 'peak' | 'max_duration' | 'min_duration'>,
       label: string,
       unit?: string,
     ) => html`
@@ -1386,13 +1476,16 @@ export class FlowmeCardEditor extends LitElement {
           type="number"
           step="any"
           min="0"
-          placeholder=${typeof params[key] === 'number' ? (params[key] as number).toFixed(0) : ''}
+          placeholder=${key === 'peak'
+            ? String(profile.peak)
+            : key === 'min_duration'
+              ? String(timing.minDur)
+              : String(timing.maxDur)}
           .value=${override[key] !== undefined ? String(override[key]) : ''}
           @change=${(e: Event) => {
             if (!this.config) return;
             const raw = (e.target as HTMLInputElement).value.trim();
             if (raw === '') {
-              // Clear this key
               const partial: Partial<SpeedCurveOverride> = {};
               for (const k of Object.keys(override) as (keyof SpeedCurveOverride)[]) {
                 if (k !== key) (partial as Record<string, unknown>)[k] = override[k];
@@ -1412,10 +1505,10 @@ export class FlowmeCardEditor extends LitElement {
       </div>
     `;
 
-    // Live preview: compute duration at threshold, p50, peak
-    const previewValues = [params.threshold, params.p50, params.peak];
-    const previewDurations = previewValues.map((v) => {
-      const ms = sigmoidSpeedCurve(v, params);
+    const t2 = resolveAnimTiming(flow, profile, this.config);
+    const previewPts = [0, t2.peak * 0.5, t2.peak];
+    const previewDurations = previewPts.map((v) => {
+      const ms = calcAnimDuration(v, t2.peak, t2.minDur, t2.maxDur);
       return `${(ms / 1000).toFixed(1)}s`;
     });
 
@@ -1426,14 +1519,11 @@ export class FlowmeCardEditor extends LitElement {
           <p class="hint-sub">
             ${t('editor.inspector.speedCurveHint', profile.unit_label, flow.domain ?? this.config.domain)}
           </p>
-          ${numInput('threshold', t('editor.inspector.threshold'), profile.unit_label)}
-          ${numInput('p50', t('editor.inspector.medianP50'), profile.unit_label)}
           ${numInput('peak', t('editor.inspector.peak'), profile.unit_label)}
           ${numInput('max_duration', t('editor.inspector.maxDuration'), t('editor.inspector.ms'))}
           ${numInput('min_duration', t('editor.inspector.minDuration'), t('editor.inspector.ms'))}
-          ${numInput('steepness', t('editor.inspector.steepness'), t('editor.inspector.k'))}
           <div class="speed-curve-preview">
-            <span>${t('editor.inspector.previewAtPoints')}</span>
+            <span>${t('editor.inspector.previewLinearSpeed')}</span>
             <strong>${previewDurations[0]}</strong>
             /
             <strong>${previewDurations[1]}</strong>
@@ -2746,6 +2836,11 @@ export class FlowmeCardEditor extends LitElement {
   private renderDefaultsPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const d: FlowmeDefaults = this.config.defaults ?? {};
+    const animG = this.config.animation ?? {};
+    const domain = this.config.domain ?? 'energy';
+    const profile = getProfile(domain);
+    const effPeak = d.peak_value ?? profile.peak;
+    const cfmDisplay = Math.round(effPeak * 0.5886 * 10) / 10;
 
     const numInput = <K extends keyof FlowmeDefaults>(
       key: K,
@@ -2790,6 +2885,95 @@ export class FlowmeCardEditor extends LitElement {
           ${numInput('burst_trigger_ratio', t('editor.inspector.burstTriggerRatio'), { min: 0.1, max: 1, step: 0.05, defaultVal: 0.9 })}
           ${numInput('burst_sustain_ms', t('editor.inspector.burstSustainMs'), { min: 1000, max: 30000, step: 500, defaultVal: 5000 })}
           ${numInput('burst_max_particles', t('editor.inspector.burstMaxParticles'), { min: 3, max: 50, step: 1, defaultVal: 20 })}
+          <details class="defaults-nested" open>
+            <summary>${t('editor.stateA.animationSpeed')}</summary>
+            <p class="hint-sub">${t('editor.stateA.slowestSpeedHelper')}</p>
+            <label class="defaults-row">
+              <span class="defaults-label">${t('editor.stateA.slowestSpeed')}</span>
+              <input
+                type="number"
+                min="1000"
+                max="60000"
+                step="500"
+                .value=${String(animG.max_duration ?? DEFAULT_ANIM_MAX_DURATION_MS)}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!Number.isFinite(v) || v <= 0) return;
+                  const prev = this.config;
+                  const next = setAnimationConfig(prev, { max_duration: v });
+                  this.pushPatch(prev, next, 'set global max_duration');
+                }}
+              />
+            </label>
+            <p class="hint-sub">${t('editor.stateA.fastestSpeedHelper')}</p>
+            <label class="defaults-row">
+              <span class="defaults-label">${t('editor.stateA.fastestSpeed')}</span>
+              <input
+                type="number"
+                min="100"
+                max="5000"
+                step="100"
+                .value=${String(animG.min_duration ?? DEFAULT_ANIM_MIN_DURATION_MS)}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const v = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (!Number.isFinite(v) || v <= 0) return;
+                  const prev = this.config;
+                  const next = setAnimationConfig(prev, { min_duration: v });
+                  this.pushPatch(prev, next, 'set global min_duration');
+                }}
+              />
+            </label>
+          </details>
+          ${domain === 'hvac'
+            ? html`
+                <div class="dual-unit-row">
+                  <span class="defaults-label">${t('editor.stateA.peakAirflow')}</span>
+                  <div class="field-col">
+                    <label>${t('editor.stateA.peakM3h')}</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      .value=${String(effPeak)}
+                      @input=${(e: Event) => {
+                        if (!this.config) return;
+                        const raw = parseFloat((e.target as HTMLInputElement).value);
+                        if (!Number.isFinite(raw) || raw <= 0) return;
+                        const prev = this.config;
+                        const next = setDefault(prev, 'peak_value', raw);
+                        this.pushPatch(prev, next, 'set defaults.peak_value m³/h');
+                      }}
+                    />
+                  </div>
+                  <div class="unit-divider">${t('editor.stateA.peakOr')}</div>
+                  <div class="field-col">
+                    <label>${t('editor.stateA.peakCfm')}</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      .value=${String(cfmDisplay)}
+                      @input=${(e: Event) => {
+                        if (!this.config) return;
+                        const raw = parseFloat((e.target as HTMLInputElement).value);
+                        if (!Number.isFinite(raw) || raw <= 0) return;
+                        const m3h = Math.round(raw * 1.699 * 10) / 10;
+                        const prev = this.config;
+                        const next = setDefault(prev, 'peak_value', m3h);
+                        this.pushPatch(prev, next, 'set defaults.peak_value via CFM');
+                      }}
+                    />
+                  </div>
+                </div>
+              `
+            : numInput('peak_value', t('editor.stateA.domainPeakDefault'), {
+                min: 0.0001,
+                max: 1e9,
+                step: 1,
+                defaultVal: profile.peak,
+              })}
         </div>
       </details>
     `;
@@ -5171,6 +5355,49 @@ export class FlowmeCardEditor extends LitElement {
       font-size: 11px;
       opacity: 0.6;
       min-width: 30px;
+    }
+    .defaults-nested {
+      margin-top: 4px;
+      padding: 8px 0 0;
+      border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.08));
+    }
+    .defaults-nested > summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .dual-unit-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 10px 12px;
+      margin-top: 4px;
+    }
+    .dual-unit-row > .defaults-label {
+      flex: 1 0 100%;
+    }
+    .field-col {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 11px;
+    }
+    .field-col input[type='number'] {
+      width: 88px;
+      font: inherit;
+      padding: 3px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      background: var(--card-background-color, #1a1a1a);
+      color: var(--primary-text-color, #fff);
+    }
+    .unit-divider {
+      align-self: center;
+      opacity: 0.65;
+      font-size: 11px;
+      padding-bottom: 6px;
     }
     .opacity-row {
       display: flex;

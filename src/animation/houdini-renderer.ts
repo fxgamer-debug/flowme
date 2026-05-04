@@ -2,10 +2,10 @@ import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition } from '../typ
 import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import {
   awaitStableSize,
+  calcAnimDuration,
   debounce,
   percentToPixel,
-  resolveSpeedCurveParams,
-  sigmoidSpeedCurve,
+  resolveAnimTiming,
   waitForNonZeroContentSize,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
@@ -238,18 +238,19 @@ export class HoudiniRenderer implements FlowRenderer {
     if (!flow || !div) return;
 
     const profile = this.profileFor(flow);
-    const params = resolveSpeedCurveParams(flow, profile);
-    const magnitude = Math.abs(value);
-    const visible = magnitude >= params.threshold;
+    const timing = resolveAnimTiming(flow, profile, this.config);
 
-    if (!visible) {
+    if (flow.visible === false) {
       div.el.style.opacity = '0';
       return;
     }
     div.el.style.opacity = '1';
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    const durMs = Math.max(50, sigmoidSpeedCurve(magnitude, params) * speedMultiplier);
+    const durMs = Math.max(
+      50,
+      calcAnimDuration(value, timing.peak, timing.minDur, timing.maxDur) * speedMultiplier,
+    );
     const dirCfg = flow.animation?.direction ?? 'auto';
     let direction: number;
     if (dirCfg === 'forward') direction = 1;
