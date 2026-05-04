@@ -2,6 +2,83 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.25] — File structure audit and cleanup
+
+### Audit summary
+
+Full repository tree reviewed (AUDIT-7). **No files removed**: nothing matched **✗ removable** (all paths are imported or are standard tooling/docs). **Uncertain / extra vs a minimal checklist** are documented below — **kept** on purpose.
+
+### Root (expected minimal set vs actual)
+
+| Status | Path |
+|--------|------|
+| ✓ | `package.json`, `package-lock.json`, `vite.config.ts`, `tsconfig.json`, `tsconfig.test.json`, `hacs.json`, `README.md`, `CHANGELOG.md`, `eslint.config.js`, `.gitignore`, `.github/`, `dist/`, `src/`, `tests/`, `translations/` |
+| ? **kept** | **`LICENSE`** — MIT (standard; not in minimal checklist) |
+| ? **kept** | **`index.html`** — Vite dev server entry (`npm run dev`); imports **`src/dev/demo-app.ts`** |
+| ? **kept** | **`vitest.config.ts`** — Vitest runner config (separate from **`vite.config.ts`** library build) |
+| ? **kept** | **`HACS.md`**, **`TESTING.md`** — maintainer checklists (HACS submission + manual QA); not duplicates of **`README.md`** |
+
+### `dist/`
+
+Contains **only** **`flowme-card.js`** and **`flowme-card.js.map`** — verified.
+
+### `src/` (abbreviated checklist vs repo)
+
+Core card/editor/types/utils/strings/i18n/debug + **`validate-config.ts`** (YAML validation) + **`node-effects-layer.ts`** at **`src/`** root (not under **`src/node-effects/`**).
+
+| Area | Notes |
+|------|--------|
+| **`src/animation/`** | Includes **`renderer-factory.ts`** (SVG vs Houdini selection) and **`flowme-painter-worklet.js`** (bundled as `?raw`; checklist name **houdini-painter-worklet.js** was a synonym). |
+| **`src/flow-profiles/`** | **`index.ts`**, **`domain-colour-profiles.ts`** plus **per-domain modules** (`energy.ts`, `water.ts`, …) — all required. |
+| **`src/pathfinding/`** | Includes **`simplify.ts`** (collinear simplification); used by **`compute-waypoints.ts`** and tests — **not** obsolete. |
+| **`src/overlays/`** | Four modules only; references to removed native camera/switch types appear only in **`validate-config`** migration paths / strings. |
+| **`src/editor/`** | **`commands.ts`**, **`toolbar.ts`**, **`undo-stack.ts`** — no rubber-band / zone-4 / legacy inspector files. |
+| **`src/dev/`** | **`demo-app.ts`**, **`demo-config.ts`**, **`mock-hass.ts`** only — no extra HTML under **`src/dev/`** (dev shell is repo-root **`index.html`**). |
+
+### `tests/`
+
+All **`tests/**/*.test.ts`** files map to active **`src/`** behaviour. **`validate-config.test.ts`** still exercises **removed overlay types** (`camera`, `switch`, …) as **migration/validation** — intentional, not dead feature tests.
+
+### `translations/`
+
+Only **`en.json`** — reference catalog for community translations.
+
+### `.github/workflows/`
+
+Only **`ci.yml`** and **`release.yml`**.
+
+### Scripts
+
+- **`lint:fix`** aligned with **`lint`**: **`eslint src tests --fix --max-warnings 0`**.
+
+### Final tree (after cleanup — same as v1.24, audit-only)
+
+```
+.
+├── .github/workflows/ci.yml
+├── .github/workflows/release.yml
+├── .gitignore
+├── CHANGELOG.md
+├── HACS.md
+├── LICENSE
+├── README.md
+├── TESTING.md
+├── eslint.config.js
+├── hacs.json
+├── index.html
+├── package-lock.json
+├── package.json
+├── tsconfig.json
+├── tsconfig.test.json
+├── vite.config.ts
+├── vitest.config.ts
+├── dist/flowme-card.js
+├── dist/flowme-card.js.map
+├── translations/en.json
+├── src/ … (42 source files: `.ts` + `flowme-painter-worklet.js` + `vite-env.d.ts`)
+└── tests/ (12 × `*.test.ts`: unit + smoke)
+```
+
 ## [1.24] — Dead code audit and cleanup
 
 ### Removed
