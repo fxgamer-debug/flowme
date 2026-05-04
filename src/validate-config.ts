@@ -23,6 +23,7 @@ import {
   PARTICLE_SPACINGS,
 } from './types.js';
 import { findUnsafeUrls } from './overlays/url-scan.js';
+import { dlog } from './debug-log.js';
 import { t } from './i18n.js';
 
 export class FlowmeConfigError extends Error {
@@ -85,11 +86,7 @@ function validateNode(raw: unknown, idx: number, seenIds: Set<string>): NodeConf
   if (n['node_effect'] !== undefined) {
     const rawFx = n['node_effect'];
     if (rawFx && typeof rawFx === 'object' && (rawFx as Record<string, unknown>)['type'] === 'pulse') {
-      console.warn(
-        '[FlowMe]',
-        `${path}.node_effect:`,
-        'type "pulse" is no longer supported; removing node_effect',
-      );
+      dlog(`${path}.node_effect: type "pulse" is no longer supported; removing node_effect`);
     } else {
       node.node_effect = validateNodeEffect(rawFx, `${path}.node_effect`);
     }
@@ -366,9 +363,7 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
   if (o['animation_style'] !== undefined) {
     let st = o['animation_style'];
     if (st === 'pulse' || st === 'spark') {
-      console.warn(
-        `[flowme] ${path}.animation_style '${String(st)}' was removed in v1.23.6 — using 'dots'`,
-      );
+      dlog(`${path}.animation_style '${String(st)}' was removed in v1.23.6 — using 'dots'`);
       st = 'dots';
     }
     if (!ANIMATION_STYLES.includes(st as never)) {
@@ -399,7 +394,7 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
       fail(`${path}.custom_svg_path`, t('validation.mustBeSvgPathString'));
     }
     if ((o['custom_svg_path'] as string).length === 0) {
-      console.warn(`[flowme] ${path}.custom_svg_path is empty — will fall back to circle`);
+      dlog(`${path}.custom_svg_path is empty — will fall back to circle`);
     }
     out.custom_svg_path = o['custom_svg_path'] as string;
   }
@@ -496,7 +491,7 @@ function validateValueGradient(raw: unknown, path: string): ValueGradientConfig 
   }
   if ((o['low_value'] as number) >= (o['high_value'] as number)) {
     // warn rather than error — still usable, colour will just be clamped to one end
-    console.warn(`[flowme] ${path}: low_value should be less than high_value`);
+    dlog(`${path}: low_value should be less than high_value`);
   }
   const out: ValueGradientConfig = {
     entity: o['entity'] as string,
@@ -723,7 +718,7 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
   // For removed native types: produce a warning overlay instead of crashing
   if (isRemovedType) {
     const warningMsg = t('validation.migrationOverlayWarning', type as string);
-    console.warn(`[flowme] ${path}: ${warningMsg}`);
+    dlog(`${path}: ${warningMsg}`);
     const overlay: OverlayConfig = {
       id: id as string,
       type: 'custom',

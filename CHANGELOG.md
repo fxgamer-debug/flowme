@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.2]
+
+### Fixed
+
+- **Domain switch renderer rebuild:** Changing **diagram domain** (e.g. energy → HVAC) now forces a **full renderer reinit** (`needsRendererReinit` includes `prev.domain !== next.domain`), so flow paths, colours, and speed curves are rebuilt instead of only patching `applyConfig`.
+
+### Changed
+
+- **Silent dashboard console:** Removed the module-load **`console.info`** version banner. All diagnostics use **`dlog`** / **`peekDebugFromRaw`** — with **`debug: false`** (default), there is no **`console.log`** / **`console.info`** output during normal card/editor use. **`console.error`** remains for genuine failures (e.g. renderer init). Validation and migration messages use **`dlog`** so they only appear when **`debug: true`**.
+
 ## [2.1.1]
 
 ### Fixed

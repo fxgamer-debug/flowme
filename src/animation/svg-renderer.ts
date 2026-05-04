@@ -16,7 +16,7 @@ import {
   type ResolvedSpeedCurveParams,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
-import { dlog, isDebugEnabled } from '../debug-log.js';
+import { dlog } from '../debug-log.js';
 import { createDurInterpState, resolveSmoothedDuration, type DurInterpState } from './dur-interpolation.js';
 
 const RLOG = '[FlowMe Renderer]';
@@ -171,14 +171,7 @@ export class SvgRenderer implements FlowRenderer {
       this.destroy();
     }
     rlog('init:', container.getBoundingClientRect(), 'flows:', config.flows.length);
-    if (isDebugEnabled()) {
-      // eslint-disable-next-line no-console -- gated by config.debug
-      console.log(
-        '[FlowMe Renderer] init start dims:',
-        container.offsetWidth,
-        container.offsetHeight,
-      );
-    }
+    rlog('init start dims:', container.offsetWidth, container.offsetHeight);
     this.container = container;
     this.config = config;
     this.prefersReducedMotionFlag = prefersReducedMotion();
@@ -201,15 +194,9 @@ export class SvgRenderer implements FlowRenderer {
     this.startFpsLoop();
     // Lovelace preview can reflow after several frames — wait for stable size.
     await awaitStableSize(container);
-    if (isDebugEnabled()) {
-      // eslint-disable-next-line no-console -- gated by config.debug
-      console.log('[FlowMe Renderer] stable dims:', container.offsetWidth, container.offsetHeight);
-    }
+    rlog('stable dims:', container.offsetWidth, container.offsetHeight);
     this.onResize();
-    if (isDebugEnabled()) {
-      // eslint-disable-next-line no-console -- gated by config.debug
-      console.log('[FlowMe Renderer] post-resize dims:', container.offsetWidth, container.offsetHeight);
-    }
+    rlog('post-resize dims:', container.offsetWidth, container.offsetHeight);
   }
 
   /** Same flow ids as at init — refresh paths and particle layout without destroy/init. */
@@ -652,14 +639,9 @@ export class SvgRenderer implements FlowRenderer {
         this.applyDots(dom, flow, profile, value, durMs, color, direction, burstMultiplier);
     }
 
-    if (
-      isDebugEnabled() &&
-      directionMode === 'both' &&
-      (style === 'dots' || style === 'arrow' || style === 'trail')
-    ) {
-      // eslint-disable-next-line no-console -- debug-only dual-stream diagnostic (gated by config.debug)
-      console.log(
-        '[FlowMe] direction both:',
+    if (directionMode === 'both' && (style === 'dots' || style === 'arrow' || style === 'trail')) {
+      dlog(
+        'direction both:',
         flowId,
         'forward particles:',
         dom.particles.length,
@@ -756,7 +738,6 @@ export class SvgRenderer implements FlowRenderer {
     const targetFps = this.config.animation?.fps ?? 60;
     const budgetMs = 1000 / targetFps;
     const avgMs = this.avgFrameMs();
-    const debug = isDebugEnabled();
 
     const over = avgMs > budgetMs * 1.2;
     const under = avgMs < budgetMs * 0.8;
@@ -781,16 +762,10 @@ export class SvgRenderer implements FlowRenderer {
       let current = this.adaptiveCount.get(flow.id) ?? configured;
       if (over && current > 1) {
         current -= 1;
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.log('[FlowMe] adaptive count:', flow.id, current, 'avg frame:', avgMs);
-        }
+        dlog('adaptive count:', flow.id, current, 'avg frame:', avgMs);
       } else if (under && current < configured) {
         current += 1;
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.log('[FlowMe] adaptive count:', flow.id, current, 'avg frame:', avgMs);
-        }
+        dlog('adaptive count:', flow.id, current, 'avg frame:', avgMs);
       }
       this.adaptiveCount.set(flow.id, Math.min(current, configured));
     }
@@ -1709,7 +1684,7 @@ export class SvgRenderer implements FlowRenderer {
       case 'custom_svg': {
         const pathD = flow.animation?.custom_svg_path ?? '';
         if (!pathD) {
-          console.warn(`[FlowMe] particle_shape is custom_svg but custom_svg_path is empty or invalid — falling back to circle. Flow: ${flow.id}`);
+          dlog(`particle_shape is custom_svg but custom_svg_path is empty or invalid — falling back to circle. Flow: ${flow.id}`);
           const circle = document.createElementNS(SVG_NS, 'circle');
           circle.setAttribute('r', String(r));
           circle.setAttribute('fill', color);

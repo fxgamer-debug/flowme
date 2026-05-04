@@ -21,6 +21,11 @@ export function setDebugEnabled(flag: boolean): void {
   _debugEnabled = flag;
 }
 
+/** Read `debug: true` from raw config before `validateConfig` so validation + dlog are gated. */
+export function peekDebugFromRaw(raw: unknown): boolean {
+  return !!(raw && typeof raw === 'object' && (raw as Record<string, unknown>)['debug'] === true);
+}
+
 /** Logs when `debug: true` is set in card config. No-op otherwise. */
 export function dlog(...args: unknown[]): void {
   if (!_debugEnabled) return;

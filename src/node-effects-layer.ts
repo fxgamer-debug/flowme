@@ -7,6 +7,7 @@
 import type { FlowmeConfig, HomeAssistant, NodeConfig, NodeEffectConfig, NodePosition } from './types.js';
 import { getProfile, NEUTRAL_NODE_COLOR, resolveFlowColor } from './flow-profiles/index.js';
 import { parseSensorValue } from './utils.js';
+import { dlog, isDebugEnabled } from './debug-log.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -152,19 +153,17 @@ export class NodeEffectsLayerController {
     const m = hooks?.getLayoutMetrics?.(svg) ?? layoutMetrics(svg);
     const defaultRpx = config.defaults?.node_radius ?? 12;
 
-    if (nowMs - this.lastDiagnosticLogMs > 4000) {
+    if (isDebugEnabled() && nowMs - this.lastDiagnosticLogMs > 4000) {
       this.lastDiagnosticLogMs = nowMs;
       for (const node of config.nodes) {
         if (!node.node_effect?.type || !node.entity) continue;
         const st = hass?.states[node.entity];
-        // eslint-disable-next-line no-console -- throttled diagnostic
-        console.log(
-          '[FlowMe] node effect update:',
+        dlog(
+          'node effect update:',
           node.id,
           node.node_effect.type,
           'entity state:',
           st?.state ?? '(none)',
-          'controller exists: true',
         );
       }
     }

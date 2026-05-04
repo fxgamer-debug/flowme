@@ -2,7 +2,7 @@ import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition } from '../typ
 import { getProfile, resolveFlowColor } from '../flow-profiles/index.js';
 import { awaitStableSize, debounce, percentToPixel, resolveSpeedCurveParams, sigmoidSpeedCurve } from '../utils.js';
 import type { FlowRenderer } from './types.js';
-import { isDebugEnabled } from '../debug-log.js';
+import { dlog } from '../debug-log.js';
 // Vite inlines the worklet source as a string at build time.
 import workletSource from '../flowme-painter-worklet.js?raw';
 
@@ -103,10 +103,7 @@ export class HoudiniRenderer implements FlowRenderer {
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     this.container = container;
-    if (isDebugEnabled()) {
-      // eslint-disable-next-line no-console -- gated by config.debug
-      console.log('[FlowMe Renderer] init start dims:', container.offsetWidth, container.offsetHeight);
-    }
+    dlog('Houdini init start dims:', container.offsetWidth, container.offsetHeight);
     this.config = config;
     this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
 
@@ -142,15 +139,9 @@ export class HoudiniRenderer implements FlowRenderer {
     this.resizeObserver = new ResizeObserver(() => this.rebuildPaths());
     this.resizeObserver.observe(container);
     await awaitStableSize(container);
-    if (isDebugEnabled()) {
-      // eslint-disable-next-line no-console -- gated by config.debug
-      console.log('[FlowMe Renderer] stable dims:', container.offsetWidth, container.offsetHeight);
-    }
+    dlog('Houdini stable dims:', container.offsetWidth, container.offsetHeight);
     this.rebuildPaths();
-    if (isDebugEnabled()) {
-      // eslint-disable-next-line no-console -- gated by config.debug
-      console.log('[FlowMe Renderer] post-resize dims:', container.offsetWidth, container.offsetHeight);
-    }
+    dlog('Houdini post-resize dims:', container.offsetWidth, container.offsetHeight);
   }
 
   applyConfig(config: FlowmeConfig): void {

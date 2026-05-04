@@ -91,7 +91,7 @@ import { loadDownscaledRgbaForPathfinding, suggestPath } from './pathfinding/ind
 import { DEFAULT_CELL_SIZE } from './pathfinding/grid-builder.js';
 import type { Point } from './pathfinding/types.js';
 import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
-import { setDebugEnabled } from './debug-log.js';
+import { dlog, peekDebugFromRaw, setDebugEnabled } from './debug-log.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
@@ -420,6 +420,7 @@ export class FlowmeCardEditor extends LitElement {
 
   setConfig(config: unknown): void {
     try {
+      setDebugEnabled(peekDebugFromRaw(config));
       this.config = validateConfig(config);
       setDebugEnabled(this.config.debug ?? false);
       // Only clear undo when HA pushes a genuinely external config change.
@@ -443,6 +444,7 @@ export class FlowmeCardEditor extends LitElement {
       // returns early for the same URL, this is the main path that corrects scale/pan.
       void this.updateComplete.then(() => this.recalcFit());
     } catch (err) {
+      setDebugEnabled(false);
       this.errorMessage = err instanceof Error ? err.message : String(err);
     }
   }
@@ -3176,9 +3178,7 @@ export class FlowmeCardEditor extends LitElement {
   ): Promise<void> {
     if (!this.config) return;
     if (opts?.logFallback) {
-      // Intentional: helps diagnose HACS single-file installs when the worker is unavailable.
-      // eslint-disable-next-line no-console -- user-visible diagnostic (see v1.22.1 CHANGELOG)
-      console.log('[FlowMe] falling back to main thread pathfinding');
+      dlog('falling back to main thread pathfinding');
     }
     const fromNode = this.config.nodes.find((n) => n.id === fromId);
     const toNode = this.config.nodes.find((n) => n.id === toId);
