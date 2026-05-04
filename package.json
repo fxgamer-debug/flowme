@@ -1,7 +1,7 @@
 {
   "name": "flowme",
-  "version": "1.25",
-  "description": "Home Assistant custom Lovelace card: animated flow visualisation over a user-supplied background image.",
+  "version": "2.0.0",
+  "description": "Animated flow visualisation with freely positioned nodes for Home Assistant",
   "type": "module",
   "main": "dist/flowme-card.js",
   "files": [

@@ -2,6 +2,14 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0] — Public release
+
+First public release of FlowMe.
+
+FlowMe is an animated flow visualisation card for Home Assistant with freely positioned nodes, multiple animation styles, weather-reactive backgrounds, a visual drag-and-drop editor, multi-domain support, value gradient colour interpolation, node effects, custom overlays, Web Worker pathfinding, i18n, and accessibility support.
+
+**Documentation:** `README.md` rewritten for end users; **`FEATURES.md`** is the complete technical feature reference. **`hacs.json`** includes a **`description`** field for the HACS UI.
+
 ## [1.25] — File structure audit and cleanup
 
 ### Audit summary

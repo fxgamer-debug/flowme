@@ -2,5 +2,6 @@
   "name": "FlowMe",
   "filename": "flowme-card.js",
   "content_in_root": false,
+  "description": "Animated flow visualisation with freely positioned nodes for Home Assistant",
   "thumbnail": "https://raw.githubusercontent.com/fxgamer-debug/flowme/main/assets/thumbnail.svg"
 }

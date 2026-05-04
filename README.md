@@ -1,434 +1,199 @@
-# flowme
+# FlowMe
 
-A generic Home Assistant custom Lovelace card that overlays **animated flow lines** and **interactive overlays** on top of a user-supplied background image. Unlike existing single-domain energy-flow cards, flowme is **multi-domain** (energy, water, network, HVAC, gas, generic) and uses **arbitrary user-defined paths** drawn directly on your own background photo via a visual drag-and-drop editor.
+> Animated flow visualisation with freely positioned nodes for Home Assistant
 
-> Status: **v1.0.1** — all six domain flow profiles, Houdini Paint renderer with SVG fallback, full drag-and-drop editor with undo/redo, one-click auto-routing via Sobel + A\*, weather-aware background crossfades, interactive overlays (sensor, switch, button, camera, custom card), HA Sections-view grid layout hints, native `<ha-entity-picker>` in the editor, 129 unit/smoke tests, strict config validation, signed GitHub releases.
-
-- **Tested on** Home Assistant **2026.4.x**.
-- **Minimum** Home Assistant version declared to HACS: **2024.1.0**.
-- **License:** MIT.
+A custom Lovelace card that renders animated flow visualisations between freely positioned nodes over a configurable background. Supports multiple flow domains, rich animation styles, weather-reactive backgrounds, and a fully visual drag-and-drop editor.
 
 ---
 
-## Table of contents
+## Features
 
-- [Why flowme](#why-flowme)
-- [Installation (HACS)](#installation-hacs)
-- [Installation (manual)](#installation-manual)
-- [Quick start](#quick-start)
-- [Config reference](#config-reference)
-- [Per-domain examples](#per-domain-examples)
-- [Editor](#editor)
-- [Security model](#security-model)
-- [Troubleshooting](#troubleshooting)
-- [Translations](#translations)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [License](#license)
+**Freely positioned nodes.** Nodes can be placed anywhere on the canvas as a percentage position. No fixed grid or forced layout.
+
+**Animated flow lines.** Flows connect nodes with animated particles. Multiple animation styles: dots, dash, arrow, trail, fluid, none. Direction follows sensor sign automatically.
+
+**Multi-domain support.** Built-in profiles for energy, water, network, HVAC, gas and generic domains. Each domain has calibrated speed curves and colour profiles.
+
+**Weather-reactive backgrounds.** Background image switches automatically based on HA weather entity state. Sun entity support for automatic day/night variants.
+
+**Visual drag-and-drop editor.** Full visual editor with zoom, pan, node dragging, waypoint editing, suggest path (A\* pathfinding with Sobel edge detection), undo/redo, and element selection.
+
+**Value gradient.** Flow colour interpolates between two colours based on a secondary sensor value. Useful for temperature-driven HVAC flows, battery health, grid frequency deviation and more.
+
+**Node effects.** Per-node visual effects: glow, badge (node colour change), ripple, alert (threshold flash).
+
+**Custom overlays.** Embed any HA card at any position on the canvas using the custom overlay system. Cameras, switches, sensors — anything.
+
+**Particle spacing modes.** Six spacing modes: even, random, clustered, pulse, wave_spacing, wave_lateral.
+
+**Custom SVG particle shapes.** User-supplied SVG path string as particle shape. Stamps along the flow path with correct orientation.
+
+**i18n.** All UI strings extractable. Drop a JSON translation file in `/local/flowme/translations/` and FlowMe loads it automatically based on HA language setting.
+
+**Accessibility.** ARIA roles, focus outlines, high contrast mode support, prefers-reduced-motion support.
+
+**Single file distribution.** One `flowme-card.js` file. No external dependencies. Web Worker pathfinding inlined in the bundle.
 
 ---
 
-## Why flowme
+## Installation
 
-- **Visual coordinate editor** — drag nodes, waypoints and overlays directly on your background image. Undo/redo with `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z`. Shift-drag snaps to an 8% grid. Shift-click a flow segment to insert a waypoint. Right-click anything to delete.
-- **Auto-routing via image analysis** — select a flow, click **Suggest path**, and flowme runs Sobel edge detection on your background image followed by A\* over a coarse cost grid to propose waypoints that follow visible architectural features (pipes, walls, cable channels, pergolas). Preview then accept.
-- **Interactive overlays** — drop sensor chips, switches, buttons and camera thumbnails anywhere on the background. Need something bespoke? Use a `custom` overlay to mount any Lovelace card inside flowme via `window.loadCardHelpers()`. All user-supplied card configs are scanned for unsafe URL schemes before they ever reach the DOM.
-- **Houdini Paint API animation** with progressive enhancement — automatically falls back to native SVG `animateMotion` on browsers without the CSS Paint API. Append `?flowme_renderer=svg` to the dashboard URL to force the SVG path for debugging.
-- **Weather-aware backgrounds** — bind `background.weather_entity` to any `weather.*` entity, map its states to images, and flowme crossfades between them.
+### HACS (recommended)
 
-## Installation (HACS)
+1. Add this repository as a custom repository in HACS: `https://github.com/fxgamer-debug/flowme`
 
-HACS default-repository submission is live at `v1.0.0`. Until it's merged into the HACS default store:
+2. Search for FlowMe in HACS → Frontend
 
-1. HACS → **Frontend** → ⋮ → **Custom repositories**
-2. Add `https://github.com/fxgamer-debug/flowme` as category **Dashboard**
-3. Install **flowme**, then add the resource (HACS does this automatically for Dashboard plugins)
-4. Refresh the dashboard → **Add card → Custom: flowme**
+3. Download and restart Home Assistant
 
-## Installation (manual)
+4. Add the card via the Lovelace card picker or YAML configuration
 
-1. Download `flowme-card.js` from the [latest release](https://github.com/fxgamer-debug/flowme/releases).
-2. Copy it into your HA `/config/www/community/flowme/` directory.
-3. In HA, go to **Settings → Dashboards → Resources** and add:
+### Manual
+
+1. Download `flowme-card.js` from the latest release on GitHub
+
+2. Place it in `/config/www/` (or another path you expose under `/local/`)
+
+3. Add to Lovelace resources:
+
+   ```yaml
+   url: /local/flowme-card.js
+   type: module
    ```
-   /hacsfiles/flowme/flowme-card.js
-   ```
-   (or `/local/community/flowme/flowme-card.js` if you placed it under `/config/www/` manually)
-   Resource type: **JavaScript Module**.
-4. Refresh the dashboard, then **Add card → Custom: flowme**.
 
-Every release ships a `flowme-card.js.sha256` alongside the bundle — verify it if you care.
+4. Restart Home Assistant
+
+---
 
 ## Quick start
 
-```yaml
-type: custom:flowme-card
-domain: energy
-background:
-  default: /local/flowme/house.jpg
-nodes:
-  - id: grid
-    position: { x: 10, y: 50 }
-    label: Grid
-  - id: house
-    position: { x: 90, y: 50 }
-    label: House
-flows:
-  - id: grid_to_house
-    from_node: grid
-    to_node: house
-    entity: sensor.grid_power
-```
-
-Drop that into a dashboard, point `entity` at a real power sensor, then click the wrench icon → **Edit card** to rearrange nodes visually.
-
-## Config reference
-
-### Top-level
-
-| Key                  | Type                                                         | Required | Description                                                                       |
-|----------------------|--------------------------------------------------------------|----------|-----------------------------------------------------------------------------------|
-| `type`               | `"custom:flowme-card"`                                       | yes      | Lovelace discriminator.                                                           |
-| `domain`             | `"energy"` · `"water"` · `"network"` · `"hvac"` · `"gas"` · `"generic"` | yes      | Selects the flow profile (particle shape, colour, speed curve, unit label).       |
-| `background`         | `Background`                                                 | no       | See below. Omit entirely for a neutral placeholder.                               |
-| `nodes`              | `Node[]`                                                     | yes      | At least one node.                                                                |
-| `flows`              | `Flow[]`                                                     | yes      | May be empty.                                                                     |
-| `overlays`           | `Overlay[]`                                                  | no       | Interactive overlays on top of the background.                                    |
-| `aspect_ratio`       | `"W:H"` string (e.g. `"16:10"`)                              | no       | Forces the card aspect. Defaults to `16:10`.                                      |
-| `fullscreen`         | `boolean`                                                    | no       | Reserved; currently cosmetic.                                                     |
-| `edit_mode_password` | `string`                                                     | no       | Gate the visual editor behind a prompt. UI only — not a security boundary.        |
-
-### `Background`
-
-| Key                   | Type                       | Description                                                                 |
-|-----------------------|----------------------------|-----------------------------------------------------------------------------|
-| `default`             | URL string                 | Base image. Optional — omit or set `""` to render a neutral placeholder. When set, must begin with `/local/`, `/api/`, `/hacsfiles/`, `https://` or `http://`. |
-| `weather_entity`      | entity id                  | Optional. A `weather.*` entity whose `state` drives image swaps.            |
-| `weather_states`      | `{ state: url }` object    | Map state strings (`sunny`, `rainy`, …) to alternate images.                |
-| `transition_duration` | number (ms)                | Crossfade duration, default `2000`.                                         |
-
-### `Node`
-
-| Key          | Type                      | Description                                          |
-|--------------|---------------------------|------------------------------------------------------|
-| `id`         | non-empty string, unique  | Required.                                            |
-| `position`   | `{ x: 0..100, y: 0..100 }`| Percent of card width/height.                        |
-| `entity`     | entity id                 | Optional. Shown as the node value if `show_value`.   |
-| `label`      | string                    | Optional.                                            |
-| `color`      | CSS colour                | Optional.                                            |
-| `size`       | number (px)               | Optional.                                            |
-| `show_label` | boolean                   | Optional.                                            |
-| `show_value` | boolean                   | Optional.                                            |
-
-### `Flow`
-
-| Key                 | Type                          | Description                                                     |
-|---------------------|-------------------------------|-----------------------------------------------------------------|
-| `id`                | non-empty string, unique      | Required.                                                       |
-| `from_node`         | node id                       | Must resolve to an existing node.                               |
-| `to_node`           | node id                       | Must resolve to an existing node.                               |
-| `entity`            | entity id                     | The sensor feeding this flow's magnitude.                       |
-| `waypoints`         | `Position[]` (optional)       | Percent-space intermediate points. Omit or set `[]` for a straight line from `from_node` to `to_node`. |
-| `domain`            | domain enum                   | Optional per-flow override of the card-level domain.            |
-| `color_positive`    | CSS colour                    | Optional override of the profile default.                       |
-| `color_negative`    | CSS colour                    | Optional override for negative values.                          |
-| `threshold`         | number                        | Values below abs(threshold) are treated as zero.                |
-| `reverse`           | boolean                       | Flip flow direction regardless of sign.                         |
-| `speed_multiplier`  | number in `[0.1, 5.0]`        | Scales the computed `dur_ms`.                                   |
-
-### `Overlay`
-
-| Key           | Type                                                              | Description                                                            |
-|---------------|-------------------------------------------------------------------|------------------------------------------------------------------------|
-| `id`          | non-empty string, unique                                           | Required.                                                              |
-| `type`        | `"sensor"` · `"switch"` · `"button"` · `"camera"` · `"custom"`     | Required.                                                              |
-| `entity`      | entity id                                                         | Required for `sensor`, `switch`, `camera`.                             |
-| `position`    | `{ x: 0..100, y: 0..100 }`                                        | Top-left anchor in percent of card size.                               |
-| `size`        | `{ width: 2..100, height: 2..100 }`                               | Optional; defaults are type-specific.                                  |
-| `label`       | string                                                            | Optional; used for sensor chips / buttons.                             |
-| `tap_action`  | `{ action: "toggle" \| "more-info" \| "none" }`                   | Optional override of the type-specific default.                        |
-| `card_config` | any JSON object                                                    | Only valid when `type: custom`. Passed to `loadCardHelpers().createCardElement()`. Recursively scanned for unsafe URL schemes. |
-
-## Per-domain examples
-
-### Energy — whole-home grid/solar/battery
+Minimal configuration to get started:
 
 ```yaml
 type: custom:flowme-card
 domain: energy
 background:
-  default: /local/flowme/house-iso.jpg
-aspect_ratio: "16:10"
+  default: /local/my-background.jpg
 nodes:
-  - id: grid
-    position: { x: 8, y: 50 }
-    label: Grid
   - id: solar
-    position: { x: 50, y: 8 }
-    label: Solar
-  - id: battery
-    position: { x: 92, y: 50 }
-    label: Battery
-  - id: house
-    position: { x: 50, y: 92 }
-    label: House
-flows:
-  - id: grid_house
-    from_node: grid
-    to_node: house
-    entity: sensor.grid_power
-  - id: solar_house
-    from_node: solar
-    to_node: house
+    position: { x: 30, y: 20 }
     entity: sensor.solar_power
-  - id: house_battery
-    from_node: house
-    to_node: battery
-    entity: sensor.battery_charge_power
-```
-
-### Water — kitchen/bathroom loop
-
-```yaml
-type: custom:flowme-card
-domain: water
-background:
-  default: /local/flowme/plumbing.jpg
-nodes:
-  - id: main
-    position: { x: 6, y: 50 }
-    label: Main
-  - id: kitchen
-    position: { x: 45, y: 30 }
-    label: Kitchen
-  - id: bathroom
-    position: { x: 75, y: 70 }
-    label: Bathroom
+    label: Solar
+  - id: home
+    position: { x: 60, y: 50 }
+    entity: sensor.load_power
+    label: Home
 flows:
-  - id: to_kitchen
-    from_node: main
-    to_node: kitchen
-    entity: sensor.kitchen_flow
-    threshold: 0.1
-  - id: to_bathroom
-    from_node: main
-    to_node: bathroom
-    entity: sensor.bathroom_flow
-    threshold: 0.1
+  - id: solar_to_home
+    from_node: solar
+    to_node: home
+    entity: sensor.solar_power
 ```
 
-### Network — WAN/LAN/Wi-Fi
+---
 
-```yaml
-type: custom:flowme-card
-domain: network
-background:
-  default: /local/flowme/rack.jpg
-nodes:
-  - id: wan
-    position: { x: 10, y: 50 }
-    label: WAN
-  - id: router
-    position: { x: 40, y: 50 }
-    label: Router
-  - id: wifi
-    position: { x: 75, y: 20 }
-    label: Wi-Fi
-  - id: lan
-    position: { x: 75, y: 80 }
-    label: LAN
-flows:
-  - id: wan_router
-    from_node: wan
-    to_node: router
-    entity: sensor.wan_down_mbps
-  - id: router_wifi
-    from_node: router
-    to_node: wifi
-    entity: sensor.wifi_clients_throughput
-  - id: router_lan
-    from_node: router
-    to_node: lan
-    entity: sensor.lan_throughput
-```
+## Configuration
 
-### HVAC — supply/return ducts
+### Top-level options
 
-```yaml
-type: custom:flowme-card
-domain: hvac
-background:
-  default: /local/flowme/floorplan.jpg
-nodes:
-  - id: ahu
-    position: { x: 50, y: 8 }
-    label: AHU
-  - id: living
-    position: { x: 25, y: 50 }
-    label: Living
-  - id: bedroom
-    position: { x: 75, y: 50 }
-    label: Bedroom
-flows:
-  - id: supply_living
-    from_node: ahu
-    to_node: living
-    entity: sensor.supply_cfm_living
-  - id: supply_bedroom
-    from_node: ahu
-    to_node: bedroom
-    entity: sensor.supply_cfm_bedroom
-```
+| Option        | Type    | Default        | Description                                      |
+| ------------- | ------- | -------------- | ------------------------------------------------ |
+| `domain`      | string  | `energy`       | Flow domain: `energy`, `water`, `network`, `hvac`, `gas`, `generic` |
+| `debug`       | boolean | `false`        | Enable console logging                          |
+| `aspect_ratio`| string  | (image native) | Canvas aspect ratio, e.g. `16:10`               |
+| `fullscreen`  | boolean | `false`        | Panel / fullscreen style                        |
+| `edit_mode_password` | string | —        | Optional password before the visual editor opens |
 
-### Gas — boiler and stove
+### Background
 
-```yaml
-type: custom:flowme-card
-domain: gas
-background:
-  default: /local/flowme/boiler-room.jpg
-nodes:
-  - id: meter
-    position: { x: 10, y: 50 }
-    label: Meter
-  - id: boiler
-    position: { x: 60, y: 30 }
-    label: Boiler
-  - id: stove
-    position: { x: 60, y: 70 }
-    label: Stove
-flows:
-  - id: meter_boiler
-    from_node: meter
-    to_node: boiler
-    entity: sensor.boiler_gas_flow
-  - id: meter_stove
-    from_node: meter
-    to_node: stove
-    entity: sensor.stove_gas_flow
-```
+| Option                        | Type   | Description |
+| ----------------------------- | ------ | ----------- |
+| `background.default`          | string | Default background image URL |
+| `background.weather_entity`   | string | Weather entity ID for state-based images |
+| `background.sun_entity`       | string | Sun entity (e.g. `sun.sun`) for night variant keys |
+| `background.transition_duration` | number | Crossfade duration in **milliseconds** (default 5000 if omitted) |
+| `background.weather_states`   | object | Map of weather state → image URL |
 
-### Generic — anything with a number
+### Nodes
 
-```yaml
-type: custom:flowme-card
-domain: generic
-background:
-  default: /local/flowme/whatever.jpg
-nodes:
-  - id: a
-    position: { x: 15, y: 50 }
-  - id: b
-    position: { x: 85, y: 50 }
-flows:
-  - id: ab
-    from_node: a
-    to_node: b
-    entity: sensor.mystery_meter
-    color_positive: "#A78BFA"
-    speed_multiplier: 1.5
-```
+| Option        | Type    | Description |
+| ------------- | ------- | ----------- |
+| `id`          | string  | Unique node identifier |
+| `position.x`  | number  | Horizontal position 0–100% |
+| `position.y`  | number  | Vertical position 0–100% |
+| `entity`      | string  | HA entity for value display |
+| `label`       | string  | Display label |
+| `show_value`  | boolean | Show sensor value |
+| `color`       | string  | Override node colour |
+| `node_effect` | object  | Node effect configuration (`glow`, `badge`, `ripple`, `alert`) |
+
+### Flows
+
+| Option            | Type   | Description |
+| ----------------- | ------ | ----------- |
+| `id`              | string | Unique flow identifier |
+| `from_node`       | string | Source node ID |
+| `to_node`         | string | Destination node ID |
+| `entity`          | string | Sensor entity driving the flow |
+| `animation_style` | string | `dots` \| `dash` \| `arrow` \| `trail` \| `fluid` \| `none` |
+| `particle_shape`  | string | `circle` \| `square` \| `arrow` \| `teardrop` \| `diamond` \| `custom_svg` |
+| `direction`       | string | `auto` \| `forward` \| `reverse` \| `both` |
+| `line_style`      | string | `corner` \| `diagonal` \| `curve` \| `smooth` |
+| `color`           | string | Override flow colour |
+| `value_gradient`  | object | Gradient colour config |
+
+Per-flow animation options (`animation_style`, `particle_shape`, `direction`, spacing, etc.) belong under a **`animation`** object on each flow in YAML (see **`FEATURES.md`**).
 
 ### Overlays
 
 ```yaml
 overlays:
-  - id: temp_livingroom
-    type: sensor
-    entity: sensor.livingroom_temperature
-    position: { x: 35, y: 40 }
-    size: { width: 14, height: 8 }
-    label: Living room
-
-  - id: porch_light
-    type: switch
-    entity: switch.porch_light
-    position: { x: 72, y: 18 }
-
-  - id: front_cam
-    type: camera
-    entity: camera.front_door
-    position: { x: 82, y: 62 }
-    size: { width: 22, height: 15 }
-
-  - id: weather_tile
-    type: custom
-    position: { x: 50, y: 85 }
-    size: { width: 40, height: 12 }
-    card_config:
-      type: weather-forecast
-      entity: weather.home
-      show_current: true
-      show_forecast: false
+  - type: custom
+    position: { x: 10, y: 10 }
+    size: { width: 20, height: 15 }
+    card:
+      type: picture-entity
+      entity: camera.front_door
+      show_name: false
 ```
 
-## Editor
+---
 
-Click the wrench on the card → **Edit card** to open the visual editor.
+## Domains
 
-| Action                                 | Shortcut                          |
-|----------------------------------------|-----------------------------------|
-| Move a node / waypoint / overlay       | drag                              |
-| Snap to 8% grid                        | hold **Shift** while dragging     |
-| Add a node                             | click an empty spot on the stage  |
-| Add a waypoint                         | **Shift**-click a flow segment    |
-| Add an overlay                         | toolbar → **+ Overlay**           |
-| Resize an overlay                      | drag bottom-right handle          |
-| Delete anything                        | right-click on it                 |
-| Undo / redo                            | **Cmd/Ctrl+Z** / **Cmd/Ctrl+Shift+Z** |
-| Suggest a path between two nodes       | select a flow → **Suggest path**  |
-| Toggle renderer (debug)                | append `?flowme_renderer=svg` or `?flowme_renderer=houdini` to the URL |
+FlowMe includes built-in profiles for:
 
-Every drag produces exactly one undo entry on pointer-up, not one per move event. The undo stack caps at 100 entries.
+| Domain   | Roles (examples)        | Units   |
+| -------- | ------------------------- | ------- |
+| energy   | Solar, Grid, Battery, Load | W       |
+| water    | Supply, Drain, Storage, Transfer | L/min |
+| network  | Upload, Download, Local, External | Mbps |
+| hvac     | Supply air, Return air, Fresh, Exhaust | CFM |
+| gas      | Inlet, Outlet, Bypass, Vent | m³/h   |
+| generic  | Flow 1–4                  | configurable |
 
-## Security model
-
-- **Allowed URL schemes** for every image field: `/local/`, `/api/`, `/hacsfiles/`, `http://`, `https://`. Any other scheme is rejected at `validateConfig` time with a clear error.
-- **Custom overlay card configs** are recursively scanned for `javascript:`, `vbscript:`, `data:` and `file:` URL schemes anywhere in the object graph. Rejection happens at both validation time AND mount time (belt-and-braces for runtime-mutated configs).
-- **No `eval`, no `Function` constructor** — everything is statically analysable.
-- **The editor password** is UI gating, not a security boundary. Anyone with YAML access can bypass it; treat it as a speed bump for unauthorised dashboard editors, not a real auth system.
-- **CSS Paint Worklet** runs inside the worklet sandbox; the card's Houdini renderer passes only numeric progress values into it — never user strings.
-
-## Troubleshooting
-
-**Card says `flowme: invalid configuration`.**
-The message includes the exact path that failed (e.g. `overlays[2].card_config.tap_action.url_path: unsafe URL scheme "javascript:"`). Fix that specific field.
-
-**Animation is choppy.**
-Append `?flowme_renderer=svg` to the URL. If SVG is smoother than Houdini, your browser's Paint Worklet is paying a surprising cost — file an issue with the browser version. Otherwise Houdini should be smoother on Chromium.
-
-**Background image doesn't load.**
-Check that your image URL begins with one of the allowed prefixes. If you're loading from `https://`, the remote server must allow your HA origin (CORS) — Sobel edge detection needs canvas read access, so images tagged as cross-origin by the browser will fail `getImageData`. Host images under `/local/` whenever possible.
-
-**"Suggest path" throws a canvas-tainted error.**
-Same CORS issue as above. Move the image under `/local/`.
-
-**`custom` overlay shows "Cannot find card type: foo-card".**
-The underlying Lovelace card must already be installed (via HACS or manually) before flowme can mount it. Install it normally, then reload your dashboard.
-
-**HACS says "incompatible with your Home Assistant version".**
-`hacs.json` declares `2024.1.0` as the minimum. Upgrade HA, or open an issue if you need older compatibility.
+---
 
 ## Translations
 
-FlowMe ships with English as the default language. To add a translation for your language:
+FlowMe ships with English as the default. To add a translation:
 
-1. Copy `translations/en.json` from the FlowMe repository as a starting point.
-2. Translate all values (keep the keys unchanged).
-3. Save as your language code, for example `fr.json`, `de.json`, `ro.json`, or `nl.json`.
-4. Place the file at `/config/www/flowme/translations/fr.json` (adjust the language code as needed).
-5. FlowMe will automatically load it when Home Assistant is set to that language.
+1. Copy `translations/en.json` from this repository
+2. Translate all values (keep keys unchanged)
+3. Save as your language code, e.g. `fr.json`
+4. Place at `/config/www/flowme/translations/fr.json`
 
-Partial translations are supported — any missing key falls back to English automatically.
+FlowMe loads it automatically when HA is set to that language. Partial translations are supported — missing keys fall back to English.
 
-To contribute your translation to the project, open a pull request adding your file to the `translations/` folder in the repository.
+To contribute, open a pull request adding your file to the `translations/` folder.
+
+---
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 20+
-- npm
+Node.js 20+, npm
 
 ### Setup
 
@@ -438,175 +203,28 @@ cd flowme
 npm install
 ```
 
-### Run dev server
+### Dev server (no HA required)
 
 ```bash
 npm run dev
-# Opens http://localhost:5173
-# Hot reloads on file changes
-# No Home Assistant installation required
 ```
 
-The dev server loads `src/dev/demo-app.ts` which renders a FlowMe card with a
-realistic mock Home Assistant environment. All sensor values update automatically
-every 2 seconds. Use the control panel on the right to override values, change
-weather and sun state, or test animation at different speeds.
+Opens `http://localhost:5173` with a mock Home Assistant environment and live reload.
 
 ### Build
 
 ```bash
 npm run build
-# Output: dist/flowme-card.js
 ```
 
 ### Test
 
 ```bash
-npm run test              # run all tests once
-npm run test:watch        # watch mode
-npm run test:coverage     # with coverage report
+npm run test
 ```
-
-### All scripts
-
-```bash
-npm run dev                 # vite dev server at http://localhost:5173
-npm run build               # produces dist/flowme-card.js
-npm run type-check          # tsc --noEmit on src
-npm run type-check:tests    # tsc --noEmit on tests
-npm run lint                # eslint src
-npm run test                # vitest run (235+ tests)
-npm run test:watch          # vitest watch mode
-npm run test:coverage       # vitest run --coverage
-npm run check               # lint + type-check + type-check:tests + test + build
-```
-
-`dist/` is committed to the repo because HACS distributes the built bundle directly. CI enforces this — if you change source without rebuilding, CI will fail.
-
-See [TESTING.md](TESTING.md) for the manual pre-release checklist and [HACS.md](HACS.md) for the HACS submission checklist.
 
 ---
 
-## Custom SVG particle shapes (v1.0.14+)
+## Licence
 
-Any SVG path can be used as a particle shape. The path `d=` attribute string is
-scaled automatically to the configured particle size:
-
-```yaml
-flows:
-  - id: solar_flow
-    entity: sensor.solar_power
-    animation:
-      animation_style: dots
-      particle_shape: custom_svg
-      custom_svg_path: "M 0 -8 L 5 8 L -5 8 Z"   # triangle
-      particle_size: 1.5
-```
-
-Other examples:
-- Arrow: `"M -6 0 L 0 -8 L 6 0 L 2 0 L 2 8 L -2 8 L -2 0 Z"`
-- Diamond: `"M 0 -8 L 6 0 L 0 8 L -6 0 Z"`
-- Circle outline (path): `"M 0 -8 A 8 8 0 1 1 0 8 A 8 8 0 1 1 0 -8"`
-
-`custom_svg` is supported for `dots` and `trail` animation styles. Other styles
-fall back to `circle` with a `console.warn`.
-
----
-
-## Value gradient colour interpolation (v1.0.14+)
-
-Drive flow or particle colour from a sensor entity value, interpolating in HSL
-colour space:
-
-```yaml
-flows:
-  - id: hvac_flow
-    entity: sensor.hvac_power
-    animation:
-      animation_style: fluid
-    value_gradient:
-      entity: sensor.indoor_temperature
-      low_value: 18          # °C
-      high_value: 28
-      low_color: "#1EB4FF"   # cool blue
-      high_color: "#FF4500"  # hot orange
-      mode: both             # applies to both particles and line stroke
-```
-
-| `mode` | What gets the gradient colour |
-|--------|-------------------------------|
-| `flow` (default) | animated particles only |
-| `line` | background outline stroke only |
-| `both` | both particles and stroke |
-
-**More domain examples:**
-
-```yaml
-# Solar intensity — grey at zero, gold at peak
-value_gradient:
-  entity: sensor.solar_power
-  low_value: 0
-  high_value: 5000
-  low_color: "#888888"
-  high_color: "#FFD700"
-
-# Battery SOC — red at low, green at full
-value_gradient:
-  entity: sensor.battery_state_of_charge
-  low_value: 0
-  high_value: 100
-  low_color: "#FF4444"
-  high_color: "#44FF44"
-
-# Network traffic — light to intense
-value_gradient:
-  entity: sensor.wan_download_mbps
-  low_value: 0
-  high_value: 500
-  low_color: "#4488FF"
-  high_color: "#FF44FF"
-```
-
-Falls back to the flow's configured `color`/domain default if the entity is
-unavailable or reports a non-numeric value.
-
----
-
-## Particle spacing modes (v1.0.14+)
-
-```yaml
-flows:
-  - id: my_flow
-    animation:
-      animation_style: dots
-      particle_spacing: clustered   # even | random | clustered | pulse | wave_spacing | wave_lateral
-      cluster_size: 4               # clustered: particles per cluster (default 3)
-      cluster_gap: 2.5              # clustered: gap multiplier (default 2.0)
-```
-
-| Mode | Description | Sub-config keys |
-|------|-------------|-----------------|
-| `even` | Equal intervals (default) | — |
-| `random` | Organic random positions, slowly re-randomised | — |
-| `clustered` | Tight groups separated by gaps | `cluster_size`, `cluster_gap` |
-| `pulse` | Rhythmically bunching and spreading | `pulse_frequency`, `pulse_ratio` |
-| `wave_spacing` | Sinusoidal density wave along path | `wave_frequency`, `wave_amplitude` |
-| `wave_lateral` | Particles oscillate perpendicular to path | `wave_frequency`, `wave_amplitude` (px) |
-
-`wave_lateral` is driven by `requestAnimationFrame` and supported for `dots`/`trail` only.
-
----
-
-## Roadmap
-
-- **v0.1.0** — MVP: energy only, SVG renderer, minimal editor.
-- **v0.2.0** — all six domain profiles, Houdini Paint renderer with SVG fallback, full drag-and-drop editor with undo/redo.
-- **v0.3.0** — Sobel + A\* pathfinding, one-click "Suggest path".
-- **v0.4.0** — weather-state background transitions.
-- **v0.5.0** — interactive overlays (sensors, switches, buttons, cameras, arbitrary custom cards).
-- **v1.0.0** — full test suite, polished docs, signed GitHub releases, HACS default-repository submission. ← **you are here**
-- **v1.1+** — HVAC temperature-gradient colour, editor multi-select + "suggest path from exactly two selected nodes", better tap-action feedback (ripple + toast), a standalone `npm run dev` demo page.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+MIT
