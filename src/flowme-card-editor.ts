@@ -194,8 +194,6 @@ export class FlowmeCardEditor extends LitElement {
   private imageNaturalH = 0;
   /** True only after a successful recalcFit applied scale/pan (avoids first paint at scale=1). */
   @state() private imageLayoutReady = false;
-  /** One-shot diagnostics for editor layout timing. */
-  private _editorFirstRenderLogged = false;
   /** URL for which naturalW/H have been loaded (avoids redundant loads). */
   private _loadedImageUrl = '';
   /** True while spacebar is held (enables drag-to-pan). */
@@ -323,17 +321,6 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   override firstUpdated(): void {
-    // eslint-disable-next-line no-console -- intentional layout diagnostic
-    console.log(
-      '[FlowMe Editor] firstUpdated, imageNaturalW:',
-      this.imageNaturalW,
-      'imageNaturalH:',
-      this.imageNaturalH,
-      'scale:',
-      this.scale,
-      'fitScale:',
-      this.fitScale,
-    );
     const canvasEl = this.canvasRef.value;
     if (!canvasEl) return;
     this._canvasResizeObserver = new ResizeObserver((entries) => {
@@ -483,21 +470,6 @@ export class FlowmeCardEditor extends LitElement {
       : this.selectorType;
     const derivedElement =
       this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? '';
-
-    if (!this._editorFirstRenderLogged) {
-      this._editorFirstRenderLogged = true;
-      // eslint-disable-next-line no-console -- intentional layout diagnostic
-      console.log(
-        '[FlowMe Editor] first render, imageNaturalW:',
-        this.imageNaturalW,
-        'imageNaturalH:',
-        this.imageNaturalH,
-        'scale:',
-        this.scale,
-        'fitScale:',
-        this.fitScale,
-      );
-    }
 
     const imageReady =
       this.imageLayoutReady && this.imageNaturalW > 0 && this.imageNaturalH > 0;
