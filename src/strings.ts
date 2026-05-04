@@ -346,6 +346,7 @@ export const STRINGS = {
       lineWidth: 'Line width (px)',
       fps: 'FPS cap',
       smoothSpeed: 'Smooth speed transitions',
+      pauseWhenHidden: 'Pause when tab hidden',
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',

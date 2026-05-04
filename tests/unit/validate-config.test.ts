@@ -23,6 +23,11 @@ describe('validateConfig — happy path', () => {
     expect(cfg.flows).toHaveLength(0);
   });
 
+  it('accepts pause_when_hidden', () => {
+    const cfg = validateConfig({ ...minimalConfig(), pause_when_hidden: false });
+    expect(cfg.pause_when_hidden).toBe(false);
+  });
+
   it('accepts a full config with all optional fields', () => {
     const raw = {
       ...minimalConfig(),

@@ -657,6 +657,13 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     config.edit_mode_password = c['edit_mode_password'] as string;
   }
 
+  if (c['pause_when_hidden'] !== undefined) {
+    if (typeof c['pause_when_hidden'] !== 'boolean') {
+      fail('pause_when_hidden', t('validation.mustBeBoolean'));
+    }
+    config.pause_when_hidden = c['pause_when_hidden'] as boolean;
+  }
+
   if (c['overlays'] !== undefined) {
     if (!Array.isArray(c['overlays'])) fail('overlays', t('validation.overlaysMustBeArray'));
     const seenOverlayIds = new Set<string>();

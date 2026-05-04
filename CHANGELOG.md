@@ -2,6 +2,13 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1]
+
+### Added
+
+- **Pause when tab hidden** — When the browser tab is hidden, flow animations (SVG and Houdini), the adaptive `requestAnimationFrame` loop, and node-effect SVG animations pause; they resume when the tab is visible again. Optional card setting `pause_when_hidden` (default **true**); set to **false** to keep animations running in background tabs. Editor: State A → Animation → **Pause when tab hidden**.
+- **HACS manifest** — `hacs.json` now includes `homeassistant` minimum version (`2023.1.0`) and `render_readme`: true so HACS can render `README.md` in the UI.
+
 ## [2.0.0] — Public release
 
 First public release of FlowMe.

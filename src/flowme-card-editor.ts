@@ -70,6 +70,7 @@ import {
   setOverlayVisible,
   setTransitionDuration,
   setAnimationConfig,
+  setPauseWhenHidden,
   setFlowAnimation,
   clearFlowAnimation,
   setVisibility,
@@ -2454,6 +2455,21 @@ export class FlowmeCardEditor extends LitElement {
             <span class="visibility-val">${animCfg.smooth_speed !== false ? t('editor.inspector.on') : t('editor.inspector.off')}</span>
           </label>
           <p class="hint-sub">${t('editor.inspector.smoothSpeedHint')}</p>
+          <label class="visibility-row">
+            <input
+              type="checkbox"
+              .checked=${this.config.pause_when_hidden !== false}
+              @change=${(e: Event) => {
+                if (!this.config) return;
+                const checked = (e.target as HTMLInputElement).checked;
+                const prev = this.config;
+                const next = setPauseWhenHidden(prev, checked);
+                this.pushPatch(prev, next, 'set pause_when_hidden');
+              }}
+            />
+            <span class="visibility-label">${t('editor.stateA.pauseWhenHidden')}</span>
+            <span class="visibility-val">${this.config.pause_when_hidden !== false ? t('editor.inspector.on') : t('editor.inspector.off')}</span>
+          </label>
         </div>
       </details>
     `;

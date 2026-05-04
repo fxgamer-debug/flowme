@@ -22,6 +22,10 @@ export interface FlowRenderer {
    * Houdini layer). Optional — omit when not updating accessibility metadata.
    */
   setFlowAriaLabel?(flowId: string, label: string): void;
+  /** Pause flow animations (tab hidden, optional). v2.1+ */
+  pause?(): void;
+  /** Resume after {@link pause}. v2.1+ */
+  resume?(): void;
   /** Tear down DOM, observers, timers. */
   destroy(): void;
 }

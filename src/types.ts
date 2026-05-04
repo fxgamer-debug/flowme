@@ -461,6 +461,12 @@ export interface FlowmeConfig {
    * Global animation settings (v1.0.12+).
    */
   animation?: AnimationConfig;
+  /**
+   * When true (default), pause flow and node-effect animations while the
+   * browser tab is hidden. Set to false to keep animating in background tabs.
+   * v2.1+.
+   */
+  pause_when_hidden?: boolean;
 }
 
 export type FlowShape = 'dot' | 'square' | 'wave' | 'pulse' | 'gradient';

@@ -172,6 +172,20 @@ export class HoudiniRenderer implements FlowRenderer {
     div.el.setAttribute('aria-label', label);
   }
 
+  pause(): void {
+    if (!this.wrapper) return;
+    this.wrapper.querySelectorAll('.flow-houdini').forEach((el) => {
+      (el as HTMLElement).style.animationPlayState = 'paused';
+    });
+  }
+
+  resume(): void {
+    if (!this.wrapper) return;
+    this.wrapper.querySelectorAll('.flow-houdini').forEach((el) => {
+      (el as HTMLElement).style.animationPlayState = 'running';
+    });
+  }
+
   destroy(): void {
     this.applyUpdate.cancel();
     this.resizeObserver?.disconnect();

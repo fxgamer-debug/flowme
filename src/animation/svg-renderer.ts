@@ -250,6 +250,10 @@ export class SvgRenderer implements FlowRenderer {
    * Called once after init; no-op when fps is 60 (default — rAF is already ~60Hz).
    */
   private startFpsLoop(): void {
+    if (this.rafHandle !== null) {
+      cancelAnimationFrame(this.rafHandle);
+      this.rafHandle = null;
+    }
     const targetFps = this.config?.animation?.fps ?? 60;
     const frameInterval = 1000 / targetFps;
 
@@ -277,6 +281,39 @@ export class SvgRenderer implements FlowRenderer {
     // Always run the rAF loop for smooth_speed and direction change transitions
     this.lastFrameTime = performance.now();
     this.rafHandle = requestAnimationFrame(loop);
+  }
+
+  pause(): void {
+    if (!this.svg) return;
+    const root = this.svg as SVGSVGElement & { pauseAnimations?: () => void };
+    if (typeof root.pauseAnimations === 'function') {
+      root.pauseAnimations();
+    } else {
+      for (const el of this.svg.querySelectorAll('animateMotion, animate, animateTransform')) {
+        const anim = el as SVGAnimationElement & { pauseAnimations?: () => void };
+        if (typeof anim.pauseAnimations === 'function') anim.pauseAnimations();
+      }
+    }
+    if (this.rafHandle !== null) {
+      cancelAnimationFrame(this.rafHandle);
+      this.rafHandle = null;
+    }
+  }
+
+  resume(): void {
+    if (!this.svg) return;
+    const root = this.svg as SVGSVGElement & { unpauseAnimations?: () => void };
+    if (typeof root.unpauseAnimations === 'function') {
+      root.unpauseAnimations();
+    } else {
+      for (const el of this.svg.querySelectorAll('animateMotion, animate, animateTransform')) {
+        const anim = el as SVGAnimationElement & { unpauseAnimations?: () => void };
+        if (typeof anim.unpauseAnimations === 'function') anim.unpauseAnimations();
+      }
+    }
+    if (this.rafHandle === null) {
+      this.startFpsLoop();
+    }
   }
 
   destroy(): void {

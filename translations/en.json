@@ -72,7 +72,8 @@
         "hvac": "HVAC",
         "gas": "Gas",
         "generic": "Generic"
-      }
+      },
+      "pauseWhenHidden": "Pause when tab hidden"
     },
     "suggestBar": {
       "message": "Suggested path ready — accept or cancel"

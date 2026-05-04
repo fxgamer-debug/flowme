@@ -26,7 +26,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Logged once at load so users can confirm the right version is loaded. */
-const CARD_VERSION = '2.0.0';
+const CARD_VERSION = '2.1';
 const DEFAULT_TRANSITION_MS = 5000;
 
 // eslint-disable-next-line no-console
@@ -94,6 +94,14 @@ export class FlowmeCard extends LitElement {
 
   private readonly onHaConnectionDisconnected = (): void => {
     this._connectionAwaitingReconnect = true;
+  };
+
+  private _visibilityListenerAttached = false;
+  /** True when we have applied tab-hidden pause (flow renderer + node effects). */
+  private _documentVisibilityPauseActive = false;
+
+  private readonly _visibilityHandler = (): void => {
+    this.syncAnimationsToDocumentVisibility();
   };
 
   @property({ attribute: false })
@@ -342,6 +350,7 @@ export class FlowmeCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.syncPauseWhenHiddenListener();
     dlog('connectedCallback — shadowRoot present?', !!this.shadowRoot, 'config present?', !!this.config, 'hass present?', !!this._hass);
   }
 
@@ -351,6 +360,11 @@ export class FlowmeCard extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    if (this._visibilityListenerAttached) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityListenerAttached = false;
+    }
+    this._documentVisibilityPauseActive = false;
     if (this._nodeFxRaf !== null) {
       cancelAnimationFrame(this._nodeFxRaf);
       this._nodeFxRaf = null;
@@ -399,6 +413,7 @@ export class FlowmeCard extends LitElement {
         // so flows render immediately without waiting for the next hass change.
         if (this.hass) this.pushAllValuesToRenderer();
         else this.syncRendererAriaLabels();
+        this.syncAnimationsToDocumentVisibility();
       })
       .catch((err) => {
         dlog('renderer init failed — falling back to SVG renderer', err);
@@ -413,6 +428,7 @@ export class FlowmeCard extends LitElement {
             }
             if (this.hass) this.pushAllValuesToRenderer();
             else this.syncRendererAriaLabels();
+            this.syncAnimationsToDocumentVisibility();
           })
           .catch((err2) => {
             console.error('[flowme] SVG renderer init also failed', err2);
@@ -439,9 +455,83 @@ export class FlowmeCard extends LitElement {
     // First paint: `ref(rendererMount)` is set only after commit — run init here
     // if `willUpdate` saw a null mount (no prior render).
     this.beginRendererInitIfNeeded();
+    this.syncPauseWhenHiddenListener();
+    this.syncAnimationsToDocumentVisibility();
     const svg = this.nodeFxSvgRef.value;
     if (svg && this.config) {
       this.nodeFx.sync(svg, this.config, this.hass, performance.now(), this.nodeEffectHooks());
+    }
+    this.ensureNodeEffectsRaf();
+  }
+
+  private syncPauseWhenHiddenListener(): void {
+    const want = this.config != null && this.config.pause_when_hidden !== false;
+    if (want && !this._visibilityListenerAttached) {
+      document.addEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityListenerAttached = true;
+    } else if (!want && this._visibilityListenerAttached) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityListenerAttached = false;
+    }
+  }
+
+  /**
+   * Pause flow + node-effect animations when the tab is hidden (unless
+   * `pause_when_hidden: false`). Idempotent.
+   */
+  private syncAnimationsToDocumentVisibility(): void {
+    const want = this.config != null && this.config.pause_when_hidden !== false;
+    if (!want) {
+      if (this._documentVisibilityPauseActive) {
+        this.resumeCardAnimationsAfterHiddenTab();
+        this._documentVisibilityPauseActive = false;
+      }
+      return;
+    }
+    if (document.visibilityState === 'hidden') {
+      if (!this._documentVisibilityPauseActive) {
+        this.pauseCardAnimationsForHiddenTab();
+        this._documentVisibilityPauseActive = true;
+      }
+    } else if (this._documentVisibilityPauseActive) {
+      this.resumeCardAnimationsAfterHiddenTab();
+      this._documentVisibilityPauseActive = false;
+    }
+  }
+
+  private pauseCardAnimationsForHiddenTab(): void {
+    this.renderer?.pause?.();
+    if (this._nodeFxRaf !== null) {
+      cancelAnimationFrame(this._nodeFxRaf);
+      this._nodeFxRaf = null;
+    }
+    const svg = this.nodeFxSvgRef.value;
+    if (svg) {
+      const root = svg as SVGSVGElement & { pauseAnimations?: () => void };
+      if (typeof root.pauseAnimations === 'function') {
+        root.pauseAnimations();
+      } else {
+        for (const el of svg.querySelectorAll('animateMotion, animate, animateTransform')) {
+          const anim = el as SVGAnimationElement & { pauseAnimations?: () => void };
+          anim.pauseAnimations?.();
+        }
+      }
+    }
+  }
+
+  private resumeCardAnimationsAfterHiddenTab(): void {
+    this.renderer?.resume?.();
+    const svg = this.nodeFxSvgRef.value;
+    if (svg) {
+      const root = svg as SVGSVGElement & { unpauseAnimations?: () => void };
+      if (typeof root.unpauseAnimations === 'function') {
+        root.unpauseAnimations();
+      } else {
+        for (const el of svg.querySelectorAll('animateMotion, animate, animateTransform')) {
+          const anim = el as SVGAnimationElement & { unpauseAnimations?: () => void };
+          anim.unpauseAnimations?.();
+        }
+      }
     }
     this.ensureNodeEffectsRaf();
   }
@@ -491,6 +581,13 @@ export class FlowmeCard extends LitElement {
   private ensureNodeEffectsRaf(): void {
     const need = !!this.config?.nodes.some((n) => n.node_effect && n.visible !== false);
     if (!need) {
+      if (this._nodeFxRaf !== null) {
+        cancelAnimationFrame(this._nodeFxRaf);
+        this._nodeFxRaf = null;
+      }
+      return;
+    }
+    if (this.config?.pause_when_hidden !== false && document.visibilityState === 'hidden') {
       if (this._nodeFxRaf !== null) {
         cancelAnimationFrame(this._nodeFxRaf);
         this._nodeFxRaf = null;
@@ -989,6 +1086,8 @@ export class FlowmeCard extends LitElement {
       this.renderer = null;
     }
     this.rendererReadyFor = undefined;
+    // New renderer must re-apply tab-hidden pause (destroy clears paused SMIL state).
+    this._documentVisibilityPauseActive = false;
   }
 
   static override styles = css`

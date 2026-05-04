@@ -664,6 +664,17 @@ export function setAnimationConfig(
   return next;
 }
 
+/** `enabled: true` (default) omits `pause_when_hidden` from YAML. */
+export function setPauseWhenHidden(config: FlowmeConfig, enabled: boolean): FlowmeConfig {
+  const next = cloneConfig(config);
+  if (enabled) {
+    delete next.pause_when_hidden;
+  } else {
+    next.pause_when_hidden = false;
+  }
+  return next;
+}
+
 export function setValueGradient(
   config: FlowmeConfig,
   flowId: string,
