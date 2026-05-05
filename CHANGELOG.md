@@ -2,6 +2,14 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.2]
+
+### Fixed
+
+- **Editor — image browser:** Resolved image URLs from HA `browse_media` items (prefer `url`, absolute `media_content_id`, then `media-source://media_source/{label}/…` → `/local/…`, then `thumbnail`) instead of assuming `/local/` + basename. Subfolders and custom `media_dirs` labels work.
+- **Editor — image browser:** Grid previews use `thumbnail` when present, with `@error` fallback to the resolved image URL.
+- **Editor — image browser:** Browse panel renders under the default URL row or under the matching weather-state row (`stopPropagation` on browse buttons). With `debug: true`, each media child is logged once for diagnosis.
+
 ## [2.3.1]
 
 ### Fixed
