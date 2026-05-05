@@ -202,6 +202,8 @@ export const STRINGS = {
       profileDefaultPlaceholder: 'profile default',
       peakValue: 'Peak value',
       peakValueHelper: 'Override domain default peak value for speed calculation',
+      zeroThreshold: 'Zero threshold (%)',
+      zeroThresholdHelper: 'Override global default — motion stops below this % of peak',
       animMinMsPlaceholder: (ms: number) => `Global default (${ms} ms)`,
       animMaxMsPlaceholder: (ms: number) => `Global default (${ms} ms)`,
       glowIntensity: 'Glow intensity',
@@ -362,6 +364,9 @@ export const STRINGS = {
       peakCfm: 'CFM',
       peakOr: 'or',
       domainPeakDefault: 'Domain default peak',
+      zeroThreshold: 'Zero threshold (%)',
+      zeroThresholdHelper: 'Motion stops below this percentage of peak value (default: 0.2%)',
+      zeroThresholdCutoff: 'Currently stops below',
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',

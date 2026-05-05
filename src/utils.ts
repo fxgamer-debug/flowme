@@ -289,20 +289,40 @@ export function parseSensorValue(raw: string | number | null | undefined): numbe
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Normalise a flow sensor value for animation (HA may pass strings like `"0"` / `"0.00"`).
+ * Does not use `|| 0` so legitimate numeric zero stays zero.
+ */
+export function normalizeAnimSensorValue(value: unknown): number {
+  if (value == null) return 0;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return 0;
+    return value === 0 ? 0 : value;
+  }
+  const n = Number.parseFloat(String(value).trim());
+  if (!Number.isFinite(n)) return 0;
+  return n === 0 ? 0 : n;
+}
+
 /** Default slowest / fastest one-cycle animation durations (v2.2+ linear speed curve). */
 export const DEFAULT_ANIM_MAX_DURATION_MS = 10_000;
 export const DEFAULT_ANIM_MIN_DURATION_MS = 500;
+
+/** Default fraction of peak below which motion is paused (v2.2.1). 0.002 × 5000 W = 10 W. */
+export const DEFAULT_ZERO_THRESHOLD = 0.002;
 
 /**
  * Linear speed curve: map sensor magnitude to cycle duration from maxDur (slow, near zero)
  * down to minDur (fast, at/above peak). Values ≥ peak animate at minDur.
  */
 export function calcAnimDuration(
-  value: number,
+  value: unknown,
   peakValue: number,
   minDur: number,
   maxDur: number,
+  zeroThreshold: number = DEFAULT_ZERO_THRESHOLD,
 ): number {
+  const numValue = normalizeAnimSensorValue(value);
   const lo = Math.min(minDur, maxDur);
   const hi = Math.max(minDur, maxDur);
   if (!(Number.isFinite(lo) && Number.isFinite(hi)) || hi <= 0 || lo <= 0) {
@@ -311,8 +331,10 @@ export function calcAnimDuration(
   if (!(peakValue > 0) || !Number.isFinite(peakValue)) {
     return hi;
   }
-  const pct = Math.min(1, Math.abs(value) / peakValue);
-  if (pct < 0.001) {
+  const pct = Math.min(1, Math.abs(numValue) / peakValue);
+  const zt =
+    Number.isFinite(zeroThreshold) && zeroThreshold > 0 && zeroThreshold <= 1 ? zeroThreshold : DEFAULT_ZERO_THRESHOLD;
+  if (pct < zt) {
     return hi;
   }
   const dur = hi - pct * (hi - lo);
@@ -322,11 +344,20 @@ export function calcAnimDuration(
   return Math.min(Math.max(dur, lo), hi);
 }
 
-/** Effective peak + duration bounds for a flow (v2.2). */
+/** Effective peak + duration bounds + zero cutoff for a flow (v2.2 / v2.2.1). */
 export interface ResolvedAnimTiming {
   peak: number;
   minDur: number;
   maxDur: number;
+  /** Fraction of peak (0–1); below this magnitude, motion is paused. */
+  zeroThreshold: number;
+}
+
+/** True when |value|/peak is below the configured zero threshold — renderer should not run motion. */
+export function isFlowMotionBelowCutoff(numValue: number, timing: ResolvedAnimTiming): boolean {
+  if (!(timing.peak > 0)) return false;
+  const pct = Math.min(1, Math.abs(numValue) / timing.peak);
+  return pct < timing.zeroThreshold;
 }
 
 /**
@@ -372,7 +403,15 @@ export function resolveAnimTiming(
     maxDur = DEFAULT_ANIM_MAX_DURATION_MS;
   }
 
-  return { peak, minDur, maxDur };
+  const zFlow = flow.animation?.zero_threshold;
+  const zCard = g?.zero_threshold;
+  let zeroThreshold =
+    typeof zFlow === 'number' && Number.isFinite(zFlow) ? zFlow : typeof zCard === 'number' && Number.isFinite(zCard) ? zCard : DEFAULT_ZERO_THRESHOLD;
+  if (!(zeroThreshold > 0 && zeroThreshold <= 1)) {
+    zeroThreshold = DEFAULT_ZERO_THRESHOLD;
+  }
+
+  return { peak, minDur, maxDur, zeroThreshold };
 }
 
 /**

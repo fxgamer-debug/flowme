@@ -21,10 +21,12 @@ import {
   PARTICLE_SHAPES,
   FLOW_DIRECTIONS,
   PARTICLE_SPACINGS,
+  normalizeFlowDomain,
 } from './types.js';
 import { findUnsafeUrls } from './overlays/url-scan.js';
 import { dlog } from './debug-log.js';
 import { t } from './i18n.js';
+import { DEFAULT_ZERO_THRESHOLD } from './utils.js';
 
 export class FlowmeConfigError extends Error {
   override name = 'FlowmeConfigError';
@@ -496,6 +498,14 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
     delete out.min_duration;
     delete out.max_duration;
   }
+  if (o['zero_threshold'] !== undefined) {
+    const v = o['zero_threshold'];
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1) {
+      out.zero_threshold = v;
+    } else {
+      dlog(`${path}.zero_threshold invalid — using default`, DEFAULT_ZERO_THRESHOLD);
+    }
+  }
   return out;
 }
 
@@ -583,6 +593,14 @@ function validateAnimationConfig(raw: unknown): AnimationConfig {
     delete out.min_duration;
     delete out.max_duration;
   }
+  if (o['zero_threshold'] !== undefined) {
+    const v = o['zero_threshold'];
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1) {
+      out.zero_threshold = v;
+    } else {
+      dlog('animation.zero_threshold invalid — using default', DEFAULT_ZERO_THRESHOLD);
+    }
+  }
   return out;
 }
 
@@ -624,10 +642,8 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     fail('type', t('validation.typeMustBeFlowme', String(c['type'])));
   }
   const rawDomain = c['domain'];
-  let cardDomain: FlowmeConfig['domain'] = 'energy';
-  if (typeof rawDomain === 'string' && FLOW_DOMAINS.includes(rawDomain as never)) {
-    cardDomain = rawDomain as FlowmeConfig['domain'];
-  }
+  const cardDomain: FlowmeConfig['domain'] =
+    typeof rawDomain === 'string' ? normalizeFlowDomain(rawDomain) : 'energy';
 
   // background and background.default are both optional. An omitted default
   // renders a neutral placeholder so the card works out of the box without

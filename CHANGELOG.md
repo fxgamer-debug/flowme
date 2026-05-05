@@ -2,6 +2,19 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.1]
+
+### Fixed
+
+- **Zero / string sensor values:** Animation input uses `normalizeAnimSensorValue()` everywhere (including renderer caches) so `"0"` / `"0.00"` matches numeric zero and cannot reuse a stale cached non-zero value incorrectly.
+- **Near-zero motion cutoff:** Default raised from 0.1% to **0.2% of peak** (configurable `animation.zero_threshold`, default `0.002`). Example: 5000 W peak → motion stops below **10 W** (0.01 kW); above that threshold speeds scale linearly as before.
+- **HVAC dual-unit in defaults:** Diagram domain is normalised with **`normalizeFlowDomain()`** (case-insensitive), so `hvac` / `HVAC` correctly shows linked **m³/h ↔ CFM** peak inputs in State A.
+
+### Changed
+
+- **Motion below cutoff:** When \|value\|/peak is below `zero_threshold`, flow animations are paused (no particle/dash/fluid motion); lines stay visible where applicable.
+- **Editor:** Removed legacy **speed curve override** block from the flow inspector (peak / min / max / zero threshold remain on the flow). Global **zero threshold (%)** with cutoff hint in State A defaults.
+
 ## [2.2]
 
 ### Added

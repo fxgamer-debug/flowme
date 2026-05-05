@@ -19,6 +19,7 @@ import {
   resolveAnimTiming,
   DEFAULT_ANIM_MAX_DURATION_MS,
   DEFAULT_ANIM_MIN_DURATION_MS,
+  DEFAULT_ZERO_THRESHOLD,
 } from '../../src/utils.js';
 import type { FlowConfig, FlowmeConfig } from '../../src/types.js';
 
@@ -28,7 +29,7 @@ const maxD = DEFAULT_ANIM_MAX_DURATION_MS;
 function durationForLinear(value: number, peak: number, lo = minD, hi = maxD): number {
   if (!(peak > 0)) return hi;
   const pct = Math.min(1, Math.abs(value) / peak);
-  if (pct < 0.001) return hi;
+  if (pct < DEFAULT_ZERO_THRESHOLD) return hi;
   const dur = hi - pct * (hi - lo);
   return Math.min(Math.max(dur, lo), hi);
 }
@@ -47,7 +48,7 @@ describe('calcAnimDuration (v2.2 linear % of peak)', () => {
     expect(calcAnimDuration(12_000, peak, minD, maxD)).toBeCloseTo(minD, 4);
   });
 
-  it('below 0.1% of peak returns slowest duration without being invalid', () => {
+  it('below default zero threshold returns slowest duration', () => {
     const tiny = peak * 0.0005;
     expect(calcAnimDuration(tiny, peak, minD, maxD)).toBe(maxD);
   });
@@ -90,6 +91,7 @@ describe('resolveAnimTiming', () => {
   it('uses flow.peak_value first, then override.peak, then defaults.peak_value, then profile.peak', () => {
     const r1 = resolveAnimTiming(flowWith({ peak_value: 123 }), energyProfile, cardBase);
     expect(r1.peak).toBe(123);
+    expect(r1.zeroThreshold).toBe(DEFAULT_ZERO_THRESHOLD);
 
     const r2 = resolveAnimTiming(
       flowWith({ speed_curve_override: { peak: 456 } }),
@@ -103,6 +105,17 @@ describe('resolveAnimTiming', () => {
 
     const r4 = resolveAnimTiming(flowWith(), energyProfile, {});
     expect(r4.peak).toBe(energyProfile.peak);
+  });
+
+  it('merges zero_threshold from flow.animation then card.animation', () => {
+    const r = resolveAnimTiming(
+      flowWith({ animation: { zero_threshold: 0.005 } }),
+      energyProfile,
+      { animation: { zero_threshold: 0.002 }, defaults: {} },
+    );
+    expect(r.zeroThreshold).toBe(0.005);
+    const r2 = resolveAnimTiming(flowWith(), energyProfile, { animation: { zero_threshold: 0.003 }, defaults: {} });
+    expect(r2.zeroThreshold).toBe(0.003);
   });
 
   it('prefers flow.animation durations over card.animation', () => {

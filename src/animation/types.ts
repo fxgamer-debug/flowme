@@ -11,7 +11,7 @@ export interface FlowRenderer {
    */
   applyConfig?(config: FlowmeConfig): void;
   /** Push a new sensor value for the named flow. Safe to call frequently. */
-  updateFlow(flowId: string, value: number): void;
+  updateFlow(flowId: string, value: unknown): void;
   /**
    * GRADIENT-1: Set the resolved gradient colour for a flow.
    * Optional — renderers that don't support gradients can omit this method.

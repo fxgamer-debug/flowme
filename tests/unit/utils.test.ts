@@ -10,6 +10,7 @@ import {
   polylineToSvgPath,
   polylineToSvgPathStyled,
   parseSensorValue,
+  normalizeAnimSensorValue,
   scaleSensorValue,
   debounce,
   parseAspectRatio,
@@ -135,6 +136,19 @@ describe('parseSensorValue', () => {
     expect(parseSensorValue(17)).toBe(17);
     expect(parseSensorValue(Number.NaN)).toBe(0);
     expect(parseSensorValue(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+});
+
+describe('normalizeAnimSensorValue', () => {
+  it('parses string zeros and preserves numeric zero', () => {
+    expect(normalizeAnimSensorValue('0')).toBe(0);
+    expect(normalizeAnimSensorValue('0.00')).toBe(0);
+    expect(normalizeAnimSensorValue(0)).toBe(0);
+    expect(normalizeAnimSensorValue(-0)).toBe(0);
+  });
+  it('does not collapse small positive numbers', () => {
+    expect(normalizeAnimSensorValue('0.01')).toBe(0.01);
+    expect(normalizeAnimSensorValue(12.5)).toBe(12.5);
   });
 });
 

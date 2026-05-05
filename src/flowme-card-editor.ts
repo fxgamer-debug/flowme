@@ -17,7 +17,6 @@ import type {
   NodePosition,
   OpacityConfig,
   OverlayConfig,
-  SpeedCurveOverride,
   ValueGradientConfig,
   VisibilityConfig,
 } from './types.js';
@@ -28,12 +27,14 @@ import {
   PARTICLE_SHAPES,
   PARTICLE_SPACINGS,
   FLOW_DIRECTIONS,
+  normalizeFlowDomain,
 } from './types.js';
 import { validateConfig } from './validate-config.js';
 import {
   calcAnimDuration,
   DEFAULT_ANIM_MAX_DURATION_MS,
   DEFAULT_ANIM_MIN_DURATION_MS,
+  DEFAULT_ZERO_THRESHOLD,
   interpolateGradientColor,
   polylineToSvgPathStyled,
   resolveAnimTiming,
@@ -45,7 +46,6 @@ import {
   addNode,
   addOverlay,
   clampPercent,
-  clearSpeedCurveOverride,
   deleteFlow,
   deleteNode,
   deleteOverlay,
@@ -64,7 +64,6 @@ import {
   setFlowColor,
   setFlowLineStyle,
   setFlowOpacity,
-  setFlowSpeedCurveOverride,
   setFlowPeakValue,
   setFlowVisible,
   setNodeLabel,
@@ -1270,7 +1269,14 @@ export class FlowmeCardEditor extends LitElement {
             ${(() => {
               const gMin = this.config.animation?.min_duration ?? DEFAULT_ANIM_MIN_DURATION_MS;
               const gMax = this.config.animation?.max_duration ?? DEFAULT_ANIM_MAX_DURATION_MS;
-              const domPeak = getProfile(flow.domain ?? this.config.domain).peak;
+              const gZero = this.config.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD;
+              const prof = getProfile(flow.domain ?? this.config.domain);
+              const timing = resolveAnimTiming(flow, prof, this.config);
+              const domPeak = prof.peak;
+              const previewPts = [0, timing.peak * 0.5, timing.peak];
+              const previewDurations = previewPts.map((v) =>
+                `${(calcAnimDuration(v, timing.peak, timing.minDur, timing.maxDur, timing.zeroThreshold) / 1000).toFixed(1)}s`,
+              );
               return html`
                 <label>
                   ${t('editor.inspector.peakValue')}
@@ -1347,6 +1353,42 @@ export class FlowmeCardEditor extends LitElement {
                     }}
                   />
                 </label>
+                <label>
+                  ${t('editor.inspector.zeroThreshold')}
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    placeholder=${`Default (${(gZero * 100).toFixed(1)}%)`}
+                    .value=${flow.animation?.zero_threshold !== undefined
+                      ? (flow.animation.zero_threshold * 100).toFixed(1)
+                      : ''}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const raw = (e.target as HTMLInputElement).value.trim();
+                      const prev = this.config;
+                      if (raw === '') {
+                        const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
+                        this.pushPatch(prev, next, `clear flow zero_threshold ${flow.id}`);
+                        return;
+                      }
+                      const v = parseFloat(raw);
+                      if (!Number.isFinite(v) || v <= 0 || v > 10) return;
+                      const next = setFlowAnimation(prev, flow.id, { zero_threshold: v / 100 });
+                      this.pushPatch(prev, next, `set flow zero_threshold ${flow.id}`);
+                    }}
+                  />
+                  <span class="hint-sub">${t('editor.inspector.zeroThresholdHelper')}</span>
+                </label>
+                <div class="speed-curve-preview inspector-timing-preview">
+                  <span>${t('editor.inspector.previewLinearSpeed')}</span>
+                  <strong>${previewDurations[0]}</strong>
+                  /
+                  <strong>${previewDurations[1]}</strong>
+                  /
+                  <strong>${previewDurations[2]}</strong>
+                </div>
               `;
             })()}
           </fieldset>
@@ -1444,7 +1486,6 @@ export class FlowmeCardEditor extends LitElement {
               <span>${flow.visible !== false ? t('editor.inspector.shown') : t('editor.inspector.hidden')}</span>
             </div>
           </label>
-          ${this.renderSpeedCurveSection(flow)}
           ${this.renderAnimationSection(flow)}
           ${this.renderValueGradientSection(flow)}
           <button class="danger" @click=${() => this.removeFlow(flow.id)}>${t('editor.inspector.deleteFlow')}</button>
@@ -1457,90 +1498,6 @@ export class FlowmeCardEditor extends LitElement {
       return this.renderOverlayInspector(overlay);
     }
     return nothing;
-  }
-
-  private renderSpeedCurveSection(flow: FlowConfig): TemplateResult {
-    if (!this.config) return html``;
-    const profile = getProfile(flow.domain ?? this.config.domain);
-    const timing = resolveAnimTiming(flow, profile, this.config);
-    const override: SpeedCurveOverride = flow.speed_curve_override ?? {};
-
-    const numInput = (
-      key: keyof Pick<SpeedCurveOverride, 'peak' | 'max_duration' | 'min_duration'>,
-      label: string,
-      unit?: string,
-    ) => html`
-      <div class="speed-curve-row">
-        <label class="speed-curve-label">${label}${unit ? html` <small>(${unit})</small>` : nothing}</label>
-        <input
-          type="number"
-          step="any"
-          min="0"
-          placeholder=${key === 'peak'
-            ? String(profile.peak)
-            : key === 'min_duration'
-              ? String(timing.minDur)
-              : String(timing.maxDur)}
-          .value=${override[key] !== undefined ? String(override[key]) : ''}
-          @change=${(e: Event) => {
-            if (!this.config) return;
-            const raw = (e.target as HTMLInputElement).value.trim();
-            if (raw === '') {
-              const partial: Partial<SpeedCurveOverride> = {};
-              for (const k of Object.keys(override) as (keyof SpeedCurveOverride)[]) {
-                if (k !== key) (partial as Record<string, unknown>)[k] = override[k];
-              }
-              const prev = this.config;
-              const next = setFlowSpeedCurveOverride(prev, flow.id, partial);
-              this.pushPatch(prev, next, `update speed curve ${key} for ${flow.id}`);
-            } else {
-              const v = parseFloat(raw);
-              if (!Number.isFinite(v)) return;
-              const prev = this.config;
-              const next = setFlowSpeedCurveOverride(prev, flow.id, { ...override, [key]: v });
-              this.pushPatch(prev, next, `update speed curve ${key} for ${flow.id}`);
-            }
-          }}
-        />
-      </div>
-    `;
-
-    const t2 = resolveAnimTiming(flow, profile, this.config);
-    const previewPts = [0, t2.peak * 0.5, t2.peak];
-    const previewDurations = previewPts.map((v) => {
-      const ms = calcAnimDuration(v, t2.peak, t2.minDur, t2.maxDur);
-      return `${(ms / 1000).toFixed(1)}s`;
-    });
-
-    return html`
-      <details class="speed-curve-details">
-        <summary>${t('editor.inspector.speedCurveOverrideSummary')}</summary>
-        <div class="speed-curve-body">
-          <p class="hint-sub">
-            ${t('editor.inspector.speedCurveHint', profile.unit_label, flow.domain ?? this.config.domain)}
-          </p>
-          ${numInput('peak', t('editor.inspector.peak'), profile.unit_label)}
-          ${numInput('max_duration', t('editor.inspector.maxDuration'), t('editor.inspector.ms'))}
-          ${numInput('min_duration', t('editor.inspector.minDuration'), t('editor.inspector.ms'))}
-          <div class="speed-curve-preview">
-            <span>${t('editor.inspector.previewLinearSpeed')}</span>
-            <strong>${previewDurations[0]}</strong>
-            /
-            <strong>${previewDurations[1]}</strong>
-            /
-            <strong>${previewDurations[2]}</strong>
-          </div>
-          ${Object.keys(override).length > 0
-            ? html`<button class="ghost" @click=${() => {
-                if (!this.config) return;
-                const prev = this.config;
-                const next = clearSpeedCurveOverride(prev, flow.id);
-                this.pushPatch(prev, next, `reset speed curve for ${flow.id}`);
-              }}>${t('editor.inspector.resetToDomainDefaults')}</button>`
-            : nothing}
-        </div>
-      </details>
-    `;
   }
 
   private defaultNodeEffect(type: NodeEffectType): NodeEffectConfig {
@@ -2837,7 +2794,7 @@ export class FlowmeCardEditor extends LitElement {
     if (!this.config) return nothing;
     const d: FlowmeDefaults = this.config.defaults ?? {};
     const animG = this.config.animation ?? {};
-    const domain = this.config.domain ?? 'energy';
+    const domain = normalizeFlowDomain(this.config.domain);
     const profile = getProfile(domain);
     const effPeak = d.peak_value ?? profile.peak;
     const cfmDisplay = Math.round(effPeak * 0.5886 * 10) / 10;
@@ -2925,6 +2882,30 @@ export class FlowmeCardEditor extends LitElement {
                 }}
               />
             </label>
+            <p class="hint-sub">${t('editor.stateA.zeroThresholdHelper')}</p>
+            <label class="defaults-row">
+              <span class="defaults-label">${t('editor.stateA.zeroThreshold')}</span>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                step="0.1"
+                .value=${((animG.zero_threshold ?? DEFAULT_ZERO_THRESHOLD) * 100).toFixed(1)}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const raw = parseFloat((e.target as HTMLInputElement).value);
+                  if (!Number.isFinite(raw) || raw <= 0 || raw > 10) return;
+                  const prev = this.config;
+                  const next = setAnimationConfig(prev, { zero_threshold: raw / 100 });
+                  this.pushPatch(prev, next, 'set global zero_threshold');
+                }}
+              />
+            </label>
+            <p class="hint-sub">
+              ${t('editor.stateA.zeroThresholdCutoff')}
+              ${((animG.zero_threshold ?? DEFAULT_ZERO_THRESHOLD) * effPeak).toFixed(2)}
+              ${profile.unit_label ? ` ${profile.unit_label}` : ''}
+            </p>
           </details>
           ${domain === 'hvac'
             ? html`

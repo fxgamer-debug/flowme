@@ -14,6 +14,8 @@ import {
   prefersReducedMotion,
   calcAnimDuration,
   resolveAnimTiming,
+  normalizeAnimSensorValue,
+  isFlowMotionBelowCutoff,
   type ResolvedAnimTiming,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
@@ -215,9 +217,9 @@ export class SvgRenderer implements FlowRenderer {
     }
   }
 
-  updateFlow(flowId: string, value: number): void {
+  updateFlow(flowId: string, value: unknown): void {
     if (!this.flowsById.has(flowId)) return;
-    this.latestValues.set(flowId, value);
+    this.latestValues.set(flowId, normalizeAnimSensorValue(value));
     this.applyUpdate();
   }
 
@@ -507,6 +509,8 @@ export class SvgRenderer implements FlowRenderer {
     const dom = this.flowNodes.get(flowId);
     if (!flow || !dom) return;
 
+    const numValue = normalizeAnimSensorValue(value);
+
     const anim = flow.animation ?? {};
     const style: AnimStyle = this.animStyle(flow);
 
@@ -518,28 +522,33 @@ export class SvgRenderer implements FlowRenderer {
 
     const profile = this.profileFor(flow);
     const timing = resolveAnimTiming(flow, profile, this.config);
-    const magnitude = Math.abs(value);
+    const magnitude = Math.abs(numValue);
+    const belowCutoff = isFlowMotionBelowCutoff(numValue, timing);
 
     const shimmer = anim.shimmer === true;
-    const thresholdHint = timing.peak * 0.001;
+    const thresholdHint = timing.peak * timing.zeroThreshold;
     const isShimmer = shimmer && magnitude <= thresholdHint && magnitude > 0;
     if (flow.visible === false) {
       this.setGroupOpacity(dom, 0);
       return;
     }
 
-    const rawSpeed = DEBUG ? DEBUG_DUR_MS : calcAnimDuration(value, timing.peak, timing.minDur, timing.maxDur);
+    const rawSpeed = DEBUG
+      ? DEBUG_DUR_MS
+      : calcAnimDuration(numValue, timing.peak, timing.minDur, timing.maxDur, timing.zeroThreshold);
     const speedMultiplier = flow.speed_multiplier ?? 1;
     let durMs = Math.max(50, rawSpeed * speedMultiplier);
     if (isShimmer) durMs = durMs / SHIMMER_SPEED_FACTOR;
 
-    // ANIM-1: smooth_speed — interpolate duration toward target
+    // ANIM-1: smooth_speed — interpolate duration toward target (skip when motion is paused)
     const smoothSpeed = this.config?.animation?.smooth_speed !== false;
-    durMs = resolveSmoothedDuration(flowId, durMs, smoothSpeed, performance.now(), this.durInterp);
+    if (!belowCutoff) {
+      durMs = resolveSmoothedDuration(flowId, durMs, smoothSpeed, performance.now(), this.durInterp);
+    }
 
     // Travel sign (+1 from→to, −1 to→from) — path geometry + motion
     const directionMode = anim.direction ?? 'auto';
-    const intendedDirection = this.computeIntendedTravelSign(flow, value);
+    const intendedDirection = this.computeIntendedTravelSign(flow, numValue);
 
     // ANIM-1: direction change — 300ms decelerate + 300ms re-accelerate (600ms total)
     let direction = intendedDirection;
@@ -618,26 +627,26 @@ export class SvgRenderer implements FlowRenderer {
 
     switch (style) {
       case 'dots':
-        this.applyDots(dom, flow, profile, value, durMs, color, direction, burstMultiplier);
+        this.applyDots(dom, flow, profile, numValue, durMs, color, direction, burstMultiplier, belowCutoff);
         break;
       case 'dash':
-        this.applyDash(dom, flow, durMs, color, direction, burstMultiplier);
+        this.applyDash(dom, flow, durMs, color, direction, burstMultiplier, belowCutoff);
         break;
       case 'arrow':
-        this.applyArrows(dom, flow, durMs, color, direction, burstMultiplier);
+        this.applyArrows(dom, flow, durMs, color, direction, burstMultiplier, belowCutoff);
         break;
       case 'trail':
-        this.applyTrail(dom, flow, durMs, color, direction, burstMultiplier);
+        this.applyTrail(dom, flow, durMs, color, direction, burstMultiplier, belowCutoff);
         break;
       case 'fluid':
-        this.applyFluid(dom, flow, durMs, color);
+        this.applyFluid(dom, flow, durMs, color, belowCutoff);
         break;
       case 'none':
         // static line — just ensure stroke is visible; no particles
         this.setGroupOpacity(dom, 1);
         break;
       default:
-        this.applyDots(dom, flow, profile, value, durMs, color, direction, burstMultiplier);
+        this.applyDots(dom, flow, profile, numValue, durMs, color, direction, burstMultiplier, belowCutoff);
     }
 
     if (directionMode === 'both' && (style === 'dots' || style === 'arrow' || style === 'trail')) {
@@ -1124,9 +1133,10 @@ export class SvgRenderer implements FlowRenderer {
     color: string,
     direction: number,
     burstMultiplier: number,
+    motionStopped = false,
   ): void {
     const dirMode = flow.animation?.direction ?? 'auto';
-    const desired = this.resolveParticleCount(flow, profile, value, burstMultiplier);
+    const desired = motionStopped ? 0 : this.resolveParticleCount(flow, profile, value, burstMultiplier);
     const shape = flow.animation?.particle_shape ?? 'circle';
     const flicker = flow.animation?.flicker === true;
 
@@ -1195,6 +1205,7 @@ export class SvgRenderer implements FlowRenderer {
     color: string,
     direction: number,
     burstMultiplier: number,
+    motionStopped = false,
   ): void {
     for (const p of dom.particles) p.shape.remove();
     dom.particles = [];
@@ -1227,13 +1238,15 @@ export class SvgRenderer implements FlowRenderer {
     const patternLength = dashLen + gapLen;
     const existing = dom.lineStroke.querySelector('animate');
     if (existing) existing.remove();
-    const anim0 = document.createElementNS(SVG_NS, 'animate');
-    anim0.setAttribute('attributeName', 'stroke-dashoffset');
-    anim0.setAttribute('from', direction > 0 ? '0' : `-${patternLength}`);
-    anim0.setAttribute('to', direction > 0 ? `-${patternLength}` : '0');
-    anim0.setAttribute('dur', `${(durMs / 1000).toFixed(3)}s`);
-    anim0.setAttribute('repeatCount', 'indefinite');
-    dom.lineStroke.appendChild(anim0);
+    if (!motionStopped) {
+      const anim0 = document.createElementNS(SVG_NS, 'animate');
+      anim0.setAttribute('attributeName', 'stroke-dashoffset');
+      anim0.setAttribute('from', direction > 0 ? '0' : `-${patternLength}`);
+      anim0.setAttribute('to', direction > 0 ? `-${patternLength}` : '0');
+      anim0.setAttribute('dur', `${(durMs / 1000).toFixed(3)}s`);
+      anim0.setAttribute('repeatCount', 'indefinite');
+      dom.lineStroke.appendChild(anim0);
+    }
   }
 
   /**
@@ -1246,12 +1259,15 @@ export class SvgRenderer implements FlowRenderer {
     color: string,
     direction: number,
     burstMultiplier: number,
+    motionStopped = false,
   ): void {
     // Reuse dots implementation but force 'arrow' shape
     const profile = this.profileFor(flow);
     const baseCount = flow.animation?.particle_count ?? DEFAULT_PARTICLE_COUNT;
     const burstMax = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
-    const desired = Math.min(burstMax, Math.max(1, Math.round(baseCount * burstMultiplier)));
+    const desired = motionStopped
+      ? 0
+      : Math.min(burstMax, Math.max(1, Math.round(baseCount * burstMultiplier)));
     const flicker = flow.animation?.flicker === true;
     const dirMode = flow.animation?.direction ?? 'auto';
 
@@ -1315,11 +1331,24 @@ export class SvgRenderer implements FlowRenderer {
     color: string,
     direction: number,
     burstMultiplier: number,
+    motionStopped = false,
   ): void {
     const profile = this.profileFor(flow);
     const baseCount = flow.animation?.particle_count ?? DEFAULT_PARTICLE_COUNT;
     const burstMax = this.config?.defaults?.burst_max_particles ?? BURST_MAX_PARTICLES;
-    const desired = Math.min(burstMax, Math.max(1, Math.round(baseCount * burstMultiplier)));
+    const desired = motionStopped
+      ? 0
+      : Math.min(burstMax, Math.max(1, Math.round(baseCount * burstMultiplier)));
+
+    if (motionStopped) {
+      for (const p of dom.particles) p.shape.remove();
+      dom.particles = [];
+      if (dom.particlesBack) {
+        for (const p of dom.particlesBack) p.shape.remove();
+        dom.particlesBack = undefined;
+      }
+      return;
+    }
     const flicker = flow.animation?.flicker === true;
     const kind = flow.animation?.particle_shape ?? 'circle';
     const trailRot = this.particleMotionRotateAttr(kind);
@@ -1414,7 +1443,7 @@ export class SvgRenderer implements FlowRenderer {
   /**
    * fluid — animated linear gradient along full path (v1.23.1).
    */
-  private applyFluid(dom: FlowDomNodes, flow: FlowConfig, durMs: number, color: string): void {
+  private applyFluid(dom: FlowDomNodes, flow: FlowConfig, durMs: number, color: string, motionStopped = false): void {
     for (const p of dom.particles) p.shape.remove();
     dom.particles = [];
 
@@ -1500,19 +1529,21 @@ export class SvgRenderer implements FlowRenderer {
       grad.appendChild(s);
     }
 
-    const anim = document.createElementNS(SVG_NS, 'animateTransform');
-    anim.setAttribute('attributeName', 'gradientTransform');
-    anim.setAttribute('type', 'translate');
-    anim.setAttribute('additive', 'replace');
-    anim.setAttribute('calcMode', 'linear');
-    anim.setAttribute('dur', `${Math.max(1, Math.round(durMs))}ms`);
-    anim.setAttribute('repeatCount', 'indefinite');
-    const tx = ux * L;
-    const ty = uy * L;
-    /** Slide pattern along path tangent (path `d` already matches travel direction after sync). */
-    anim.setAttribute('from', `${-tx} ${-ty}`);
-    anim.setAttribute('to', `0 0`);
-    grad.appendChild(anim);
+    if (!motionStopped) {
+      const anim = document.createElementNS(SVG_NS, 'animateTransform');
+      anim.setAttribute('attributeName', 'gradientTransform');
+      anim.setAttribute('type', 'translate');
+      anim.setAttribute('additive', 'replace');
+      anim.setAttribute('calcMode', 'linear');
+      anim.setAttribute('dur', `${Math.max(1, Math.round(durMs))}ms`);
+      anim.setAttribute('repeatCount', 'indefinite');
+      const tx = ux * L;
+      const ty = uy * L;
+      /** Slide pattern along path tangent (path `d` already matches travel direction after sync). */
+      anim.setAttribute('from', `${-tx} ${-ty}`);
+      anim.setAttribute('to', `0 0`);
+      grad.appendChild(anim);
+    }
 
     const strokeWidth = (this.config?.defaults?.line_width ?? STROKE_WIDTH) * 3;
     const glowFilter = this.glowFilter(flow, this.profileFor(flow), color);

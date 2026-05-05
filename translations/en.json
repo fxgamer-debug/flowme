@@ -36,7 +36,9 @@
       "minDuration": "Min duration (ms)",
       "maxDuration": "Max duration (ms)",
       "peakValue": "Peak value",
-      "peakValueHelper": "Override domain default peak value for speed calculation"
+      "peakValueHelper": "Override domain default peak value for speed calculation",
+      "zeroThreshold": "Zero threshold (%)",
+      "zeroThresholdHelper": "Override global default — motion stops below this % of peak"
     },
     "nodeEffect": {
       "section": "Node effect",
@@ -87,7 +89,10 @@
       "peakM3h": "m³/h",
       "peakCfm": "CFM",
       "peakOr": "or",
-      "domainPeakDefault": "Domain default peak"
+      "domainPeakDefault": "Domain default peak",
+      "zeroThreshold": "Zero threshold (%)",
+      "zeroThresholdHelper": "Motion stops below this percentage of peak value (default: 0.2%)",
+      "zeroThresholdCutoff": "Currently stops below"
     },
     "suggestBar": {
       "message": "Suggested path ready — accept or cancel"

@@ -14,6 +14,13 @@ export const FLOW_DOMAINS = [
 
 export type FlowDomain = (typeof FLOW_DOMAINS)[number];
 
+/** Normalise diagram domain from YAML/HA (handles casing). Unknown → `energy`. */
+export function normalizeFlowDomain(raw: string | undefined | null): FlowDomain {
+  if (raw == null || typeof raw !== 'string') return 'energy';
+  const lower = raw.trim().toLowerCase();
+  return ((FLOW_DOMAINS as readonly string[]).includes(lower) ? lower : 'energy') as FlowDomain;
+}
+
 export interface NodePosition {
   /** 0-100 percentage of container width */
   x: number;
@@ -273,6 +280,10 @@ export interface FlowAnimationConfig {
   min_duration?: number;
   /** Slowest one-cycle duration near zero (ms). v2.2+. Default from card.animation or 10000. */
   max_duration?: number;
+  /**
+   * Fraction of peak below which flow motion is paused (0–1). v2.2.1+. Default 0.002 (0.2% of peak).
+   */
+  zero_threshold?: number;
 }
 
 /**
@@ -295,6 +306,8 @@ export interface AnimationConfig {
   min_duration?: number;
   /** Global slowest cycle duration near zero (ms). v2.2+. Default 10000. */
   max_duration?: number;
+  /** Global fraction of peak below which motion stops (0–1). v2.2.1+. Default 0.002. */
+  zero_threshold?: number;
 }
 
 export const OVERLAY_TYPES = ['custom'] as const;

@@ -4,6 +4,8 @@ import {
   awaitStableSize,
   calcAnimDuration,
   debounce,
+  isFlowMotionBelowCutoff,
+  normalizeAnimSensorValue,
   percentToPixel,
   resolveAnimTiming,
   waitForNonZeroContentSize,
@@ -160,9 +162,9 @@ export class HoudiniRenderer implements FlowRenderer {
     this.rebuildPaths();
   }
 
-  updateFlow(flowId: string, value: number): void {
+  updateFlow(flowId: string, value: unknown): void {
     if (!this.flowsById.has(flowId)) return;
-    this.latestValues.set(flowId, value);
+    this.latestValues.set(flowId, normalizeAnimSensorValue(value));
     this.applyUpdate();
   }
 
@@ -237,8 +239,10 @@ export class HoudiniRenderer implements FlowRenderer {
     const div = this.flowDivs.get(flowId);
     if (!flow || !div) return;
 
+    const numValue = normalizeAnimSensorValue(value);
     const profile = this.profileFor(flow);
     const timing = resolveAnimTiming(flow, profile, this.config);
+    const belowCutoff = isFlowMotionBelowCutoff(numValue, timing);
 
     if (flow.visible === false) {
       div.el.style.opacity = '0';
@@ -247,16 +251,19 @@ export class HoudiniRenderer implements FlowRenderer {
     div.el.style.opacity = '1';
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    const durMs = Math.max(
-      50,
-      calcAnimDuration(value, timing.peak, timing.minDur, timing.maxDur) * speedMultiplier,
-    );
+    const durMs = belowCutoff
+      ? 1e9
+      : Math.max(
+          50,
+          calcAnimDuration(numValue, timing.peak, timing.minDur, timing.maxDur, timing.zeroThreshold) *
+            speedMultiplier,
+        );
     const dirCfg = flow.animation?.direction ?? 'auto';
     let direction: number;
     if (dirCfg === 'forward') direction = 1;
     else if (dirCfg === 'reverse') direction = -1;
     else if (dirCfg === 'both') direction = 1;
-    else direction = value >= 0 ? 1 : -1;
+    else direction = numValue >= 0 ? 1 : -1;
     const domain = flow.domain ?? this.config?.domain;
     const flowIndex = this.config?.flows.findIndex((f) => f.id === flow.id) ?? -1;
     const color = resolveFlowColor(
@@ -268,11 +275,13 @@ export class HoudiniRenderer implements FlowRenderer {
       flowIndex >= 0 ? flowIndex : 0,
     );
 
-    const count = Math.max(
-      1,
-      Math.round(profile.particle_count_curve ? profile.particle_count_curve(value) : 3),
-    );
-    const amp = profile.wave_amplitude_curve ? profile.wave_amplitude_curve(value) : 4;
+    const count = belowCutoff
+      ? 0
+      : Math.max(
+          1,
+          Math.round(profile.particle_count_curve ? profile.particle_count_curve(numValue) : 3),
+        );
+    const amp = profile.wave_amplitude_curve ? profile.wave_amplitude_curve(numValue) : 4;
 
     const style = div.el.style;
     style.setProperty('--flowme-shape', profile.shape);
@@ -297,7 +306,7 @@ export class HoudiniRenderer implements FlowRenderer {
       style.setProperty('--flowme-dur', String(rounded));
     }
     this.lastDurMsByFlow.set(flowId, durMs);
-    style.animation = `${ANIMATION_NAME} calc(var(--flowme-dur) * 1ms) linear infinite`;
+    style.animation = belowCutoff ? 'none' : `${ANIMATION_NAME} calc(var(--flowme-dur) * 1ms) linear infinite`;
   }
 
   private profileFor(flow: FlowConfig): FlowProfile {
