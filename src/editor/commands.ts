@@ -270,6 +270,13 @@ export function setSunEntity(
   return next;
 }
 
+export function setWeatherEffects(config: FlowmeConfig, enabled: boolean): FlowmeConfig {
+  const next = cloneConfig(config);
+  if (enabled) next.background.weather_effects = true;
+  else delete next.background.weather_effects;
+  return next;
+}
+
 export function setTransitionDuration(
   config: FlowmeConfig,
   ms: number | undefined,

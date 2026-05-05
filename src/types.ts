@@ -439,6 +439,11 @@ export interface BackgroundConfig {
   sun_entity?: string;
   /** Fade duration between background images, in milliseconds. Default 2000. */
   transition_duration?: number;
+  /**
+   * When true and `weather_entity` is set, draw animated CSS weather overlays
+   * matching the current HA weather state. Default false.
+   */
+  weather_effects?: boolean;
 }
 
 export interface FlowmeConfig {

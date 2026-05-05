@@ -94,19 +94,32 @@ flows:
 
 ## Background images
 
-Place your background images in `/config/www/flowme/backgrounds/`. They are served at URLs such as `/local/flowme/backgrounds/filename.jpg`.
+Place your background images in `/config/www/community/flowme/backgrounds/`. They are served at URLs such as `/local/community/flowme/backgrounds/filename.jpg`.
 
 To enable the visual image browser in the FlowMe editor, add this to your `configuration.yaml`:
 
 ```yaml
 homeassistant:
   media_dirs:
-    flowme: /config/www/flowme/backgrounds
+    flowme: /config/www/community/flowme/backgrounds
 ```
 
 Then restart Home Assistant. The **Browse** button in the editor will show thumbnails of all images in that folder.
 
 Without this setup, you can still enter background image URLs manually.
+
+### Animated backgrounds
+
+FlowMe supports animated background images (GIF, animated WebP, APNG). Place the file in `/config/www/community/flowme/backgrounds/`, then set the URL as usual, for example:
+
+```yaml
+background:
+  default: /local/community/flowme/backgrounds/rain.gif
+```
+
+**Note:** Using animated backgrounds together with **CSS weather effects** (see **FEATURES.md**) is not recommended on low-powered or always-on devices; it may reduce performance. Prefer one or the other.
+
+Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP under 1MB; APNG under 1MB (WebP often looks better than GIF at a smaller size).
 
 ---
 
@@ -131,6 +144,7 @@ Without this setup, you can still enter background image URLs manually.
 | `background.sun_entity`       | string | Sun entity (e.g. `sun.sun`) for night variant keys |
 | `background.transition_duration` | number | Crossfade duration in **milliseconds** (default 5000 if omitted) |
 | `background.weather_states`   | object | Map of weather state → image URL |
+| `background.weather_effects`  | bool   | When `true` and `weather_entity` is set, animated CSS overlays match the current weather (default `false`) |
 
 ### Nodes
 

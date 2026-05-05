@@ -2,6 +2,33 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.4]
+
+### Added
+
+- **`background.weather_effects`:** Optional boolean (default false). When true and `weather_entity` is set, FlowMe renders CSS-only animated overlays for supported HA weather states (`sunny`, `rainy`, `lightning-rainy`, etc.). See `FEATURES.md`. Respects `prefers-reduced-motion`.
+- **Editor:** “Weather effects” checkbox (shown when a weather entity is selected).
+
+### Changed
+
+- **Background image paths (HACS convention):** Browser and docs use `/config/www/community/flowme/backgrounds/` on disk and `/local/community/flowme/backgrounds/` in URLs. Update `media_dirs.flowme` accordingly.
+
+### Migration (from v2.3.x)
+
+Move images from `/config/www/flowme/backgrounds/` to `/config/www/community/flowme/backgrounds/` and set:
+
+```yaml
+homeassistant:
+  media_dirs:
+    flowme: /config/www/community/flowme/backgrounds
+```
+
+Then restart Home Assistant and refresh background URLs in the card if needed.
+
+### Documentation
+
+- **README.md** / **FEATURES.md:** Community folder layout, animated backgrounds (GIF / animated WebP / APNG), weather effects reference.
+
 ## [2.3.3]
 
 ### Changed

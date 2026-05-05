@@ -6,19 +6,55 @@ Technical reference for implemented behaviour. For installation and overview, se
 
 ## Background images
 
-Place your background images in `/config/www/flowme/backgrounds/`. They are served at URLs such as `/local/flowme/backgrounds/filename.jpg`.
+Place your background images in `/config/www/community/flowme/backgrounds/`. They are served at URLs such as `/local/community/flowme/backgrounds/filename.jpg`.
 
 To enable the visual image browser in the FlowMe editor, add this to your `configuration.yaml`:
 
 ```yaml
 homeassistant:
   media_dirs:
-    flowme: /config/www/flowme/backgrounds
+    flowme: /config/www/community/flowme/backgrounds
 ```
 
-Then restart Home Assistant. The **Browse** button in the editor lists images from that folder and inserts `/local/flowme/backgrounds/…` URLs into the configuration.
+Then restart Home Assistant. The **Browse** button in the editor lists images from that folder and inserts `/local/community/flowme/backgrounds/…` URLs into the configuration.
 
 Without this setup, you can still set `background.default` and weather image URLs manually to any allowed path (for example other files under `/local/`).
+
+### Animated backgrounds
+
+GIF, animated WebP, and APNG files work as ordinary background images (browser/CSS `background-image`). Store them under `/config/www/community/flowme/backgrounds/` and reference `/local/community/flowme/backgrounds/…` in YAML.
+
+Combining animated backgrounds with **`background.weather_effects`** (see below) can be heavy on low-powered or wall-mounted tablets; use one or the other where performance matters. Rough file-size guidance: GIF < 2MB; animated WebP < 1MB; APNG < 1MB.
+
+### Weather effects (CSS overlays)
+
+When **`background.weather_effects`** is `true` and **`background.weather_entity`** points at a weather entity, FlowMe draws a **pure CSS** animated layer above the background image (below flows and nodes). States come from Home Assistant’s weather integration (`weather.state`). Animations honour **`prefers-reduced-motion`**.
+
+| YAML | Role |
+|------|------|
+| `background.weather_effects: true` | Enable overlays (requires `weather_entity`) |
+
+Supported HA weather states and overlay behaviour:
+
+| State | Effect |
+| ----- | ------ |
+| `sunny` | Soft golden radial glow from the top, slow pulse |
+| `clear-night` | Random star dots with gentle twinkle |
+| `cloudy` | Few large blurred clouds drifting slowly |
+| `partlycloudy` | Fewer / lighter clouds, slightly faster drift |
+| `rainy` | Diagonal rain streaks |
+| `pouring` | Denser, faster rain |
+| `snowy` | Falling snowflakes with mild lateral drift |
+| `snowy-rainy` | Mix of rain streaks and snowflakes |
+| `windy` | Horizontal sweep lines |
+| `windy-variant` | More / faster wind streaks |
+| `fog` | Soft drifting fog layers; optional light blur where supported |
+| `hail` | Small pellets falling quickly |
+| `lightning` | Occasional full-area flash |
+| `lightning-rainy` | Rain plus lightning flashes |
+| `exceptional` | Pulsing FlowMe-orange edge glow |
+
+Unknown or unsupported states hide the overlay. **`weather_effects`** defaults to **false**.
 
 ---
 

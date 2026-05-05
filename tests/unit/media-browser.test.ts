@@ -14,7 +14,7 @@ describe('flowme media browser', () => {
     );
   });
 
-  it('maps media_content_id under flowme to /local/flowme/backgrounds/', () => {
+  it('maps media_content_id under flowme to /local/community/flowme/backgrounds/', () => {
     expect(
       resolveMediaBrowseItemUrl({
         media_content_id: 'media-source://media_source/flowme/bg.jpg',

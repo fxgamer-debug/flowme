@@ -1,16 +1,16 @@
 /**
  * FlowMe image browser uses a dedicated HA `media_dirs` entry so URLs map
- * deterministically to `/local/flowme/backgrounds/…`.
+ * deterministically to `/local/community/flowme/backgrounds/…` (HACS-style path).
  *
  * Required one-time setup:
- * - Folder on disk: `/config/www/flowme/backgrounds/`
- * - `configuration.yaml`: `media_dirs: { flowme: /config/www/flowme/backgrounds }`
+ * - Folder on disk: `/config/www/community/flowme/backgrounds/`
+ * - `configuration.yaml`: `media_dirs: { flowme: /config/www/community/flowme/backgrounds }`
  */
 
 export const FLOWME_MEDIA_LABEL = 'flowme';
 
 /** Public URL prefix for files under that media dir (HA serves `/config/www/` as `/local/`). */
-export const FLOWME_LOCAL_PATH = '/local/flowme/backgrounds/';
+export const FLOWME_LOCAL_PATH = '/local/community/flowme/backgrounds/';
 
 /** Root identifier passed to `browse_media` for the FlowMe folder. */
 export function flowmeBrowseMediaContentId(): string {

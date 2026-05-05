@@ -83,6 +83,7 @@ import {
   setVisibility,
   setWeatherEntity,
   setSunEntity,
+  setWeatherEffects,
   setWeatherStateImage,
   snapToGrid,
   bulkMoveNodes,
@@ -3135,7 +3136,7 @@ export class FlowmeCardEditor extends LitElement {
                       <span>${t('editor.stateA.browserSetupStep3')}</span>
                       <pre class="browser-code">homeassistant:
   media_dirs:
-    flowme: /config/www/flowme/backgrounds</pre>
+    flowme: /config/www/community/flowme/backgrounds</pre>
                     </li>
                     <li>${t('editor.stateA.browserSetupStep4')}</li>
                   </ol>
@@ -3242,6 +3243,21 @@ export class FlowmeCardEditor extends LitElement {
               { includeDomains: ['weather'], placeholder: t('editor.inspector.weatherPlaceholder') },
             )}
           </label>
+          ${bg.weather_entity?.trim()
+            ? html`
+                <div class="weather-effects-row">
+                  <label class="weather-effects-toggle">
+                    <input
+                      type="checkbox"
+                      .checked=${bg.weather_effects ?? false}
+                      @change=${this.onWeatherEffectsChange}
+                    />
+                    ${t('editor.stateA.weatherEffects')}
+                  </label>
+                  <p class="weather-effects-hint">${t('editor.stateA.weatherEffectsHelper')}</p>
+                </div>
+              `
+            : nothing}
           ${liveWeatherState !== undefined
             ? html`<div class="weather-live-state">
                 ${t('editor.inspector.currentState')} <strong>${liveWeatherState}</strong>
@@ -3474,6 +3490,14 @@ export class FlowmeCardEditor extends LitElement {
     const next = setWeatherEntity(prev, trimmed || undefined);
     this.pushPatch(prev, next, 'edit weather entity');
   }
+
+  private onWeatherEffectsChange = (e: Event): void => {
+    if (!this.config) return;
+    const checked = (e.target as HTMLInputElement).checked;
+    const prev = this.config;
+    const next = setWeatherEffects(prev, checked);
+    this.pushPatch(prev, next, 'toggle weather effects');
+  };
 
   private onWeatherStateKeyChange(oldKey: string, event: Event): void {
     if (!this.config) return;
@@ -5710,6 +5734,24 @@ export class FlowmeCardEditor extends LitElement {
       flex-direction: column;
       gap: 4px;
       font-size: 12px;
+    }
+    .weather-effects-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+    }
+    .weather-effects-toggle {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .weather-effects-hint {
+      margin: 0;
+      font-size: 11px;
+      opacity: 0.75;
+      line-height: 1.35;
     }
     .weather-body input[type='text'],
     .weather-body input[type='number'] {

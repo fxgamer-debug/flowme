@@ -368,13 +368,16 @@ export const STRINGS = {
       browserUnavailable:
         'Media Source integration not available. Enable it to browse files, or enter a URL manually.',
       browserSetupRequired: 'To enable image browsing, follow these steps:',
-      browserSetupStep1: 'Create folder: /config/www/flowme/backgrounds/',
+      browserSetupStep1: 'Create folder: /config/www/community/flowme/backgrounds/',
       browserSetupStep2: 'Place your background images there (.jpg, .png, .webp, etc.).',
       browserSetupStep3: 'Add to configuration.yaml:',
       browserSetupStep4: 'Restart Home Assistant.',
       browserSetupNote:
         'Images placed in this folder will appear in the browser automatically.',
       browserSetupDocs: 'View setup guide',
+      weatherEffects: 'Weather effects',
+      weatherEffectsHelper:
+        'Animate weather conditions with CSS overlays. Not recommended with animated backgrounds on low-powered devices.',
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',
