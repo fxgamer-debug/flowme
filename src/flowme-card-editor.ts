@@ -99,7 +99,7 @@ import { DEFAULT_CELL_SIZE } from './pathfinding/grid-builder.js';
 import type { Point } from './pathfinding/types.js';
 import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
 import { dlog, isDebugEnabled, peekDebugFromRaw, setDebugEnabled } from './debug-log.js';
-import { resolveMediaBrowseItemUrl } from './media-browser.js';
+import { flowmeBrowseMediaContentId, resolveMediaBrowseItemUrl } from './media-browser.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
@@ -3128,10 +3128,18 @@ export class FlowmeCardEditor extends LitElement {
             ? html`
                 <div class="browser-setup-guide">
                   <p>${t('editor.stateA.browserSetupRequired')}</p>
-                  <pre class="browser-code">homeassistant:
+                  <ol class="browser-setup-steps">
+                    <li>${t('editor.stateA.browserSetupStep1')}</li>
+                    <li>${t('editor.stateA.browserSetupStep2')}</li>
+                    <li>
+                      <span>${t('editor.stateA.browserSetupStep3')}</span>
+                      <pre class="browser-code">homeassistant:
   media_dirs:
-    www: /config/www</pre>
-                  <p>${t('editor.stateA.browserSetupRestart')}</p>
+    flowme: /config/www/flowme/backgrounds</pre>
+                    </li>
+                    <li>${t('editor.stateA.browserSetupStep4')}</li>
+                  </ol>
+                  <p>${t('editor.stateA.browserSetupNote')}</p>
                   <a
                     href="https://www.home-assistant.io/more-info/local-media/setup-media/"
                     target="_blank"
@@ -3402,7 +3410,7 @@ export class FlowmeCardEditor extends LitElement {
     try {
       const result = (await hass.callWS({
         type: 'media_source/browse_media',
-        media_content_id: 'media-source://media_source/www/.',
+        media_content_id: flowmeBrowseMediaContentId(),
       })) as {
         children?: unknown[];
       };
@@ -3417,16 +3425,13 @@ export class FlowmeCardEditor extends LitElement {
         if (!IMAGE_BROWSER_EXTS.some((ext) => id.endsWith(ext))) continue;
         const resolved = resolveMediaBrowseItemUrl(item);
         if (!resolved) continue;
-        const thumbRaw = item.thumbnail;
-        const thumbnail =
-          typeof thumbRaw === 'string' && thumbRaw.length > 0 ? thumbRaw : resolved;
         const name =
           (typeof item.title === 'string' && item.title.length > 0
             ? item.title
             : undefined) ??
           (typeof item.media_content_id === 'string' ? item.media_content_id : undefined) ??
           resolved;
-        files.push({ name, url: resolved, thumbnail });
+        files.push({ name, url: resolved, thumbnail: resolved });
       }
 
       if (files.length === 0 && !children.length) {
@@ -5745,6 +5750,16 @@ export class FlowmeCardEditor extends LitElement {
       padding: 12px;
       font-size: 0.85em;
       color: var(--secondary-text-color, rgba(255, 255, 255, 0.55));
+    }
+    .browser-setup-steps {
+      margin: 8px 0 8px 1.25em;
+      padding-left: 1em;
+    }
+    .browser-setup-steps li {
+      margin: 6px 0;
+    }
+    .browser-setup-steps pre {
+      margin-top: 6px;
     }
     .browser-code {
       background: var(--code-editor-background, #1e1e1e);

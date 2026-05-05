@@ -4,6 +4,24 @@ Technical reference for implemented behaviour. For installation and overview, se
 
 ---
 
+## Background images
+
+Place your background images in `/config/www/flowme/backgrounds/`. They are served at URLs such as `/local/flowme/backgrounds/filename.jpg`.
+
+To enable the visual image browser in the FlowMe editor, add this to your `configuration.yaml`:
+
+```yaml
+homeassistant:
+  media_dirs:
+    flowme: /config/www/flowme/backgrounds
+```
+
+Then restart Home Assistant. The **Browse** button in the editor lists images from that folder and inserts `/local/flowme/backgrounds/…` URLs into the configuration.
+
+Without this setup, you can still set `background.default` and weather image URLs manually to any allowed path (for example other files under `/local/`).
+
+---
+
 ## Animation system
 
 ### `animation_style` (per flow, under `flows[].animation`)

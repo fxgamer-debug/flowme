@@ -1,38 +1,38 @@
 /**
- * Resolve a browser-usable URL from a Home Assistant `browse_media` child item.
- * Prefers explicit paths/URLs from HA; falls back to stripping `media-source://media_source/{label}/`.
+ * FlowMe image browser uses a dedicated HA `media_dirs` entry so URLs map
+ * deterministically to `/local/flowme/backgrounds/…`.
+ *
+ * Required one-time setup:
+ * - Folder on disk: `/config/www/flowme/backgrounds/`
+ * - `configuration.yaml`: `media_dirs: { flowme: /config/www/flowme/backgrounds }`
  */
 
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === 'string' && v.length > 0;
-}
+export const FLOWME_MEDIA_LABEL = 'flowme';
 
-function looksLikeDirectUrl(s: string): boolean {
-  return s.startsWith('/') || s.startsWith('http://') || s.startsWith('https://');
+/** Public URL prefix for files under that media dir (HA serves `/config/www/` as `/local/`). */
+export const FLOWME_LOCAL_PATH = '/local/flowme/backgrounds/';
+
+/** Root identifier passed to `browse_media` for the FlowMe folder. */
+export function flowmeBrowseMediaContentId(): string {
+  return `media-source://media_source/${FLOWME_MEDIA_LABEL}/.`;
 }
 
 /**
- * Returns a URL suitable for saving in card config and for loading the image,
- * or `undefined` if the item cannot be resolved.
+ * Maps a `browse_media` child item to the URL stored in card config and used
+ * for thumbnails (HA often omits `thumbnail` for these files).
  */
 export function resolveMediaBrowseItemUrl(item: Record<string, unknown>): string | undefined {
-  if (isNonEmptyString(item.url) && looksLikeDirectUrl(item.url)) {
-    return item.url;
+  const id = typeof item.media_content_id === 'string' ? item.media_content_id : '';
+  const prefix = `media-source://media_source/${FLOWME_MEDIA_LABEL}/`;
+  if (id.startsWith(prefix)) {
+    let rest = id.slice(prefix.length);
+    if (rest.startsWith('./')) rest = rest.slice(2);
+    return FLOWME_LOCAL_PATH + rest;
   }
-  if (isNonEmptyString(item.media_content_id) && looksLikeDirectUrl(item.media_content_id)) {
-    return item.media_content_id;
-  }
-  const mc = item.media_content_id;
-  if (isNonEmptyString(mc)) {
-    const match = mc.match(/^media-source:\/\/media_source\/[^/]+\/(.+)$/);
-    if (match?.[1]) {
-      let rest = match[1];
-      if (rest.startsWith('./')) rest = rest.slice(2);
-      return `/local/${rest}`;
-    }
-  }
-  if (isNonEmptyString(item.thumbnail) && looksLikeDirectUrl(item.thumbnail)) {
-    return item.thumbnail;
+  const title = typeof item.title === 'string' ? item.title : '';
+  const trimmed = title.replace(/^\/+/, '');
+  if (trimmed.length > 0) {
+    return FLOWME_LOCAL_PATH + trimmed;
   }
   return undefined;
 }

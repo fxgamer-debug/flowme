@@ -1,47 +1,53 @@
 import { describe, it, expect } from 'vitest';
 
-import { resolveMediaBrowseItemUrl } from '../../src/media-browser.js';
+import {
+  FLOWME_LOCAL_PATH,
+  FLOWME_MEDIA_LABEL,
+  flowmeBrowseMediaContentId,
+  resolveMediaBrowseItemUrl,
+} from '../../src/media-browser.js';
 
-describe('resolveMediaBrowseItemUrl', () => {
-  it('uses url when it is an absolute path', () => {
+describe('flowme media browser', () => {
+  it('flowmeBrowseMediaContentId uses the FlowMe label', () => {
+    expect(flowmeBrowseMediaContentId()).toBe(
+      `media-source://media_source/${FLOWME_MEDIA_LABEL}/.`,
+    );
+  });
+
+  it('maps media_content_id under flowme to /local/flowme/backgrounds/', () => {
     expect(
       resolveMediaBrowseItemUrl({
-        url: '/local/backgrounds/bg.jpg',
-        media_content_id: 'media-source://media_source/www/ignored',
+        media_content_id: 'media-source://media_source/flowme/bg.jpg',
       }),
-    ).toBe('/local/backgrounds/bg.jpg');
+    ).toBe(`${FLOWME_LOCAL_PATH}bg.jpg`);
   });
 
-  it('uses direct media_content_id path', () => {
-    expect(resolveMediaBrowseItemUrl({ media_content_id: '/local/x.png' })).toBe('/local/x.png');
-  });
-
-  it('strips media-source prefix for any label', () => {
+  it('maps nested paths under the flowme media dir', () => {
     expect(
       resolveMediaBrowseItemUrl({
-        media_content_id: 'media-source://media_source/backgrounds/sub/folder/a.webp',
+        media_content_id: 'media-source://media_source/flowme/sub/a.webp',
       }),
-    ).toBe('/local/sub/folder/a.webp');
+    ).toBe(`${FLOWME_LOCAL_PATH}sub/a.webp`);
   });
 
-  it('strips leading ./ after media-source', () => {
+  it('strips ./ after the flowme prefix', () => {
     expect(
       resolveMediaBrowseItemUrl({
-        media_content_id: 'media-source://media_source/www/./foo.jpg',
+        media_content_id: 'media-source://media_source/flowme/./x.png',
       }),
-    ).toBe('/local/foo.jpg');
+    ).toBe(`${FLOWME_LOCAL_PATH}x.png`);
   });
 
-  it('falls back to thumbnail when needed', () => {
+  it('falls back to title when media_content_id is not under flowme', () => {
     expect(
       resolveMediaBrowseItemUrl({
-        media_content_id: 'media-source://frontend/…',
-        thumbnail: '/api/media_browser_proxy/some',
+        title: 'fallback.jpg',
+        media_content_id: 'other',
       }),
-    ).toBe('/api/media_browser_proxy/some');
+    ).toBe(`${FLOWME_LOCAL_PATH}fallback.jpg`);
   });
 
-  it('returns undefined when nothing matches', () => {
+  it('returns undefined when nothing usable is present', () => {
     expect(resolveMediaBrowseItemUrl({ media_content_id: 'invalid' })).toBeUndefined();
   });
 });

@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.3]
+
+### Changed
+
+- **Editor — image browser:** Uses a dedicated HA media folder: map `media_dirs.flowme` → `/config/www/flowme/backgrounds`, browse `media-source://media_source/flowme/.`, and resolve URLs to `/local/flowme/backgrounds/…`. Preview thumbnails use the same resolved URL. Setup guide and **README** / **FEATURES.md** document the one-time folder + YAML steps.
+
 ## [2.3.2]
 
 ### Fixed

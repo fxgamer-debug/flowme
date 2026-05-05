@@ -92,6 +92,24 @@ flows:
 
 ---
 
+## Background images
+
+Place your background images in `/config/www/flowme/backgrounds/`. They are served at URLs such as `/local/flowme/backgrounds/filename.jpg`.
+
+To enable the visual image browser in the FlowMe editor, add this to your `configuration.yaml`:
+
+```yaml
+homeassistant:
+  media_dirs:
+    flowme: /config/www/flowme/backgrounds
+```
+
+Then restart Home Assistant. The **Browse** button in the editor will show thumbnails of all images in that folder.
+
+Without this setup, you can still enter background image URLs manually.
+
+---
+
 ## Configuration
 
 ### Top-level options

@@ -94,8 +94,12 @@
       "browseImages": "Browse images",
       "loading": "Loading…",
       "browserUnavailable": "Media Source integration not available. Enable it to browse files, or enter a URL manually.",
-      "browserSetupRequired": "To enable image browsing, add this to configuration.yaml and restart Home Assistant:",
-      "browserSetupRestart": "After restarting, the browser will show images from /config/www/",
+      "browserSetupRequired": "To enable image browsing, follow these steps:",
+      "browserSetupStep1": "Create folder: /config/www/flowme/backgrounds/",
+      "browserSetupStep2": "Place your background images there (.jpg, .png, .webp, etc.).",
+      "browserSetupStep3": "Add to configuration.yaml:",
+      "browserSetupStep4": "Restart Home Assistant.",
+      "browserSetupNote": "Images placed in this folder will appear in the browser automatically.",
       "browserSetupDocs": "View setup guide"
     },
     "suggestBar": {
