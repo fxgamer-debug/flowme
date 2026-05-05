@@ -128,6 +128,8 @@ export const STRINGS = {
       overlay: 'Overlay',
       label: 'Label',
       flowIdField: 'Flow id',
+      flowLabel: 'Label',
+      flowLabelPlaceholder: 'Display name (optional)',
       overlayIdField: 'Overlay id',
       entity: 'Entity',
       colour: 'Colour',
@@ -361,6 +363,10 @@ export const STRINGS = {
       peakCfm: 'CFM',
       peakOr: 'or',
       domainPeakDefault: 'Domain default peak',
+      browseImages: 'Browse images',
+      loading: 'Loading…',
+      browserUnavailable:
+        'Media Source integration not available. Enable it to browse files, or enter a URL manually.',
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',
@@ -430,6 +436,7 @@ export const STRINGS = {
       `must start with one of ${prefixes} (got "${preview}")`,
     mustBeObject: 'must be an object',
     mustBeNonEmptyId: 'must be a non-empty string',
+    flowLabelMaxLen: 'flow label must be at most 64 characters',
     duplicateNodeId: (id: string) => `duplicate node id "${id}"`,
     duplicateFlowId: (id: string) => `duplicate flow id "${id}"`,
     unknownNodeRef: (id: string) => `references unknown node "${id}"`,

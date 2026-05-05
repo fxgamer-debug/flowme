@@ -1,6 +1,12 @@
 import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition, SpeedCurveOverride, ValueGradientConfig } from './types.js';
 import { dlog } from './debug-log.js';
 
+/** Display title for a flow in UI / ARIA (v2.3+). `id` remains the internal key. */
+export function flowDisplayName(flow: Pick<FlowConfig, 'id' | 'label'>): string {
+  const s = flow.label?.trim();
+  return s && s.length > 0 ? s : flow.id;
+}
+
 /**
  * Resolve when `ResizeObserver` reports the **same** non-zero `contentRect`
  * width/height for **two** consecutive callbacks — HA's preview iframe can keep

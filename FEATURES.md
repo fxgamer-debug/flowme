@@ -83,6 +83,7 @@ Top-level on each `flows[]` item (see `FlowConfig` in `src/types.ts`):
 | Property                | Type    | Default | Description |
 | ----------------------- | ------- | ------- | ----------- |
 | `id`                    | string  | required | Unique id. |
+| `label`                 | string  | —       | Optional display name in UI / ARIA; falls back to `id`. Max 64 chars; omitted if empty or equal to `id`. |
 | `from_node` / `to_node` | string  | required | Node ids. |
 | `entity`                | string  | required | Driving sensor. |
 | `waypoints`             | array   | `[]`    | Percent waypoints in order. |
@@ -174,13 +175,39 @@ Requires `entity` on the node. Types: `glow`, `badge`, `ripple`, `alert`.
 - **`weather_entity`**: When set, `weather_states` map keys on `states[entity].state` to image URLs. Unknown state falls back sensibly.
 - **`sun_entity`**: When `sun` is below horizon, lookup uses `{state}-night` before the day key, enabling night-specific art.
 - **`transition_duration`**: Crossfade in **milliseconds**; if omitted, the card uses 5000 ms.
-- **URLs**: Validated to allowed prefixes (`/local/`, `https://`, etc.) for security.
+- **URLs**: Validated to allowed prefixes (`/local/`, `/media/`, `https://`, etc.) for security.
 
 ---
 
 ## Value gradient
 
 Interpolates HSL between `low_color` and `high_color` using a second entity. Example use cases: duct temperature vs setpoint, battery SoC, grid frequency deviation. `mode` controls whether particles, the base line, or both take the gradient.
+
+### HVAC temperature-based flow colours
+
+FlowMe does not have a dedicated HVAC temperature gradient feature because the existing Value Gradient system already covers this use case.
+
+To colour an HVAC flow based on supply vs return temperature difference:
+
+1. Set the flow colour to your “neutral” colour (e.g. grey for no heat exchange).
+
+2. Configure `value_gradient` on the flow:
+
+   ```yaml
+   value_gradient:
+     entity: sensor.hvac_supply_temp
+     low_value: 18    # return temp °C
+     high_value: 55   # supply temp °C
+     low_color: "#1EB4FF"   # cool blue
+     high_color: "#FF4500"  # hot orange
+     mode: flow  # colour the particles
+   ```
+
+3. The flow particles will interpolate from blue (cool, low heat exchange) to orange (hot, high heat exchange) based on supply temperature.
+
+4. For bidirectional HVAC (heating and cooling), use `direction: both` with two flows — one for supply, one for return — each with their own `value_gradient` configuration.
+
+This gives a clear visual representation of heat transfer without any additional configuration beyond the standard `value_gradient` system.
 
 ---
 

@@ -114,4 +114,5 @@ export {
   DEFAULT_ZERO_THRESHOLD,
   normalizeAnimSensorValue,
   isFlowMotionBelowCutoff,
+  flowDisplayName,
 } from '../utils.js';

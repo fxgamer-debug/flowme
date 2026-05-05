@@ -30,6 +30,7 @@ import {
   renameOverlayId,
   renameWeatherState,
   setCardDomain,
+  setFlowLabel,
 } from '../../src/editor/commands.js';
 import type { FlowmeConfig } from '../../src/types.js';
 
@@ -243,6 +244,16 @@ describe('setCardDomain + rename ids (v1.22.1)', () => {
     const c = baseConfig();
     const next = setCardDomain(c, 'water');
     expect(next.domain).toBe('water');
+  });
+
+  it('setFlowLabel sets and clears optional display label', () => {
+    const c = baseConfig();
+    const withLabel = setFlowLabel(c, 'f1', 'Main feed');
+    expect(withLabel.flows[0]!.label).toBe('Main feed');
+    const cleared = setFlowLabel(withLabel, 'f1', undefined);
+    expect(cleared.flows[0]!.label).toBeUndefined();
+    const sameAsId = setFlowLabel(c, 'f1', 'f1');
+    expect(sameAsId.flows[0]!.label).toBeUndefined();
   });
 
   it('renameFlowId', () => {

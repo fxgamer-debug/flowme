@@ -2,6 +2,21 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3]
+
+### Added
+
+- **`flows[].label`:** Optional display name (max 64 characters) for UI and ARIA; `id` remains the only internal key. Documented in `FEATURES.md`.
+- **Editor — background image browser:** “Browse” opens a grid of images from the Home Assistant Media Source local folder (`media_source/browse_media`), with graceful fallback when the integration is unavailable. `/media/...` URLs are allowed in validation.
+
+### Changed
+
+- Flow selector, inspector title, waypoint ARIA, undo descriptions, and card flow ARIA use **`label ?? id`** where helpful.
+
+### Documentation
+
+- **`FEATURES.md`:** HVAC temperature example using `value_gradient`.
+
 ## [2.2.3]
 
 ### Added

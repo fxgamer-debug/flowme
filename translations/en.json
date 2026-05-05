@@ -17,6 +17,8 @@
     "inspector": {
       "label": "Label",
       "flowIdField": "Flow id",
+      "flowLabel": "Label",
+      "flowLabelPlaceholder": "Display name (optional)",
       "overlayIdField": "Overlay id",
       "entity": "Entity",
       "visible": "Visible",
@@ -88,7 +90,10 @@
       "peakM3h": "m³/h",
       "peakCfm": "CFM",
       "peakOr": "or",
-      "domainPeakDefault": "Domain default peak"
+      "domainPeakDefault": "Domain default peak",
+      "browseImages": "Browse images",
+      "loading": "Loading…",
+      "browserUnavailable": "Media Source integration not available. Enable it to browse files, or enter a URL manually."
     },
     "suggestBar": {
       "message": "Suggested path ready — accept or cancel"

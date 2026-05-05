@@ -33,6 +33,7 @@ import { validateConfig } from './validate-config.js';
 import {
   calcAnimDuration,
   DEFAULT_ZERO_THRESHOLD,
+  flowDisplayName,
   interpolateGradientColor,
   polylineToSvgPathStyled,
   resolveAnimTiming,
@@ -63,6 +64,7 @@ import {
   setFlowLineStyle,
   setFlowOpacity,
   setFlowPeakValue,
+  setFlowLabel,
   setFlowVisible,
   setNodeLabel,
   setNodeOpacity,
@@ -100,6 +102,19 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 import PathfindingWorker from './pathfinding/pathfinding.worker.ts?worker&inline';
+
+const IMAGE_BROWSER_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+
+/** Map HA Media Source local id to a path served by the HA host (for `/media/local/...`). */
+function mediaContentIdToLocalUrl(mediaContentId: string): string {
+  const prefix = 'media-source://media_source/local/';
+  const lower = mediaContentId.toLowerCase();
+  const p = lower.indexOf(prefix);
+  if (p === -1) return mediaContentId;
+  let rest = mediaContentId.slice(p + prefix.length);
+  if (rest.startsWith('./')) rest = rest.slice(2);
+  return `/media/local/${rest}`;
+}
 
 type DragTarget =
   | { kind: 'node'; id: string }
@@ -179,6 +194,10 @@ export class FlowmeCardEditor extends LitElement {
   @state() private flowZeroThresholdDraft: Record<string, string> = {};
   /** Advanced-options `<details>` open state per flow (undefined = derive from `zero_threshold` in config). */
   @state() private flowInspectorAdvancedOpen: Record<string, boolean> = {};
+  @state() private imageBrowserOpen = false;
+  @state() private imageBrowserLoading = false;
+  @state() private imageBrowserError = '';
+  @state() private imageBrowserFiles: { name: string; url: string; thumb?: string }[] = [];
   private _pathWorker?: Worker;
   private _pathWorkerPending = false;
   private _pathPendingSelection: { fromId: string; toId: string } | null = null;
@@ -717,7 +736,7 @@ export class FlowmeCardEditor extends LitElement {
                 <option value=${n.id}>${n.label ?? n.id}</option>
               `) : nothing}
               ${derivedType === 'flows' ? this.config.flows.map((f) => html`
-                <option value=${f.id}>${f.id}</option>
+                <option value=${f.id}>${flowDisplayName(f)}</option>
               `) : nothing}
               ${derivedType === 'overlays' ? (this.config.overlays ?? []).map((o, i) => html`
                 <option value=${o.id ?? String(i)}>${t('editor.canvas.overlayOption', i, o.id ? t('editor.canvas.overlayOptionIdPart', o.id) : '')}</option>
@@ -803,7 +822,7 @@ export class FlowmeCardEditor extends LitElement {
           class="waypoint"
           role="button"
           tabindex="0"
-          aria-label=${t('aria.waypointHandle', index, flow.id)}
+          aria-label=${t('aria.waypointHandle', index, flowDisplayName(flow))}
           data-flow-id=${flow.id}
           data-waypoint-index=${index}
           style=${`left: ${p.x}px; top: ${p.y}px;`}
@@ -1200,6 +1219,7 @@ export class FlowmeCardEditor extends LitElement {
       const flow = this.config.flows.find((f) => f.id === this.selectedFlowId);
       if (!flow) return nothing;
       const flowIndex = this.config.flows.findIndex((f) => f.id === flow.id);
+      const flowTitle = flowDisplayName(flow);
       return html`
         <div class="inspector">
           <label class="inspector-id-row">
@@ -1212,9 +1232,21 @@ export class FlowmeCardEditor extends LitElement {
               @change=${(e: Event) => this.onInspectorFlowIdChange(flow.id, e)}
             />
           </label>
-          <h3>${t('editor.inspector.flowHeading', flow.id)}</h3>
+          <h3>${t('editor.inspector.flowHeading', flowDisplayName(flow))}</h3>
           <fieldset class="inspector-fieldset">
             <legend class="inspector-legend">${t('editor.inspector.routeAndSensor')}</legend>
+            <div class="field-row">
+              <label for="flow-label-${flow.id}">${t('editor.inspector.flowLabel')}</label>
+              <input
+                id="flow-label-${flow.id}"
+                type="text"
+                maxlength="64"
+                placeholder=${flow.id}
+                title=${t('editor.inspector.flowLabelPlaceholder')}
+                .value=${flow.label ?? ''}
+                @change=${(e: Event) => this.onFlowLabelChange(flow.id, (e.target as HTMLInputElement).value)}
+              />
+            </div>
             <div class="field-row flow-endpoint-row">
               <label for=${`flow-from-${flow.id}`}>${t('editor.inspector.fromNode')}</label>
               <select
@@ -1296,13 +1328,13 @@ export class FlowmeCardEditor extends LitElement {
                       const prev = this.config;
                       if (raw === '') {
                         const next = setFlowPeakValue(prev, flow.id, undefined);
-                        this.pushPatch(prev, next, `clear peak_value ${flow.id}`);
+                        this.pushPatch(prev, next, `clear peak_value ${flowTitle}`);
                         return;
                       }
                       const v = parseFloat(raw);
                       if (!Number.isFinite(v) || v <= 0) return;
                       const next = setFlowPeakValue(prev, flow.id, v);
-                      this.pushPatch(prev, next, `set peak_value ${flow.id}`);
+                      this.pushPatch(prev, next, `set peak_value ${flowTitle}`);
                     }}
                   />
                   <span class="hint-sub">${t('editor.inspector.peakValueHelper')}</span>
@@ -1322,13 +1354,13 @@ export class FlowmeCardEditor extends LitElement {
                       const prev = this.config;
                       if (raw === '') {
                         const next = setFlowAnimation(prev, flow.id, { min_duration: undefined });
-                        this.pushPatch(prev, next, `clear flow min_duration ${flow.id}`);
+                        this.pushPatch(prev, next, `clear flow min_duration ${flowTitle}`);
                         return;
                       }
                       const v = parseInt(raw, 10);
                       if (!Number.isFinite(v) || v <= 0) return;
                       const next = setFlowAnimation(prev, flow.id, { min_duration: v });
-                      this.pushPatch(prev, next, `set flow min_duration ${flow.id}`);
+                      this.pushPatch(prev, next, `set flow min_duration ${flowTitle}`);
                     }}
                   />
                 </label>
@@ -1347,13 +1379,13 @@ export class FlowmeCardEditor extends LitElement {
                       const prev = this.config;
                       if (raw === '') {
                         const next = setFlowAnimation(prev, flow.id, { max_duration: undefined });
-                        this.pushPatch(prev, next, `clear flow max_duration ${flow.id}`);
+                        this.pushPatch(prev, next, `clear flow max_duration ${flowTitle}`);
                         return;
                       }
                       const v = parseInt(raw, 10);
                       if (!Number.isFinite(v) || v <= 0) return;
                       const next = setFlowAnimation(prev, flow.id, { max_duration: v });
-                      this.pushPatch(prev, next, `set flow max_duration ${flow.id}`);
+                      this.pushPatch(prev, next, `set flow max_duration ${flowTitle}`);
                     }}
                   />
                 </label>
@@ -1378,7 +1410,7 @@ export class FlowmeCardEditor extends LitElement {
                       if (this.config && flow.animation?.zero_threshold !== undefined) {
                         const prev = this.config;
                         const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
-                        this.pushPatch(prev, next, `advanced closed: clear zero_threshold ${flow.id}`);
+                        this.pushPatch(prev, next, `advanced closed: clear zero_threshold ${flowTitle}`);
                       }
                     }
                   }}
@@ -1429,14 +1461,14 @@ export class FlowmeCardEditor extends LitElement {
                                 if (raw === '') {
                                   clearDraft();
                                   const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
-                                  this.pushPatch(prev, next, `clear flow zero_threshold ${flow.id}`);
+                                  this.pushPatch(prev, next, `clear flow zero_threshold ${flowTitle}`);
                                   return;
                                 }
                                 const v = parseFloat(raw);
                                 if (!Number.isFinite(v) || v <= 0 || v > 100) return;
                                 clearDraft();
                                 const next = setFlowAnimation(prev, flow.id, { zero_threshold: v / 100 });
-                                this.pushPatch(prev, next, `set flow zero_threshold ${flow.id}`);
+                                this.pushPatch(prev, next, `set flow zero_threshold ${flowTitle}`);
                               }}
                             />
                             <span class="field-hint hint-sub">${cutoffHint}</span>
@@ -1459,7 +1491,7 @@ export class FlowmeCardEditor extends LitElement {
                 const val = (e.target as HTMLSelectElement).value;
                 const prev = this.config;
                 const next = setFlowLineStyle(prev, flow.id, val as typeof flow.line_style);
-                this.pushPatch(prev, next, `set line style of ${flow.id}`);
+                this.pushPatch(prev, next, `set line style of ${flowTitle}`);
               }}
             >
               ${LINE_STYLES.map(
@@ -1489,7 +1521,7 @@ export class FlowmeCardEditor extends LitElement {
                       const val = (e.target as HTMLInputElement).value;
                       const prev = this.config;
                       const next = setFlowColor(prev, flow.id, val);
-                      this.pushPatch(prev, next, `set colour of ${flow.id}`);
+                      this.pushPatch(prev, next, `set colour of ${flowTitle}`);
                     }}
                   />
                   <span class="color-effective">${flow.color ? t('editor.inspector.colourOverrideActive') : t('editor.inspector.colourDomainDefault')}</span>
@@ -1498,7 +1530,7 @@ export class FlowmeCardEditor extends LitElement {
                         if (!this.config) return;
                         const prev = this.config;
                         const next = setFlowColor(prev, flow.id, undefined);
-                        this.pushPatch(prev, next, `clear colour of ${flow.id}`);
+                        this.pushPatch(prev, next, `clear colour of ${flowTitle}`);
                       }}>${t('editor.inspector.clearColour')}</button>`
                     : nothing}
                 `;
@@ -1520,7 +1552,7 @@ export class FlowmeCardEditor extends LitElement {
                   if (!Number.isFinite(v)) return;
                   const prev = this.config;
                   const next = setFlowOpacity(prev, flow.id, v);
-                  this.pushPatch(prev, next, `set opacity of ${flow.id}`);
+                  this.pushPatch(prev, next, `set opacity of ${flowTitle}`);
                 }}
               />
               <span>${(flow.opacity ?? 1).toFixed(2)}</span>
@@ -1537,7 +1569,7 @@ export class FlowmeCardEditor extends LitElement {
                   const checked = (e.target as HTMLInputElement).checked;
                   const prev = this.config;
                   const next = setFlowVisible(prev, flow.id, checked);
-                  this.pushPatch(prev, next, `${checked ? 'show' : 'hide'} flow ${flow.id}`);
+                  this.pushPatch(prev, next, `${checked ? 'show' : 'hide'} flow ${flowTitle}`);
                 }}
               />
               <span>${flow.visible !== false ? t('editor.inspector.shown') : t('editor.inspector.hidden')}</span>
@@ -1919,7 +1951,7 @@ export class FlowmeCardEditor extends LitElement {
       if (!this.config) return;
       const prev = this.config;
       const next = setFlowAnimation(prev, flow.id, partial);
-      this.pushPatch(prev, next, `update animation for ${flow.id}`);
+      this.pushPatch(prev, next, `update animation for ${flowDisplayName(flow)}`);
     };
 
     // Styles that don't use discrete particles (shape picker irrelevant)
@@ -2176,7 +2208,7 @@ export class FlowmeCardEditor extends LitElement {
                 if (!this.config) return;
                 const prev = this.config;
                 const next = clearFlowAnimation(prev, flow.id);
-                this.pushPatch(prev, next, `reset animation for ${flow.id}`);
+                this.pushPatch(prev, next, `reset animation for ${flowDisplayName(flow)}`);
               }}>${t('editor.inspector.resetToDefaults')}</button>`
             : nothing}
         </div>
@@ -2287,7 +2319,7 @@ export class FlowmeCardEditor extends LitElement {
       const insertionIndex = longestIdx > 0 ? longestIdx - 1 + 1 : 0;
       const prev = this.config;
       const next = insertWaypoint(prev, flow.id, insertionIndex, mid);
-      this.pushPatch(prev, next, `add waypoint to ${flow.id}`);
+      this.pushPatch(prev, next, `add waypoint to ${flowDisplayName(flow)}`);
     };
 
     return html`
@@ -2314,7 +2346,7 @@ export class FlowmeCardEditor extends LitElement {
                         if (!Number.isFinite(v)) return;
                         const prev = this.config;
                         const next = moveWaypoint(prev, flow.id, index, { x: v, y: wp.y });
-                        this.pushPatch(prev, next, `move waypoint ${index} of ${flow.id}`);
+                        this.pushPatch(prev, next, `move waypoint ${index} of ${flowDisplayName(flow)}`);
                       }}
                     />
                   </label>
@@ -2328,7 +2360,7 @@ export class FlowmeCardEditor extends LitElement {
                         if (!Number.isFinite(v)) return;
                         const prev = this.config;
                         const next = moveWaypoint(prev, flow.id, index, { x: wp.x, y: v });
-                        this.pushPatch(prev, next, `move waypoint ${index} of ${flow.id}`);
+                        this.pushPatch(prev, next, `move waypoint ${index} of ${flowDisplayName(flow)}`);
                       }}
                     />
                   </label>
@@ -2337,7 +2369,7 @@ export class FlowmeCardEditor extends LitElement {
                       if (!this.config) return;
                       const prev = this.config;
                       const next = deleteWaypoint(prev, flow.id, index);
-                      this.pushPatch(prev, next, `delete waypoint ${index} of ${flow.id}`);
+                      this.pushPatch(prev, next, `delete waypoint ${index} of ${flowDisplayName(flow)}`);
                     }}
                   >×</button>
                 </li>
@@ -2370,7 +2402,7 @@ export class FlowmeCardEditor extends LitElement {
       if (!this.config) return;
       const prev = this.config;
       const next = patchValueGradient(prev, flow.id, partial);
-      this.pushPatch(prev, next, `update gradient for ${flow.id}`);
+      this.pushPatch(prev, next, `update gradient for ${flowDisplayName(flow)}`);
     };
 
     // Build live preview gradient if enabled
@@ -2411,7 +2443,7 @@ export class FlowmeCardEditor extends LitElement {
               const next = checked
                 ? setValueGradient(prev, flow.id, defaultVg)
                 : clearValueGradient(prev, flow.id);
-              this.pushPatch(prev, next, `${checked ? 'enable' : 'disable'} gradient for ${flow.id}`);
+              this.pushPatch(prev, next, `${checked ? 'enable' : 'disable'} gradient for ${flowDisplayName(flow)}`);
             }}
           />
           ${t('editor.inspector.enableGradient')}
@@ -2486,7 +2518,7 @@ export class FlowmeCardEditor extends LitElement {
             if (!this.config) return;
             const prev = this.config;
             const next = clearValueGradient(prev, flow.id);
-            this.pushPatch(prev, next, `disable gradient for ${flow.id}`);
+            this.pushPatch(prev, next, `disable gradient for ${flowDisplayName(flow)}`);
           }}>${t('editor.inspector.removeGradient')}</button>
         ` : nothing}
       </div>
@@ -3104,12 +3136,61 @@ export class FlowmeCardEditor extends LitElement {
         <div class="weather-body">
           <label>
             ${t('editor.inspector.defaultImageUrl')}
-            <input
-              type="text"
-              .value=${bg.default}
-              @change=${this.onDefaultBgChange}
-              placeholder=${t('editor.inspector.defaultBgPlaceholder')}
-            />
+            <div class="bg-url-row">
+              <input
+                type="text"
+                class="bg-url-input"
+                .value=${bg.default}
+                @change=${this.onDefaultBgChange}
+                placeholder=${t('editor.inspector.defaultBgPlaceholder')}
+              />
+              <button
+                type="button"
+                class="tb-icon-btn"
+                title=${t('editor.stateA.browseImages')}
+                aria-label=${t('editor.stateA.browseImages')}
+                @click=${() => void this.openImageBrowser()}
+              >
+                📁
+              </button>
+            </div>
+            ${this.imageBrowserOpen
+              ? html`
+                  <div class="image-browser">
+                    ${this.imageBrowserLoading
+                      ? html`<div class="browser-loading">${t('editor.stateA.loading')}</div>`
+                      : this.imageBrowserError
+                        ? html`<div class="browser-error">${this.imageBrowserError}</div>`
+                        : html`
+                            <div class="browser-grid">
+                              ${this.imageBrowserFiles.map(
+                                (file) => html`
+                                  <div
+                                    class="browser-item ${bg.default === file.url ? 'browser-item--selected' : ''}"
+                                    role="button"
+                                    tabindex="0"
+                                    @click=${() => this.selectBgImage(file.url)}
+                                    @keydown=${(e: KeyboardEvent) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        this.selectBgImage(file.url);
+                                      }
+                                    }}
+                                  >
+                                    <img
+                                      src=${file.thumb ?? file.url}
+                                      loading="lazy"
+                                      alt=${file.name}
+                                    />
+                                    <span class="browser-name">${file.name}</span>
+                                  </div>
+                                `,
+                              )}
+                            </div>
+                          `}
+                  </div>
+                `
+              : nothing}
             ${bg.default
               ? html`<img class="weather-thumb" src=${bg.default} alt=${t('editor.inspector.defaultBgAlt')} />`
               : nothing}
@@ -3230,6 +3311,63 @@ export class FlowmeCardEditor extends LitElement {
     const next = setBackgroundDefault(prev, value);
     this.pushPatch(prev, next, 'edit default background');
   };
+
+  private async openImageBrowser(): Promise<void> {
+    this.imageBrowserOpen = !this.imageBrowserOpen;
+    if (!this.imageBrowserOpen) {
+      this.requestUpdate();
+      return;
+    }
+    this.imageBrowserError = '';
+    if (this.imageBrowserFiles.length > 0) {
+      this.requestUpdate();
+      return;
+    }
+    const hass = this.hass;
+    if (!hass || typeof hass.callWS !== 'function') {
+      this.imageBrowserError = t('editor.stateA.browserUnavailable');
+      this.requestUpdate();
+      return;
+    }
+    this.imageBrowserLoading = true;
+    this.requestUpdate();
+    try {
+      const result = (await hass.callWS({
+        type: 'media_source/browse_media',
+        media_content_id: 'media-source://media_source/local/.',
+      })) as {
+        children?: Array<{ title?: string; media_content_id?: string; thumbnail?: string }>;
+      };
+      const children = result?.children ?? [];
+      this.imageBrowserFiles = children
+        .filter((item) => {
+          const id = (item.media_content_id ?? '').toLowerCase();
+          return IMAGE_BROWSER_EXTS.some((ext) => id.endsWith(ext));
+        })
+        .map((item) => {
+          const mc = item.media_content_id ?? '';
+          return {
+            name: item.title ?? mc,
+            url: mediaContentIdToLocalUrl(mc),
+            thumb: item.thumbnail,
+          };
+        });
+    } catch {
+      this.imageBrowserError = t('editor.stateA.browserUnavailable');
+      this.imageBrowserFiles = [];
+    } finally {
+      this.imageBrowserLoading = false;
+      this.requestUpdate();
+    }
+  }
+
+  private selectBgImage(url: string): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = setBackgroundDefault(prev, url);
+    this.pushPatch(prev, next, 'Set background image');
+    this.imageBrowserOpen = false;
+  }
 
   private setWeatherEntityValue(value: string): void {
     if (!this.config) return;
@@ -3822,7 +3960,7 @@ export class FlowmeCardEditor extends LitElement {
           t('editor.inspector.flowEntityDefault');
         const prev = this.config;
         const { config: next, flow } = addFlow(prev, this.pending.fromId, nodeId, entity);
-        this.pushPatch(prev, next, `add flow ${flow.id}`);
+        this.pushPatch(prev, next, `add flow ${flowDisplayName(flow)}`);
         this.pending = null;
         return;
       }
@@ -4125,6 +4263,7 @@ export class FlowmeCardEditor extends LitElement {
 
   private setFlowEntity(flowId: string, value: string): void {
     if (!this.config) return;
+    const flow = this.config.flows.find((f) => f.id === flowId);
     const prev = this.config;
     const trimmed = value.trim();
     if (!trimmed) return; // flow entity is required — ignore empty submit
@@ -4134,7 +4273,7 @@ export class FlowmeCardEditor extends LitElement {
         f.id === flowId ? { ...f, entity: trimmed } : f,
       ),
     };
-    this.pushPatch(prev, next, `edit entity of ${flowId}`);
+    this.pushPatch(prev, next, `edit entity of ${flow ? flowDisplayName(flow) : flowId}`);
   }
 
   private onOverlaySizeChange(id: string, which: 'width' | 'height', event: Event): void {
@@ -4202,10 +4341,21 @@ export class FlowmeCardEditor extends LitElement {
 
   private removeFlow(flowId: string): void {
     if (!this.config) return;
+    const flow = this.config.flows.find((f) => f.id === flowId);
     const prev = this.config;
     const next = deleteFlow(prev, flowId);
     this.selectedFlowId = null;
-    this.pushPatch(prev, next, `delete flow ${flowId}`);
+    this.pushPatch(prev, next, `delete flow ${flow ? flowDisplayName(flow) : flowId}`);
+  }
+
+  private onFlowLabelChange(flowId: string, raw: string): void {
+    if (!this.config) return;
+    const flow = this.config.flows.find((f) => f.id === flowId);
+    if (!flow) return;
+    const label = raw.trim();
+    const prev = this.config;
+    const next = setFlowLabel(prev, flowId, label === '' || label === flow.id ? undefined : label);
+    this.pushPatch(prev, next, `Set flow label ${flow.id}`);
   }
 
   // -- keyboard --
@@ -5471,6 +5621,67 @@ export class FlowmeCardEditor extends LitElement {
       border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
       background: var(--card-background-color, #1a1a1a);
       color: var(--primary-text-color, #fff);
+    }
+    .bg-url-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+    }
+    .bg-url-row .bg-url-input {
+      flex: 1;
+      min-width: 0;
+    }
+    .image-browser {
+      margin-top: 8px;
+      border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .browser-loading,
+    .browser-error {
+      padding: 10px;
+      font-size: 12px;
+      opacity: 0.85;
+    }
+    .browser-error {
+      color: var(--error-color, #f87171);
+    }
+    .browser-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 4px;
+      padding: 8px;
+    }
+    .browser-item {
+      cursor: pointer;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      text-align: center;
+    }
+    .browser-item:hover {
+      border-color: var(--primary-color, #4ade80);
+    }
+    .browser-item--selected {
+      border-color: var(--primary-color, #4ade80);
+      background: var(--primary-color-light, rgba(74, 222, 128, 0.12));
+    }
+    .browser-item img {
+      width: 100%;
+      height: 60px;
+      object-fit: cover;
+      display: block;
+    }
+    .browser-name {
+      font-size: 0.7em;
+      color: var(--secondary-text-color, rgba(255, 255, 255, 0.55));
+      padding: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
     }
     .weather-thumb {
       margin-top: 4px;

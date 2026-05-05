@@ -99,6 +99,54 @@ describe('validateConfig — happy path', () => {
     expect(cfg.debug).toBe(true);
   });
 
+  it('accepts optional flow label and /media/ background URLs', () => {
+    const raw = {
+      ...minimalConfig(),
+      background: { default: '/media/local/photo.jpg' },
+      flows: [
+        {
+          id: 'solar1',
+          label: 'Solar String 1',
+          from_node: 'a',
+          to_node: 'b',
+          entity: 'sensor.pv',
+          waypoints: [],
+        },
+      ],
+    };
+    const cfg = validateConfig(raw);
+    expect(cfg.flows[0]?.label).toBe('Solar String 1');
+    expect(cfg.background.default).toBe('/media/local/photo.jpg');
+  });
+
+  it('omits flow label when empty or identical to id', () => {
+    const mk = (label: unknown) =>
+      validateConfig({
+        ...minimalConfig(),
+        flows: [{ id: 'f1', label, from_node: 'a', to_node: 'b', entity: 'sensor.x', waypoints: [] }],
+      });
+    expect(mk('').flows[0]?.label).toBeUndefined();
+    expect(mk('f1').flows[0]?.label).toBeUndefined();
+  });
+
+  it('rejects flow label longer than 64 characters', () => {
+    expect(() =>
+      validateConfig({
+        ...minimalConfig(),
+        flows: [
+          {
+            id: 'f1',
+            label: 'x'.repeat(65),
+            from_node: 'a',
+            to_node: 'b',
+            entity: 'sensor.x',
+            waypoints: [],
+          },
+        ],
+      }),
+    ).toThrow(/label/);
+  });
+
   it('rejects defaults.burst_trigger_ratio > 1', () => {
     const raw = { ...minimalConfig(), defaults: { burst_trigger_ratio: 1.5 } };
     expect(() => validateConfig(raw)).toThrow(/burst_trigger_ratio/);

@@ -32,7 +32,15 @@ export class FlowmeConfigError extends Error {
   override name = 'FlowmeConfigError';
 }
 
-const ALLOWED_URL_PREFIXES = ['/local/', '/api/', '/hacsfiles/', 'https://', 'http://', 'data:'];
+const ALLOWED_URL_PREFIXES = [
+  '/local/',
+  '/media/',
+  '/api/',
+  '/hacsfiles/',
+  'https://',
+  'http://',
+  'data:',
+];
 
 function fail(path: string, reason: string): never {
   throw new FlowmeConfigError(`${path}: ${reason}`);
@@ -191,6 +199,16 @@ function validateFlow(
     entity: entity as string,
     waypoints,
   };
+
+  if (f['label'] !== undefined) {
+    const labRaw = f['label'];
+    if (typeof labRaw !== 'string') fail(`${path}.label`, t('validation.mustBeString'));
+    const trimmed = (labRaw as string).trim();
+    if (trimmed.length > 64) fail(`${path}.label`, t('validation.flowLabelMaxLen'));
+    if (trimmed.length > 0 && trimmed !== idStr) {
+      flow.label = trimmed;
+    }
+  }
 
   if (typeof f['domain'] === 'string') {
     if (!FLOW_DOMAINS.includes(f['domain'] as never)) {

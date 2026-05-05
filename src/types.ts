@@ -112,6 +112,8 @@ export interface SpeedCurveOverride {
 
 export interface FlowConfig {
   id: string;
+  /** Optional display name in UI and ARIA; falls back to `id`. v2.3+. */
+  label?: string;
   /** Node id to originate at. */
   from_node: string;
   /** Node id to terminate at. */
@@ -563,6 +565,8 @@ export interface HomeAssistant {
     service: string,
     serviceData?: Record<string, unknown>,
   ) => Promise<unknown>;
+  /** Core websocket API (e.g. `media_source/browse_media`). Optional in tests. */
+  callWS?: <T = unknown>(msg: Record<string, unknown>) => Promise<T>;
   /** Loose — different HA versions have different shapes. */
   [key: string]: unknown;
 }

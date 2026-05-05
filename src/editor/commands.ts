@@ -687,6 +687,19 @@ export function setFlowPeakValue(
   return next;
 }
 
+/** Set or clear optional flow display `label` (omit from YAML when undefined or same as `id`). v2.3+. */
+export function setFlowLabel(config: FlowmeConfig, flowId: string, label: string | undefined): FlowmeConfig {
+  const next = cloneConfig(config);
+  next.flows = next.flows.map((f) => {
+    if (f.id !== flowId) return f;
+    const out = { ...f };
+    if (label === undefined || label === '' || label === flowId) delete out.label;
+    else out.label = label;
+    return out;
+  });
+  return next;
+}
+
 /** `enabled: true` (default) omits `pause_when_hidden` from YAML. */
 export function setPauseWhenHidden(config: FlowmeConfig, enabled: boolean): FlowmeConfig {
   const next = cloneConfig(config);
