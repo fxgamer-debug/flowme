@@ -276,9 +276,9 @@ export interface FlowAnimationConfig {
    * wave_lateral — max perpendicular offset in px. Default: 8.
    */
   wave_amplitude?: number;
-  /** Fastest one-cycle duration at peak value (ms). v2.2+. Default from card.animation or 500. */
+  /** Fastest one-cycle duration at peak value (ms). v2.2+. Default 100 ms. */
   min_duration?: number;
-  /** Slowest one-cycle duration near zero (ms). v2.2+. Default from card.animation or 10000. */
+  /** Slowest one-cycle duration near zero (ms). v2.2+. Default 10 000 ms. */
   max_duration?: number;
   /**
    * Fraction of peak below which flow motion is paused (0–1). v2.2.1+. Default 0.002 (0.2% of peak).
@@ -302,12 +302,6 @@ export interface AnimationConfig {
    * re-accelerate in new direction over 300ms. Default: true.
    */
   smooth_speed?: boolean;
-  /** Global fastest cycle duration at peak (ms). v2.2+. Default 500. */
-  min_duration?: number;
-  /** Global slowest cycle duration near zero (ms). v2.2+. Default 10000. */
-  max_duration?: number;
-  /** Global fraction of peak below which motion stops (0–1). v2.2.1+. Default 0.002. */
-  zero_threshold?: number;
 }
 
 export const OVERLAY_TYPES = ['custom'] as const;

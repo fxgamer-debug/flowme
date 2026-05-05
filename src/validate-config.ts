@@ -568,39 +568,6 @@ function validateAnimationConfig(raw: unknown): AnimationConfig {
     if (typeof o['smooth_speed'] !== 'boolean') fail('animation.smooth_speed', t('validation.mustBeBoolean'));
     out.smooth_speed = o['smooth_speed'] as boolean;
   }
-  let minG: number | undefined;
-  let maxG: number | undefined;
-  if (o['min_duration'] !== undefined) {
-    const v = o['min_duration'];
-    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) <= 0) {
-      fail('animation.min_duration', t('validation.durationPositive'));
-    }
-    if ((v as number) > 60_000) fail('animation.min_duration', t('validation.mustBeAtMost', 60_000));
-    minG = v as number;
-    out.min_duration = minG;
-  }
-  if (o['max_duration'] !== undefined) {
-    const v = o['max_duration'];
-    if (typeof v !== 'number' || !Number.isFinite(v) || (v as number) <= 0) {
-      fail('animation.max_duration', t('validation.durationPositive'));
-    }
-    if ((v as number) > 60_000) fail('animation.max_duration', t('validation.mustBeAtMost', 60_000));
-    maxG = v as number;
-    out.max_duration = maxG;
-  }
-  if (minG !== undefined && maxG !== undefined && minG >= maxG) {
-    dlog('animation: min_duration >= max_duration — resetting to defaults (500 / 10000 ms)');
-    delete out.min_duration;
-    delete out.max_duration;
-  }
-  if (o['zero_threshold'] !== undefined) {
-    const v = o['zero_threshold'];
-    if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1) {
-      out.zero_threshold = v;
-    } else {
-      dlog('animation.zero_threshold invalid — using default', DEFAULT_ZERO_THRESHOLD);
-    }
-  }
   return out;
 }
 

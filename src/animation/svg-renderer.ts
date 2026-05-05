@@ -523,7 +523,7 @@ export class SvgRenderer implements FlowRenderer {
     const profile = this.profileFor(flow);
     const timing = resolveAnimTiming(flow, profile, this.config);
     const magnitude = Math.abs(numValue);
-    const belowCutoff = isFlowMotionBelowCutoff(numValue, timing);
+    const belowCutoff = isFlowMotionBelowCutoff(numValue, timing, { flowId });
 
     const shimmer = anim.shimmer === true;
     const thresholdHint = timing.peak * timing.zeroThreshold;

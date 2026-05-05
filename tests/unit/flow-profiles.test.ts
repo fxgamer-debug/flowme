@@ -23,6 +23,14 @@ import {
 } from '../../src/utils.js';
 import type { FlowConfig, FlowmeConfig } from '../../src/types.js';
 
+/** Unvalidated legacy card shape (pre–v2.2.2) — `resolveAnimTiming` must ignore these. */
+function legacyCardWithGlobalAnim(): Pick<FlowmeConfig, 'animation' | 'defaults'> {
+  return {
+    defaults: {},
+    animation: { min_duration: 400, max_duration: 9000, zero_threshold: 0.05 },
+  } as unknown as Pick<FlowmeConfig, 'animation' | 'defaults'>;
+}
+
 const minD = DEFAULT_ANIM_MIN_DURATION_MS;
 const maxD = DEFAULT_ANIM_MAX_DURATION_MS;
 
@@ -73,7 +81,6 @@ describe('calcAnimDuration (v2.2 linear % of peak)', () => {
 
 describe('resolveAnimTiming', () => {
   const cardBase: Pick<FlowmeConfig, 'animation' | 'defaults'> = {
-    animation: { min_duration: 400, max_duration: 9000 },
     defaults: { peak_value: 800 },
   };
 
@@ -92,6 +99,7 @@ describe('resolveAnimTiming', () => {
     const r1 = resolveAnimTiming(flowWith({ peak_value: 123 }), energyProfile, cardBase);
     expect(r1.peak).toBe(123);
     expect(r1.zeroThreshold).toBe(DEFAULT_ZERO_THRESHOLD);
+    expect(r1.zeroThresholdSource).toBe('default');
 
     const r2 = resolveAnimTiming(
       flowWith({ speed_curve_override: { peak: 456 } }),
@@ -107,18 +115,23 @@ describe('resolveAnimTiming', () => {
     expect(r4.peak).toBe(energyProfile.peak);
   });
 
-  it('merges zero_threshold from flow.animation then card.animation', () => {
+  it('uses per-flow zero_threshold when set, else default (card.animation ignored)', () => {
     const r = resolveAnimTiming(
       flowWith({ animation: { zero_threshold: 0.005 } }),
       energyProfile,
-      { animation: { zero_threshold: 0.002 }, defaults: {} },
+      { animation: {}, defaults: {} },
     );
     expect(r.zeroThreshold).toBe(0.005);
-    const r2 = resolveAnimTiming(flowWith(), energyProfile, { animation: { zero_threshold: 0.003 }, defaults: {} });
-    expect(r2.zeroThreshold).toBe(0.003);
+    expect(r.zeroThresholdSource).toBe('per-flow');
+    const r2 = resolveAnimTiming(flowWith(), energyProfile, { animation: {}, defaults: {} });
+    expect(r2.zeroThreshold).toBe(DEFAULT_ZERO_THRESHOLD);
+    expect(r2.zeroThresholdSource).toBe('default');
+    const rLegacy = resolveAnimTiming(flowWith(), energyProfile, legacyCardWithGlobalAnim());
+    expect(rLegacy.zeroThreshold).toBe(DEFAULT_ZERO_THRESHOLD);
+    expect(rLegacy.zeroThresholdSource).toBe('default');
   });
 
-  it('prefers flow.animation durations over card.animation', () => {
+  it('uses flow.animation durations when set; ignores legacy card.animation min/max', () => {
     const r = resolveAnimTiming(
       flowWith({ animation: { min_duration: 100, max_duration: 5000 } }),
       energyProfile,
@@ -126,6 +139,9 @@ describe('resolveAnimTiming', () => {
     );
     expect(r.minDur).toBe(100);
     expect(r.maxDur).toBe(5000);
+    const r2 = resolveAnimTiming(flowWith(), energyProfile, legacyCardWithGlobalAnim());
+    expect(r2.minDur).toBe(DEFAULT_ANIM_MIN_DURATION_MS);
+    expect(r2.maxDur).toBe(DEFAULT_ANIM_MAX_DURATION_MS);
   });
 
   it('inherits speed_curve_override min/max when flow.animation absent', () => {

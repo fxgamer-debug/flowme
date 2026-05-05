@@ -242,7 +242,7 @@ export class HoudiniRenderer implements FlowRenderer {
     const numValue = normalizeAnimSensorValue(value);
     const profile = this.profileFor(flow);
     const timing = resolveAnimTiming(flow, profile, this.config);
-    const belowCutoff = isFlowMotionBelowCutoff(numValue, timing);
+    const belowCutoff = isFlowMotionBelowCutoff(numValue, timing, { flowId });
 
     if (flow.visible === false) {
       div.el.style.opacity = '0';

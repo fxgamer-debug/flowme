@@ -1,4 +1,5 @@
 import type { FlowConfig, FlowmeConfig, FlowProfile, NodePosition, SpeedCurveOverride, ValueGradientConfig } from './types.js';
+import { dlog } from './debug-log.js';
 
 /**
  * Resolve when `ResizeObserver` reports the **same** non-zero `contentRect`
@@ -306,7 +307,7 @@ export function normalizeAnimSensorValue(value: unknown): number {
 
 /** Default slowest / fastest one-cycle animation durations (v2.2+ linear speed curve). */
 export const DEFAULT_ANIM_MAX_DURATION_MS = 10_000;
-export const DEFAULT_ANIM_MIN_DURATION_MS = 500;
+export const DEFAULT_ANIM_MIN_DURATION_MS = 100;
 
 /** Default fraction of peak below which motion is paused (v2.2.1). 0.002 × 5000 W = 10 W. */
 export const DEFAULT_ZERO_THRESHOLD = 0.002;
@@ -351,19 +352,44 @@ export interface ResolvedAnimTiming {
   maxDur: number;
   /** Fraction of peak (0–1); below this magnitude, motion is paused. */
   zeroThreshold: number;
+  /** Whether `zero_threshold` came from the flow or built-in default. */
+  zeroThresholdSource: 'per-flow' | 'default';
 }
 
 /** True when |value|/peak is below the configured zero threshold — renderer should not run motion. */
-export function isFlowMotionBelowCutoff(numValue: number, timing: ResolvedAnimTiming): boolean {
+export function isFlowMotionBelowCutoff(
+  numValue: number,
+  timing: ResolvedAnimTiming,
+  meta?: { flowId: string },
+): boolean {
   if (!(timing.peak > 0)) return false;
   const pct = Math.min(1, Math.abs(numValue) / timing.peak);
-  return pct < timing.zeroThreshold;
+  const stopping = pct < timing.zeroThreshold;
+  if (meta?.flowId) {
+    dlog(
+      'threshold check:',
+      meta.flowId,
+      'scaledValue:',
+      numValue,
+      'peak:',
+      timing.peak,
+      'pct:',
+      pct.toFixed(6),
+      'zeroThreshold:',
+      timing.zeroThreshold,
+      'thresholdSource:',
+      timing.zeroThresholdSource,
+      'stopping:',
+      stopping,
+    );
+  }
+  return stopping;
 }
 
 /**
  * Resolve peak (for pct-of-peak) and min/max animation duration (ms).
  * Precedence: per-flow `peak_value`, `speed_curve_override.peak`, `defaults.peak_value`, profile.peak.
- * Durations: flow.animation → speed_curve_override → card.animation → defaults.
+ * Durations: flow.animation → speed_curve_override → defaults (100 ms / 10 000 ms).
  */
 export function resolveAnimTiming(
   flow: Pick<FlowConfig, 'peak_value' | 'speed_curve_override' | 'animation'>,
@@ -371,7 +397,6 @@ export function resolveAnimTiming(
   card: Pick<FlowmeConfig, 'animation' | 'defaults'> | null | undefined,
 ): ResolvedAnimTiming {
   const o: SpeedCurveOverride = flow.speed_curve_override ?? {};
-  const g = card?.animation;
   const defaults = card?.defaults;
 
   const peakFlow =
@@ -382,16 +407,8 @@ export function resolveAnimTiming(
   const profilePeak = profile.peak > 0 ? profile.peak : 1;
   const peak = peakFlow ?? peakOverride ?? peakDefault ?? profilePeak;
 
-  let minDur =
-    flow.animation?.min_duration ??
-    o.min_duration ??
-    g?.min_duration ??
-    DEFAULT_ANIM_MIN_DURATION_MS;
-  let maxDur =
-    flow.animation?.max_duration ??
-    o.max_duration ??
-    g?.max_duration ??
-    DEFAULT_ANIM_MAX_DURATION_MS;
+  let minDur = flow.animation?.min_duration ?? o.min_duration ?? DEFAULT_ANIM_MIN_DURATION_MS;
+  let maxDur = flow.animation?.max_duration ?? o.max_duration ?? DEFAULT_ANIM_MAX_DURATION_MS;
 
   if (!(minDur > 0) || !(maxDur > minDur) || maxDur > 60_000) {
     minDur = DEFAULT_ANIM_MIN_DURATION_MS;
@@ -404,14 +421,15 @@ export function resolveAnimTiming(
   }
 
   const zFlow = flow.animation?.zero_threshold;
-  const zCard = g?.zero_threshold;
+  const zeroThresholdSource: 'per-flow' | 'default' =
+    typeof zFlow === 'number' && Number.isFinite(zFlow) ? 'per-flow' : 'default';
   let zeroThreshold =
-    typeof zFlow === 'number' && Number.isFinite(zFlow) ? zFlow : typeof zCard === 'number' && Number.isFinite(zCard) ? zCard : DEFAULT_ZERO_THRESHOLD;
+    typeof zFlow === 'number' && Number.isFinite(zFlow) ? zFlow : DEFAULT_ZERO_THRESHOLD;
   if (!(zeroThreshold > 0 && zeroThreshold <= 1)) {
     zeroThreshold = DEFAULT_ZERO_THRESHOLD;
   }
 
-  return { peak, minDur, maxDur, zeroThreshold };
+  return { peak, minDur, maxDur, zeroThreshold, zeroThresholdSource };
 }
 
 /**

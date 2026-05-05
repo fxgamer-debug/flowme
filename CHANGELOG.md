@@ -2,6 +2,18 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.2]
+
+### Changed
+
+- **Animation defaults:** Card-wide `animation.min_duration`, `animation.max_duration`, and `animation.zero_threshold` are removed — speed bounds and zero cutoff are **per-flow only** (plus `speed_curve_override` min/max). Built-in defaults remain **100 ms** (fastest at peak), **10 000 ms** (slowest near zero), and **0.2%** zero threshold.
+- **Editor — State A:** The defaults panel no longer shows global animation speed or zero threshold; placeholders in the flow inspector show those built-in defaults explicitly.
+- **Editor — flow inspector:** Zero threshold hint shows the computed cutoff in profile units (e.g. W, m³/h), updating live while editing the field.
+
+### Fixed
+
+- **Diagnostics:** With `debug: true`, each threshold evaluation logs scaled value, peak, percentage of peak, threshold, source (`per-flow` vs `default`), and whether motion is stopped — to distinguish unit-scaling behaviour from comparison bugs.
+
 ## [2.2.1]
 
 ### Fixed

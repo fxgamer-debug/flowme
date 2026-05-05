@@ -32,8 +32,6 @@ import {
 import { validateConfig } from './validate-config.js';
 import {
   calcAnimDuration,
-  DEFAULT_ANIM_MAX_DURATION_MS,
-  DEFAULT_ANIM_MIN_DURATION_MS,
   DEFAULT_ZERO_THRESHOLD,
   interpolateGradientColor,
   polylineToSvgPathStyled,
@@ -177,6 +175,8 @@ export class FlowmeCardEditor extends LitElement {
   /** Flow id while inspector endpoint auto-route runs (shows same busy UX as Suggest Path). */
   @state() private flowEndpointPathfindingFlowId: string | null = null;
   @state() private flowEndpointError: string | null = null;
+  /** Live zero-threshold % text while editing (per flow id) — drives reactive cutoff hint. */
+  @state() private flowZeroThresholdDraft: Record<string, string> = {};
   private _pathWorker?: Worker;
   private _pathWorkerPending = false;
   private _pathPendingSelection: { fromId: string; toId: string } | null = null;
@@ -1267,9 +1267,6 @@ export class FlowmeCardEditor extends LitElement {
               )}
             </label>
             ${(() => {
-              const gMin = this.config.animation?.min_duration ?? DEFAULT_ANIM_MIN_DURATION_MS;
-              const gMax = this.config.animation?.max_duration ?? DEFAULT_ANIM_MAX_DURATION_MS;
-              const gZero = this.config.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD;
               const prof = getProfile(flow.domain ?? this.config.domain);
               const timing = resolveAnimTiming(flow, prof, this.config);
               const domPeak = prof.peak;
@@ -1277,6 +1274,17 @@ export class FlowmeCardEditor extends LitElement {
               const previewDurations = previewPts.map((v) =>
                 `${(calcAnimDuration(v, timing.peak, timing.minDur, timing.maxDur, timing.zeroThreshold) / 1000).toFixed(1)}s`,
               );
+              const draftPct = this.flowZeroThresholdDraft[flow.id];
+              let ztFracForHint: number;
+              if (draftPct !== undefined && draftPct.trim() !== '') {
+                const p = parseFloat(draftPct);
+                ztFracForHint =
+                  Number.isFinite(p) && p > 0 && p <= 10 ? p / 100 : (flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD);
+              } else {
+                ztFracForHint = flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD;
+              }
+              const resolvedPeak = flow.peak_value ?? prof.peak;
+              const cutoffHint = `${t('editor.inspector.zeroThresholdCutoff')} ${(ztFracForHint * resolvedPeak).toFixed(1)}${prof.unit_label ? ` ${prof.unit_label}` : ''}`;
               return html`
                 <label>
                   ${t('editor.inspector.peakValue')}
@@ -1310,7 +1318,7 @@ export class FlowmeCardEditor extends LitElement {
                     min="1"
                     max="60000"
                     step="100"
-                    placeholder=${t('editor.inspector.animMinMsPlaceholder', gMin)}
+                    placeholder=${t('editor.inspector.animMinMsPlaceholder')}
                     .value=${flow.animation?.min_duration !== undefined ? String(flow.animation.min_duration) : ''}
                     @change=${(e: Event) => {
                       if (!this.config) return;
@@ -1335,7 +1343,7 @@ export class FlowmeCardEditor extends LitElement {
                     min="2"
                     max="60000"
                     step="500"
-                    placeholder=${t('editor.inspector.animMaxMsPlaceholder', gMax)}
+                    placeholder=${t('editor.inspector.animMaxMsPlaceholder')}
                     .value=${flow.animation?.max_duration !== undefined ? String(flow.animation.max_duration) : ''}
                     @change=${(e: Event) => {
                       if (!this.config) return;
@@ -1360,14 +1368,22 @@ export class FlowmeCardEditor extends LitElement {
                     min="0"
                     max="10"
                     step="0.1"
-                    placeholder=${`Default (${(gZero * 100).toFixed(1)}%)`}
-                    .value=${flow.animation?.zero_threshold !== undefined
-                      ? (flow.animation.zero_threshold * 100).toFixed(1)
-                      : ''}
+                    placeholder=${t('editor.inspector.animZeroPctPlaceholder')}
+                    .value=${this.flowZeroThresholdDraft[flow.id] !== undefined
+                      ? this.flowZeroThresholdDraft[flow.id]
+                      : flow.animation?.zero_threshold !== undefined
+                        ? (flow.animation.zero_threshold * 100).toFixed(1)
+                        : ''}
+                    @input=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value;
+                      this.flowZeroThresholdDraft = { ...this.flowZeroThresholdDraft, [flow.id]: v };
+                    }}
                     @change=${(e: Event) => {
                       if (!this.config) return;
                       const raw = (e.target as HTMLInputElement).value.trim();
                       const prev = this.config;
+                      const { [flow.id]: _drop, ...restDraft } = this.flowZeroThresholdDraft;
+                      this.flowZeroThresholdDraft = restDraft;
                       if (raw === '') {
                         const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
                         this.pushPatch(prev, next, `clear flow zero_threshold ${flow.id}`);
@@ -1379,7 +1395,7 @@ export class FlowmeCardEditor extends LitElement {
                       this.pushPatch(prev, next, `set flow zero_threshold ${flow.id}`);
                     }}
                   />
-                  <span class="hint-sub">${t('editor.inspector.zeroThresholdHelper')}</span>
+                  <span class="hint-sub">${cutoffHint}</span>
                 </label>
                 <div class="speed-curve-preview inspector-timing-preview">
                   <span>${t('editor.inspector.previewLinearSpeed')}</span>
@@ -2793,7 +2809,6 @@ export class FlowmeCardEditor extends LitElement {
   private renderDefaultsPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const d: FlowmeDefaults = this.config.defaults ?? {};
-    const animG = this.config.animation ?? {};
     const domain = normalizeFlowDomain(this.config.domain);
     const profile = getProfile(domain);
     const effPeak = d.peak_value ?? profile.peak;
@@ -2842,71 +2857,6 @@ export class FlowmeCardEditor extends LitElement {
           ${numInput('burst_trigger_ratio', t('editor.inspector.burstTriggerRatio'), { min: 0.1, max: 1, step: 0.05, defaultVal: 0.9 })}
           ${numInput('burst_sustain_ms', t('editor.inspector.burstSustainMs'), { min: 1000, max: 30000, step: 500, defaultVal: 5000 })}
           ${numInput('burst_max_particles', t('editor.inspector.burstMaxParticles'), { min: 3, max: 50, step: 1, defaultVal: 20 })}
-          <details class="defaults-nested" open>
-            <summary>${t('editor.stateA.animationSpeed')}</summary>
-            <p class="hint-sub">${t('editor.stateA.slowestSpeedHelper')}</p>
-            <label class="defaults-row">
-              <span class="defaults-label">${t('editor.stateA.slowestSpeed')}</span>
-              <input
-                type="number"
-                min="1000"
-                max="60000"
-                step="500"
-                .value=${String(animG.max_duration ?? DEFAULT_ANIM_MAX_DURATION_MS)}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const v = parseInt((e.target as HTMLInputElement).value, 10);
-                  if (!Number.isFinite(v) || v <= 0) return;
-                  const prev = this.config;
-                  const next = setAnimationConfig(prev, { max_duration: v });
-                  this.pushPatch(prev, next, 'set global max_duration');
-                }}
-              />
-            </label>
-            <p class="hint-sub">${t('editor.stateA.fastestSpeedHelper')}</p>
-            <label class="defaults-row">
-              <span class="defaults-label">${t('editor.stateA.fastestSpeed')}</span>
-              <input
-                type="number"
-                min="100"
-                max="5000"
-                step="100"
-                .value=${String(animG.min_duration ?? DEFAULT_ANIM_MIN_DURATION_MS)}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const v = parseInt((e.target as HTMLInputElement).value, 10);
-                  if (!Number.isFinite(v) || v <= 0) return;
-                  const prev = this.config;
-                  const next = setAnimationConfig(prev, { min_duration: v });
-                  this.pushPatch(prev, next, 'set global min_duration');
-                }}
-              />
-            </label>
-            <p class="hint-sub">${t('editor.stateA.zeroThresholdHelper')}</p>
-            <label class="defaults-row">
-              <span class="defaults-label">${t('editor.stateA.zeroThreshold')}</span>
-              <input
-                type="number"
-                min="0"
-                max="10"
-                step="0.1"
-                .value=${((animG.zero_threshold ?? DEFAULT_ZERO_THRESHOLD) * 100).toFixed(1)}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const raw = parseFloat((e.target as HTMLInputElement).value);
-                  if (!Number.isFinite(raw) || raw <= 0 || raw > 10) return;
-                  const prev = this.config;
-                  const next = setAnimationConfig(prev, { zero_threshold: raw / 100 });
-                  this.pushPatch(prev, next, 'set global zero_threshold');
-                }}
-              />
-            </label>
-            <p class="hint-sub">
-              ${t('editor.stateA.zeroThresholdCutoff')}
-              ${((animG.zero_threshold ?? DEFAULT_ZERO_THRESHOLD) * effPeak).toFixed(2)}
-              ${profile.unit_label ? ` ${profile.unit_label}` : ''}
-            </p>
-          </details>
           ${domain === 'hvac'
             ? html`
                 <div class="dual-unit-row">
