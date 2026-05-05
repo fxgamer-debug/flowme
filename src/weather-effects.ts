@@ -48,12 +48,42 @@ const WX_CSS = `
 
 /* --- sunny --- */
 .flowme-wx-sunny {
-  background: radial-gradient(ellipse 130% 70% at 50% 0%, rgba(255, 220, 140, 0.22), transparent 60%);
-  animation: flowme-wx-sunny-pulse 4s ease-in-out infinite;
+  position: relative;
 }
-@keyframes flowme-wx-sunny-pulse {
-  0%, 100% { opacity: 0.05; }
-  50% { opacity: 0.15; }
+.flowme-wx-sunny-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 130% 70% at 50% 0%, rgba(255, 220, 140, 0.45), transparent 60%);
+  animation: flowme-wx-sunny-glow-pulse 4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes flowme-wx-sunny-glow-pulse {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.4; }
+}
+.flowme-wx-sun-ray-arm {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform-origin: top center;
+  pointer-events: none;
+}
+.flowme-wx-sun-ray {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: linear-gradient(180deg, rgba(255, 220, 100, 0.42), rgba(255, 220, 100, 0.03));
+  animation:
+    flowme-wx-ray-pulse 4s ease-in-out infinite,
+    flowme-wx-ray-sway 10s ease-in-out infinite;
+}
+@keyframes flowme-wx-ray-pulse {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.3; }
+}
+@keyframes flowme-wx-ray-sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
 }
 
 /* --- clear-night stars --- */
@@ -93,18 +123,32 @@ const WX_CSS = `
 }
 
 /* --- rain --- */
+.flowme-wx-rain-layer {
+  position: absolute;
+  top: -10%;
+  left: 0;
+  width: 100%;
+  height: 120%;
+  overflow: hidden;
+  pointer-events: none;
+}
 .flowme-wx-rain-streak {
   position: absolute;
   width: 2px;
   height: 18%;
-  top: -20%;
+  top: -5%;
   background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.42));
   transform: rotate(15deg);
   transform-origin: center top;
   animation: flowme-wx-rain-fall 0.72s linear infinite;
 }
 @keyframes flowme-wx-rain-fall {
-  to { transform: translateY(520%) rotate(15deg); }
+  from {
+    transform: translateY(-15vh) rotate(15deg);
+  }
+  to {
+    transform: translateY(135vh) rotate(15deg);
+  }
 }
 
 .flowme-wx-pouring .flowme-wx-rain-streak {
@@ -231,22 +275,53 @@ function rnd(min: number, max: number): number {
 }
 
 function buildSunny(): HTMLElement {
-  const el = document.createElement('div');
-  el.className = 'flowme-weather-effect flowme-wx-sunny';
-  return el;
+  const wrap = document.createElement('div');
+  wrap.className = 'flowme-weather-effect flowme-wx-sunny';
+  const glow = document.createElement('div');
+  glow.className = 'flowme-wx-sunny-glow';
+  wrap.appendChild(glow);
+
+  const rayCount = Math.floor(rnd(4, 7));
+  for (let i = 0; i < rayCount; i++) {
+    const angle = rnd(-30, 30);
+    const topW = rnd(20, 40);
+    const botW = rnd(200, 400);
+    const hPct = rnd(40, 60);
+
+    const arm = document.createElement('div');
+    arm.className = 'flowme-wx-sun-ray-arm';
+    arm.style.height = `${hPct}%`;
+    arm.style.width = `${botW}px`;
+    arm.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+
+    const ray = document.createElement('div');
+    ray.className = 'flowme-wx-sun-ray';
+    ray.style.width = '100%';
+    ray.style.height = '100%';
+    ray.style.clipPath = `polygon(calc(50% - ${topW / 2}px) 0, calc(50% + ${topW / 2}px) 0, calc(50% + ${botW / 2}px) 100%, calc(50% - ${botW / 2}px) 100%)`;
+
+    const pulseDur = rnd(3, 5);
+    const swayDur = rnd(8, 12);
+    ray.style.animationDuration = `${pulseDur}s, ${swayDur}s`;
+    ray.style.animationDelay = `${rnd(0, 1.5)}s, ${rnd(0, 2)}s`;
+
+    arm.appendChild(ray);
+    wrap.appendChild(arm);
+  }
+  return wrap;
 }
 
 function buildClearNight(): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'flowme-weather-effect flowme-wx-clear-night';
-  const n = 26;
+  const n = Math.floor(rnd(80, 121));
   for (let i = 0; i < n; i++) {
     const s = document.createElement('div');
     s.className = 'flowme-wx-star';
     s.style.left = `${rnd(2, 98)}%`;
     s.style.top = `${rnd(4, 88)}%`;
-    s.style.animationDelay = `${rnd(0, 3)}s`;
-    s.style.animationDuration = `${rnd(2, 4)}s`;
+    s.style.animationDelay = `${rnd(0, 4)}s`;
+    s.style.animationDuration = `${rnd(2, 6)}s`;
     wrap.appendChild(s);
   }
   return wrap;
@@ -275,6 +350,8 @@ function buildCloudy(partly: boolean): HTMLElement {
 function buildRain(pouring: boolean): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = pouring ? 'flowme-weather-effect flowme-wx-pouring' : 'flowme-weather-effect flowme-wx-rainy';
+  const layer = document.createElement('div');
+  layer.className = 'flowme-wx-rain-layer';
   const count = pouring ? 88 : 56;
   for (let i = 0; i < count; i++) {
     const s = document.createElement('div');
@@ -286,24 +363,31 @@ function buildRain(pouring: boolean): HTMLElement {
     } else {
       s.style.opacity = String(rnd(0.5, 0.6));
     }
-    wrap.appendChild(s);
+    layer.appendChild(s);
   }
+  wrap.appendChild(layer);
   return wrap;
 }
 
 function buildSnowy(): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'flowme-weather-effect flowme-wx-snowy';
-  const count = 36;
+  const count = Math.floor(rnd(80, 101));
   for (let i = 0; i < count; i++) {
     const s = document.createElement('div');
     s.className = 'flowme-wx-snowflake';
-    const r = rnd(3, 8);
+    const large = Math.random() < 0.45;
+    const r = large ? rnd(6, 8) : rnd(2, 4);
     s.style.width = `${r}px`;
     s.style.height = `${r}px`;
     s.style.left = `${rnd(0, 100)}%`;
-    s.style.opacity = String(rnd(0.6, 0.8));
-    s.style.animationDuration = `${rnd(3, 5)}s`;
+    if (large) {
+      s.style.opacity = String(rnd(0.5, 0.7));
+      s.style.animationDuration = `${rnd(4, 6)}s`;
+    } else {
+      s.style.opacity = String(rnd(0.7, 0.9));
+      s.style.animationDuration = `${rnd(2, 3)}s`;
+    }
     s.style.animationDelay = `${rnd(0, 4)}s`;
     wrap.appendChild(s);
   }
@@ -313,6 +397,8 @@ function buildSnowy(): HTMLElement {
 function buildSnowyRainy(): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'flowme-weather-effect flowme-wx-snowy-rainy';
+  const rainLayer = document.createElement('div');
+  rainLayer.className = 'flowme-wx-rain-layer';
   for (let i = 0; i < 30; i++) {
     const s = document.createElement('div');
     s.className = 'flowme-wx-rain-streak';
@@ -320,16 +406,26 @@ function buildSnowyRainy(): HTMLElement {
     s.style.animationDelay = `${rnd(0, 0.8)}s`;
     s.style.animationDuration = `${rnd(0.55, 0.75)}s`;
     s.style.opacity = '0.38';
-    wrap.appendChild(s);
+    rainLayer.appendChild(s);
   }
-  for (let i = 0; i < 20; i++) {
+  wrap.appendChild(rainLayer);
+
+  const snowCount = Math.floor(rnd(40, 51));
+  for (let i = 0; i < snowCount; i++) {
     const s = document.createElement('div');
     s.className = 'flowme-wx-snowflake';
-    const r = rnd(3, 6);
+    const large = Math.random() < 0.45;
+    const r = large ? rnd(6, 8) : rnd(2, 4);
     s.style.width = `${r}px`;
     s.style.height = `${r}px`;
     s.style.left = `${rnd(0, 100)}%`;
-    s.style.animationDuration = `${rnd(2.5, 4)}s`;
+    if (large) {
+      s.style.opacity = String(rnd(0.5, 0.7));
+      s.style.animationDuration = `${rnd(4, 6)}s`;
+    } else {
+      s.style.opacity = String(rnd(0.7, 0.9));
+      s.style.animationDuration = `${rnd(2, 3)}s`;
+    }
     s.style.animationDelay = `${rnd(0, 2)}s`;
     wrap.appendChild(s);
   }
@@ -395,7 +491,7 @@ function buildLightningRainy(): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'flowme-weather-effect flowme-wx-lightning-rainy';
   const rainHost = document.createElement('div');
-  rainHost.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;';
+  rainHost.className = 'flowme-wx-rain-layer';
   for (let i = 0; i < 56; i++) {
     const s = document.createElement('div');
     s.className = 'flowme-wx-rain-streak';

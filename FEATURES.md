@@ -26,6 +26,18 @@ GIF, animated WebP, and APNG files work as ordinary background images (browser/C
 
 Combining animated backgrounds with **`background.weather_effects`** (see below) can be heavy on low-powered or wall-mounted tablets; use one or the other where performance matters. Rough file-size guidance: GIF < 2MB; animated WebP < 1MB; APNG < 1MB.
 
+### Generating custom animated backgrounds
+
+AI video tools can produce seamless looping clips tailored to your space. Options to explore:
+
+- **Runway** ([runwayml.com](https://runwayml.com)) — text/image to video; loop-friendly exports
+- **Pika** ([pika.art](https://pika.art)) — image animation and looping video
+- **Kling** ([klingai.com](https://klingai.com)) — image-to-video with loop support
+
+Prefer **animated WebP** for quality vs file size, or **GIF** for widest compatibility.
+
+Practical target: a **3–5 second** seamless loop at your card background resolution; keep files **under ~2MB** for smooth playback.
+
 ### Weather effects (CSS overlays)
 
 When **`background.weather_effects`** is `true` and **`background.weather_entity`** points at a weather entity, FlowMe draws a **pure CSS** animated layer above the background image (below flows and nodes). States come from Home Assistant’s weather integration (`weather.state`). Animations honour **`prefers-reduced-motion`**.
@@ -38,8 +50,8 @@ Supported HA weather states and overlay behaviour:
 
 | State | Effect |
 | ----- | ------ |
-| `sunny` | Soft golden radial glow from the top, slow pulse |
-| `clear-night` | Random star dots with gentle twinkle |
+| `sunny` | Radial glow plus several golden ray beams from the top centre |
+| `clear-night` | Many star dots with independent twinkle timing |
 | `cloudy` | Few large blurred clouds drifting slowly |
 | `partlycloudy` | Fewer / lighter clouds, slightly faster drift |
 | `rainy` | Diagonal rain streaks |

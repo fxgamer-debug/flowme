@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.4.1]
+
+### Changed
+
+- **Weather effects:** Clear-night uses many more stars with independent twinkle timing; sunny uses a brighter radial glow plus multiple ray beams; rain/pouring/lightning-rainy/snowy-rainy rain uses an extended layer and longer fall distance so streaks reach the bottom edge; snowy/snowy-rainy use more snowflakes with varied size, opacity, and fall speed.
+
+### Documentation
+
+- **`FEATURES.md`:** Tips for generating looping animated backgrounds with AI tools (WebP/GIF export).
+
 ## [2.4]
 
 ### Added
