@@ -309,35 +309,48 @@ export function normalizeAnimSensorValue(value: unknown): number {
 export const DEFAULT_ANIM_MAX_DURATION_MS = 10_000;
 export const DEFAULT_ANIM_MIN_DURATION_MS = 100;
 
-/** Default fraction of peak below which motion is paused (v2.2.1). 0.002 × 5000 W = 10 W. */
+/**
+ * Default absolute stop for animation (profile base units) when advanced `zero_threshold` is off.
+ * v2.2.3+: motion pauses when |scaled value| is strictly below this (noise / true zero).
+ */
+export const DEFAULT_ANIM_EPSILON = 0.001;
+
+/**
+ * Default fraction of peak for the advanced zero-threshold field (0.2%). Used only when the user
+ * enables advanced options and sets an explicit per-flow `zero_threshold`; not used for auto-stop.
+ */
 export const DEFAULT_ZERO_THRESHOLD = 0.002;
 
 /**
  * Linear speed curve: map sensor magnitude to cycle duration from maxDur (slow, near zero)
  * down to minDur (fast, at/above peak). Values ≥ peak animate at minDur.
  */
-export function calcAnimDuration(
-  value: unknown,
-  peakValue: number,
-  minDur: number,
-  maxDur: number,
-  zeroThreshold: number = DEFAULT_ZERO_THRESHOLD,
-): number {
+export function calcAnimDuration(value: unknown, timing: ResolvedAnimTiming): number {
   const numValue = normalizeAnimSensorValue(value);
-  const lo = Math.min(minDur, maxDur);
-  const hi = Math.max(minDur, maxDur);
+  const lo = Math.min(timing.minDur, timing.maxDur);
+  const hi = Math.max(timing.minDur, timing.maxDur);
   if (!(Number.isFinite(lo) && Number.isFinite(hi)) || hi <= 0 || lo <= 0) {
     return Math.max(50, DEFAULT_ANIM_MIN_DURATION_MS);
   }
+  const peakValue = timing.peak;
   if (!(peakValue > 0) || !Number.isFinite(peakValue)) {
     return hi;
   }
-  const pct = Math.min(1, Math.abs(numValue) / peakValue);
-  const zt =
-    Number.isFinite(zeroThreshold) && zeroThreshold > 0 && zeroThreshold <= 1 ? zeroThreshold : DEFAULT_ZERO_THRESHOLD;
-  if (pct < zt) {
+
+  if (timing.zeroThresholdEnabled && timing.zeroThreshold !== undefined) {
+    const zt =
+      Number.isFinite(timing.zeroThreshold) && timing.zeroThreshold > 0 && timing.zeroThreshold <= 1
+        ? timing.zeroThreshold
+        : DEFAULT_ZERO_THRESHOLD;
+    const pctCheck = Math.min(1, Math.abs(numValue) / peakValue);
+    if (pctCheck < zt) {
+      return hi;
+    }
+  } else if (Math.abs(numValue) < DEFAULT_ANIM_EPSILON) {
     return hi;
   }
+
+  const pct = Math.min(1, Math.abs(numValue) / peakValue);
   const dur = hi - pct * (hi - lo);
   if (!Number.isFinite(dur) || dur <= 0) {
     return lo;
@@ -345,38 +358,63 @@ export function calcAnimDuration(
   return Math.min(Math.max(dur, lo), hi);
 }
 
-/** Effective peak + duration bounds + zero cutoff for a flow (v2.2 / v2.2.1). */
+/** Effective peak + duration bounds + stop rule for a flow (v2.2.3+). */
 export interface ResolvedAnimTiming {
   peak: number;
   minDur: number;
   maxDur: number;
-  /** Fraction of peak (0–1); below this magnitude, motion is paused. */
-  zeroThreshold: number;
-  /** Whether `zero_threshold` came from the flow or built-in default. */
+  /**
+   * Advanced: fraction of peak (0–1) when `zeroThresholdEnabled`; omitted when using epsilon auto-stop.
+   */
+  zeroThreshold?: number;
+  /** True when the flow YAML sets a valid `animation.zero_threshold` (advanced % of peak). */
+  zeroThresholdEnabled: boolean;
+  /** `per-flow` when advanced threshold is set; `default` when using epsilon auto-stop. */
   zeroThresholdSource: 'per-flow' | 'default';
 }
 
-/** True when |value|/peak is below the configured zero threshold — renderer should not run motion. */
+/** True when motion should pause (epsilon auto-stop or advanced % of peak). */
 export function isFlowMotionBelowCutoff(
   numValue: number,
   timing: ResolvedAnimTiming,
   meta?: { flowId: string },
 ): boolean {
-  if (!(timing.peak > 0)) return false;
-  const pct = Math.min(1, Math.abs(numValue) / timing.peak);
-  const stopping = pct < timing.zeroThreshold;
+  let stopping: boolean;
+  if (timing.zeroThresholdEnabled && timing.zeroThreshold !== undefined) {
+    if (!(timing.peak > 0) || !Number.isFinite(timing.peak)) {
+      stopping = Math.abs(numValue) < DEFAULT_ANIM_EPSILON;
+    } else {
+      const pct = Math.min(1, Math.abs(numValue) / timing.peak);
+      const zt =
+        Number.isFinite(timing.zeroThreshold) && timing.zeroThreshold > 0 && timing.zeroThreshold <= 1
+          ? timing.zeroThreshold
+          : DEFAULT_ZERO_THRESHOLD;
+      stopping = pct < zt;
+    }
+  } else {
+    stopping = Math.abs(numValue) < DEFAULT_ANIM_EPSILON;
+  }
+
   if (meta?.flowId) {
+    const pctLog =
+      timing.peak > 0 && Number.isFinite(timing.peak)
+        ? Math.min(1, Math.abs(numValue) / timing.peak).toFixed(6)
+        : '(n/a)';
     dlog(
       'threshold check:',
       meta.flowId,
+      'mode:',
+      timing.zeroThresholdEnabled ? 'pct' : 'epsilon',
       'scaledValue:',
       numValue,
       'peak:',
       timing.peak,
       'pct:',
-      pct.toFixed(6),
+      pctLog,
+      'epsilon:',
+      DEFAULT_ANIM_EPSILON,
       'zeroThreshold:',
-      timing.zeroThreshold,
+      timing.zeroThresholdEnabled ? timing.zeroThreshold : '(off)',
       'thresholdSource:',
       timing.zeroThresholdSource,
       'stopping:',
@@ -421,15 +459,12 @@ export function resolveAnimTiming(
   }
 
   const zFlow = flow.animation?.zero_threshold;
-  const zeroThresholdSource: 'per-flow' | 'default' =
-    typeof zFlow === 'number' && Number.isFinite(zFlow) ? 'per-flow' : 'default';
-  let zeroThreshold =
-    typeof zFlow === 'number' && Number.isFinite(zFlow) ? zFlow : DEFAULT_ZERO_THRESHOLD;
-  if (!(zeroThreshold > 0 && zeroThreshold <= 1)) {
-    zeroThreshold = DEFAULT_ZERO_THRESHOLD;
-  }
+  const zeroThresholdEnabled =
+    typeof zFlow === 'number' && Number.isFinite(zFlow) && zFlow > 0 && zFlow <= 1;
+  const zeroThreshold = zeroThresholdEnabled ? zFlow : undefined;
+  const zeroThresholdSource: 'per-flow' | 'default' = zeroThresholdEnabled ? 'per-flow' : 'default';
 
-  return { peak, minDur, maxDur, zeroThreshold, zeroThresholdSource };
+  return { peak, minDur, maxDur, zeroThreshold, zeroThresholdEnabled, zeroThresholdSource };
 }
 
 /**

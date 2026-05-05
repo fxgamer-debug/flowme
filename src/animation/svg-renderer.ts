@@ -16,6 +16,7 @@ import {
   resolveAnimTiming,
   normalizeAnimSensorValue,
   isFlowMotionBelowCutoff,
+  DEFAULT_ANIM_EPSILON,
   type ResolvedAnimTiming,
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
@@ -526,7 +527,10 @@ export class SvgRenderer implements FlowRenderer {
     const belowCutoff = isFlowMotionBelowCutoff(numValue, timing, { flowId });
 
     const shimmer = anim.shimmer === true;
-    const thresholdHint = timing.peak * timing.zeroThreshold;
+    const thresholdHint =
+      timing.zeroThresholdEnabled && timing.zeroThreshold !== undefined
+        ? timing.peak * timing.zeroThreshold
+        : DEFAULT_ANIM_EPSILON;
     const isShimmer = shimmer && magnitude <= thresholdHint && magnitude > 0;
     if (flow.visible === false) {
       this.setGroupOpacity(dom, 0);
@@ -535,7 +539,7 @@ export class SvgRenderer implements FlowRenderer {
 
     const rawSpeed = DEBUG
       ? DEBUG_DUR_MS
-      : calcAnimDuration(numValue, timing.peak, timing.minDur, timing.maxDur, timing.zeroThreshold);
+      : calcAnimDuration(numValue, timing);
     const speedMultiplier = flow.speed_multiplier ?? 1;
     let durMs = Math.max(50, rawSpeed * speedMultiplier);
     if (isShimmer) durMs = durMs / SHIMMER_SPEED_FACTOR;

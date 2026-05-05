@@ -17,8 +17,10 @@ import {
 import {
   calcAnimDuration,
   resolveAnimTiming,
+  isFlowMotionBelowCutoff,
   DEFAULT_ANIM_MAX_DURATION_MS,
   DEFAULT_ANIM_MIN_DURATION_MS,
+  DEFAULT_ANIM_EPSILON,
   DEFAULT_ZERO_THRESHOLD,
 } from '../../src/utils.js';
 import type { FlowConfig, FlowmeConfig } from '../../src/types.js';
@@ -34,45 +36,70 @@ function legacyCardWithGlobalAnim(): Pick<FlowmeConfig, 'animation' | 'defaults'
 const minD = DEFAULT_ANIM_MIN_DURATION_MS;
 const maxD = DEFAULT_ANIM_MAX_DURATION_MS;
 
+function timingEpsilon(peak: number, minDur = minD, maxDur = maxD): ReturnType<typeof resolveAnimTiming> {
+  return {
+    peak,
+    minDur,
+    maxDur,
+    zeroThresholdEnabled: false,
+    zeroThresholdSource: 'default',
+  };
+}
+
+function timingPct(peak: number, zt: number, minDur = minD, maxDur = maxD): ReturnType<typeof resolveAnimTiming> {
+  return {
+    peak,
+    minDur,
+    maxDur,
+    zeroThreshold: zt,
+    zeroThresholdEnabled: true,
+    zeroThresholdSource: 'per-flow',
+  };
+}
+
 function durationForLinear(value: number, peak: number, lo = minD, hi = maxD): number {
-  if (!(peak > 0)) return hi;
-  const pct = Math.min(1, Math.abs(value) / peak);
-  if (pct < DEFAULT_ZERO_THRESHOLD) return hi;
-  const dur = hi - pct * (hi - lo);
-  return Math.min(Math.max(dur, lo), hi);
+  return calcAnimDuration(value, timingEpsilon(peak, lo, hi));
 }
 
 describe('calcAnimDuration (v2.2 linear % of peak)', () => {
   const peak = 5000;
 
-  it('interpolates linearly between max (slow) and min (fast) duration', () => {
-    const atHalf = calcAnimDuration(2500, peak, minD, maxD);
+  it('interpolates linearly between max (slow) and min (fast) duration (epsilon mode)', () => {
+    const atHalf = calcAnimDuration(2500, timingEpsilon(peak));
     const expected = maxD - 0.5 * (maxD - minD);
     expect(atHalf).toBeCloseTo(expected, 5);
   });
 
   it('at full peak returns min duration (capped)', () => {
-    expect(calcAnimDuration(5000, peak, minD, maxD)).toBeCloseTo(minD, 4);
-    expect(calcAnimDuration(12_000, peak, minD, maxD)).toBeCloseTo(minD, 4);
+    expect(calcAnimDuration(5000, timingEpsilon(peak))).toBeCloseTo(minD, 4);
+    expect(calcAnimDuration(12_000, timingEpsilon(peak))).toBeCloseTo(minD, 4);
   });
 
-  it('below default zero threshold returns slowest duration', () => {
+  it('below DEFAULT_ANIM_EPSILON returns slowest duration (auto-stop)', () => {
+    const tiny = DEFAULT_ANIM_EPSILON * 0.5;
+    expect(calcAnimDuration(tiny, timingEpsilon(peak))).toBe(maxD);
+  });
+
+  it('advanced pct mode: below threshold returns slowest duration', () => {
     const tiny = peak * 0.0005;
-    expect(calcAnimDuration(tiny, peak, minD, maxD)).toBe(maxD);
+    expect(calcAnimDuration(tiny, timingPct(peak, DEFAULT_ZERO_THRESHOLD))).toBe(maxD);
   });
 
   it('uses abs(value); sign is direction only', () => {
-    expect(calcAnimDuration(-2500, peak, minD, maxD)).toBeCloseTo(calcAnimDuration(2500, peak, minD, maxD), 6);
+    expect(calcAnimDuration(-2500, timingEpsilon(peak))).toBeCloseTo(
+      calcAnimDuration(2500, timingEpsilon(peak)),
+      6,
+    );
   });
 
   it('normalizes swapped min/max to lo/hi ordering', () => {
-    const a = calcAnimDuration(2500, peak, 800, 200);
-    const b = calcAnimDuration(2500, peak, 200, 800);
+    const a = calcAnimDuration(2500, { ...timingEpsilon(peak), minDur: 800, maxDur: 200 });
+    const b = calcAnimDuration(2500, { ...timingEpsilon(peak), minDur: 200, maxDur: 800 });
     expect(a).toBeCloseTo(b, 5);
   });
 
   it('matches hand-derived envelope against profiles.peak', () => {
-    expect(calcAnimDuration(2500, energyProfile.peak, minD, maxD)).toBeCloseTo(
+    expect(calcAnimDuration(2500, timingEpsilon(energyProfile.peak))).toBeCloseTo(
       durationForLinear(2500, energyProfile.peak),
       5,
     );
@@ -98,7 +125,8 @@ describe('resolveAnimTiming', () => {
   it('uses flow.peak_value first, then override.peak, then defaults.peak_value, then profile.peak', () => {
     const r1 = resolveAnimTiming(flowWith({ peak_value: 123 }), energyProfile, cardBase);
     expect(r1.peak).toBe(123);
-    expect(r1.zeroThreshold).toBe(DEFAULT_ZERO_THRESHOLD);
+    expect(r1.zeroThreshold).toBeUndefined();
+    expect(r1.zeroThresholdEnabled).toBe(false);
     expect(r1.zeroThresholdSource).toBe('default');
 
     const r2 = resolveAnimTiming(
@@ -122,12 +150,15 @@ describe('resolveAnimTiming', () => {
       { animation: {}, defaults: {} },
     );
     expect(r.zeroThreshold).toBe(0.005);
+    expect(r.zeroThresholdEnabled).toBe(true);
     expect(r.zeroThresholdSource).toBe('per-flow');
     const r2 = resolveAnimTiming(flowWith(), energyProfile, { animation: {}, defaults: {} });
-    expect(r2.zeroThreshold).toBe(DEFAULT_ZERO_THRESHOLD);
+    expect(r2.zeroThreshold).toBeUndefined();
+    expect(r2.zeroThresholdEnabled).toBe(false);
     expect(r2.zeroThresholdSource).toBe('default');
     const rLegacy = resolveAnimTiming(flowWith(), energyProfile, legacyCardWithGlobalAnim());
-    expect(rLegacy.zeroThreshold).toBe(DEFAULT_ZERO_THRESHOLD);
+    expect(rLegacy.zeroThreshold).toBeUndefined();
+    expect(rLegacy.zeroThresholdEnabled).toBe(false);
     expect(rLegacy.zeroThresholdSource).toBe('default');
   });
 
@@ -152,6 +183,20 @@ describe('resolveAnimTiming', () => {
     );
     expect(r.minDur).toBe(600);
     expect(r.maxDur).toBe(12_000);
+  });
+});
+
+describe('isFlowMotionBelowCutoff (v2.2.3 epsilon vs advanced)', () => {
+  it('uses epsilon when advanced off', () => {
+    const t = timingEpsilon(5000);
+    expect(isFlowMotionBelowCutoff(DEFAULT_ANIM_EPSILON * 0.5, t)).toBe(true);
+    expect(isFlowMotionBelowCutoff(DEFAULT_ANIM_EPSILON * 2, t)).toBe(false);
+  });
+
+  it('uses pct of peak when advanced on', () => {
+    const t = timingPct(5000, 0.01);
+    expect(isFlowMotionBelowCutoff(40, t)).toBe(true);
+    expect(isFlowMotionBelowCutoff(60, t)).toBe(false);
   });
 });
 

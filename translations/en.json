@@ -39,9 +39,10 @@
       "peakValueHelper": "Override domain default peak value for speed calculation",
       "zeroThreshold": "Zero threshold (%)",
       "zeroThresholdCutoff": "Motion stops below",
+      "advancedOptions": "Advanced options",
+      "zeroThresholdAuto": "Leave empty to use auto-stop",
       "animMinMsPlaceholder": "Default 100ms",
-      "animMaxMsPlaceholder": "Default 10000ms",
-      "animZeroPctPlaceholder": "Default 0.2%"
+      "animMaxMsPlaceholder": "Default 10000ms"
     },
     "nodeEffect": {
       "section": "Node effect",

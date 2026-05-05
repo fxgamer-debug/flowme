@@ -281,7 +281,8 @@ export interface FlowAnimationConfig {
   /** Slowest one-cycle duration near zero (ms). v2.2+. Default 10 000 ms. */
   max_duration?: number;
   /**
-   * Fraction of peak below which flow motion is paused (0–1). v2.2.1+. Default 0.002 (0.2% of peak).
+   * Advanced only: fraction of peak below which flow motion is paused (0–1). When omitted, motion
+   * uses absolute auto-stop (strictly below 0.001 in profile units). v2.2.3+.
    */
   zero_threshold?: number;
 }

@@ -110,6 +110,7 @@ export {
   resolveAnimTiming,
   DEFAULT_ANIM_MIN_DURATION_MS,
   DEFAULT_ANIM_MAX_DURATION_MS,
+  DEFAULT_ANIM_EPSILON,
   DEFAULT_ZERO_THRESHOLD,
   normalizeAnimSensorValue,
   isFlowMotionBelowCutoff,

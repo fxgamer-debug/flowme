@@ -177,6 +177,8 @@ export class FlowmeCardEditor extends LitElement {
   @state() private flowEndpointError: string | null = null;
   /** Live zero-threshold % text while editing (per flow id) — drives reactive cutoff hint. */
   @state() private flowZeroThresholdDraft: Record<string, string> = {};
+  /** Advanced-options `<details>` open state per flow (undefined = derive from `zero_threshold` in config). */
+  @state() private flowInspectorAdvancedOpen: Record<string, boolean> = {};
   private _pathWorker?: Worker;
   private _pathWorkerPending = false;
   private _pathPendingSelection: { fromId: string; toId: string } | null = null;
@@ -1271,20 +1273,14 @@ export class FlowmeCardEditor extends LitElement {
               const timing = resolveAnimTiming(flow, prof, this.config);
               const domPeak = prof.peak;
               const previewPts = [0, timing.peak * 0.5, timing.peak];
-              const previewDurations = previewPts.map((v) =>
-                `${(calcAnimDuration(v, timing.peak, timing.minDur, timing.maxDur, timing.zeroThreshold) / 1000).toFixed(1)}s`,
+              const previewDurations = previewPts.map(
+                (v) => `${(calcAnimDuration(v, timing) / 1000).toFixed(1)}s`,
               );
-              const draftPct = this.flowZeroThresholdDraft[flow.id];
-              let ztFracForHint: number;
-              if (draftPct !== undefined && draftPct.trim() !== '') {
-                const p = parseFloat(draftPct);
-                ztFracForHint =
-                  Number.isFinite(p) && p > 0 && p <= 10 ? p / 100 : (flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD);
-              } else {
-                ztFracForHint = flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD;
-              }
-              const resolvedPeak = flow.peak_value ?? prof.peak;
-              const cutoffHint = `${t('editor.inspector.zeroThresholdCutoff')} ${(ztFracForHint * resolvedPeak).toFixed(1)}${prof.unit_label ? ` ${prof.unit_label}` : ''}`;
+              const hasZt = flow.animation?.zero_threshold !== undefined;
+              const advancedOpen =
+                this.flowInspectorAdvancedOpen[flow.id] !== undefined
+                  ? this.flowInspectorAdvancedOpen[flow.id]!
+                  : hasZt;
               return html`
                 <label>
                   ${t('editor.inspector.peakValue')}
@@ -1361,46 +1357,6 @@ export class FlowmeCardEditor extends LitElement {
                     }}
                   />
                 </label>
-                <label>
-                  ${t('editor.inspector.zeroThreshold')}
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    placeholder=${t('editor.inspector.animZeroPctPlaceholder')}
-                    .value=${this.flowZeroThresholdDraft[flow.id] !== undefined
-                      ? this.flowZeroThresholdDraft[flow.id]
-                      : flow.animation?.zero_threshold !== undefined
-                        ? (flow.animation.zero_threshold * 100).toFixed(1)
-                        : ''}
-                    @input=${(e: Event) => {
-                      const v = (e.target as HTMLInputElement).value;
-                      this.flowZeroThresholdDraft = { ...this.flowZeroThresholdDraft, [flow.id]: v };
-                    }}
-                    @change=${(e: Event) => {
-                      if (!this.config) return;
-                      const raw = (e.target as HTMLInputElement).value.trim();
-                      const prev = this.config;
-                      const clearDraft = (): void => {
-                        const { [flow.id]: _drop, ...restDraft } = this.flowZeroThresholdDraft;
-                        this.flowZeroThresholdDraft = restDraft;
-                      };
-                      if (raw === '') {
-                        clearDraft();
-                        const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
-                        this.pushPatch(prev, next, `clear flow zero_threshold ${flow.id}`);
-                        return;
-                      }
-                      const v = parseFloat(raw);
-                      if (!Number.isFinite(v) || v <= 0 || v > 10) return;
-                      clearDraft();
-                      const next = setFlowAnimation(prev, flow.id, { zero_threshold: v / 100 });
-                      this.pushPatch(prev, next, `set flow zero_threshold ${flow.id}`);
-                    }}
-                  />
-                  <span class="hint-sub">${cutoffHint}</span>
-                </label>
                 <div class="speed-curve-preview inspector-timing-preview">
                   <span>${t('editor.inspector.previewLinearSpeed')}</span>
                   <strong>${previewDurations[0]}</strong>
@@ -1409,6 +1365,87 @@ export class FlowmeCardEditor extends LitElement {
                   /
                   <strong>${previewDurations[2]}</strong>
                 </div>
+                <details
+                  class="advanced-options"
+                  .open=${advancedOpen}
+                  @toggle=${(e: Event) => {
+                    const el = e.currentTarget as HTMLDetailsElement;
+                    const open = el.open;
+                    this.flowInspectorAdvancedOpen = { ...this.flowInspectorAdvancedOpen, [flow.id]: open };
+                    if (!open) {
+                      const { [flow.id]: _z, ...restDraft } = this.flowZeroThresholdDraft;
+                      this.flowZeroThresholdDraft = restDraft;
+                      if (this.config && flow.animation?.zero_threshold !== undefined) {
+                        const prev = this.config;
+                        const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
+                        this.pushPatch(prev, next, `advanced closed: clear zero_threshold ${flow.id}`);
+                      }
+                    }
+                  }}
+                >
+                  <summary>${t('editor.inspector.advancedOptions')}</summary>
+                  <div class="advanced-options-content">
+                    ${(() => {
+                      const draftPct = this.flowZeroThresholdDraft[flow.id];
+                      let ztFracForHint: number;
+                      if (draftPct !== undefined && draftPct.trim() !== '') {
+                        const p = parseFloat(draftPct);
+                        ztFracForHint =
+                          Number.isFinite(p) && p > 0 && p <= 100
+                            ? p / 100
+                            : (flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD);
+                      } else {
+                        ztFracForHint = flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD;
+                      }
+                      const resolvedPeak = flow.peak_value ?? prof.peak;
+                      const cutoffHint = `${t('editor.inspector.zeroThresholdCutoff')} ${(ztFracForHint * resolvedPeak).toFixed(1)}${prof.unit_label ? ` ${prof.unit_label}` : ''}`;
+                      return html`
+                        <div class="field-row advanced-zero-row">
+                          <label>
+                            ${t('editor.inspector.zeroThreshold')}
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              placeholder=${t('editor.inspector.zeroThresholdAuto')}
+                              .value=${this.flowZeroThresholdDraft[flow.id] !== undefined
+                                ? this.flowZeroThresholdDraft[flow.id]
+                                : flow.animation?.zero_threshold !== undefined
+                                  ? (flow.animation.zero_threshold * 100).toFixed(1)
+                                  : ''}
+                              @input=${(e: Event) => {
+                                const v = (e.target as HTMLInputElement).value;
+                                this.flowZeroThresholdDraft = { ...this.flowZeroThresholdDraft, [flow.id]: v };
+                              }}
+                              @change=${(e: Event) => {
+                                if (!this.config) return;
+                                const raw = (e.target as HTMLInputElement).value.trim();
+                                const prev = this.config;
+                                const clearDraft = (): void => {
+                                  const { [flow.id]: _drop, ...restDraft } = this.flowZeroThresholdDraft;
+                                  this.flowZeroThresholdDraft = restDraft;
+                                };
+                                if (raw === '') {
+                                  clearDraft();
+                                  const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
+                                  this.pushPatch(prev, next, `clear flow zero_threshold ${flow.id}`);
+                                  return;
+                                }
+                                const v = parseFloat(raw);
+                                if (!Number.isFinite(v) || v <= 0 || v > 100) return;
+                                clearDraft();
+                                const next = setFlowAnimation(prev, flow.id, { zero_threshold: v / 100 });
+                                this.pushPatch(prev, next, `set flow zero_threshold ${flow.id}`);
+                              }}
+                            />
+                            <span class="field-hint hint-sub">${cutoffHint}</span>
+                          </label>
+                        </div>
+                      `;
+                    })()}
+                  </div>
+                </details>
               `;
             })()}
           </fieldset>
@@ -5302,6 +5339,37 @@ export class FlowmeCardEditor extends LitElement {
       font-size: 12px;
       font-weight: 600;
       margin-bottom: 6px;
+    }
+    .advanced-options {
+      margin-top: 12px;
+      border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.12));
+      padding-top: 8px;
+    }
+    .advanced-options summary {
+      cursor: pointer;
+      font-size: 0.85em;
+      color: var(--secondary-text-color, rgba(255, 255, 255, 0.55));
+      user-select: none;
+      list-style: none;
+    }
+    .advanced-options summary::before {
+      content: '▶ ';
+      font-size: 0.75em;
+    }
+    .advanced-options[open] summary::before {
+      content: '▼ ';
+    }
+    .advanced-options-content {
+      padding-top: 8px;
+    }
+    .advanced-zero-row label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+    }
+    .advanced-zero-row input[type='number'] {
+      max-width: 120px;
     }
     .dual-unit-row {
       display: flex;

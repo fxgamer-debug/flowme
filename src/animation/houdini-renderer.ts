@@ -255,7 +255,7 @@ export class HoudiniRenderer implements FlowRenderer {
       ? 1e9
       : Math.max(
           50,
-          calcAnimDuration(numValue, timing.peak, timing.minDur, timing.maxDur, timing.zeroThreshold) *
+          calcAnimDuration(numValue, timing) *
             speedMultiplier,
         );
     const dirCfg = flow.animation?.direction ?? 'auto';

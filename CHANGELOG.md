@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.3]
+
+### Added
+
+- **Flow inspector — Advanced options:** Collapsible section (closed by default) for an optional **zero threshold (% of peak)**. Undo/redo applies to opening/closing and threshold edits via `pushPatch`.
+
+### Changed
+
+- **Auto-stop (default):** When no per-flow `animation.zero_threshold` is set, flow motion pauses when the absolute scaled sensor value is **strictly below 0.001** in the profile’s base unit (W, L/min, m³/h, Mbps, etc.) instead of using a percentage of peak.
+- **Advanced threshold:** Explicit `zero_threshold` in YAML still uses the **% of peak** rule. `DEFAULT_ZERO_THRESHOLD` (0.2%) remains the semantic default for invalid advanced values only — not for auto-stop.
+
 ## [2.2.2]
 
 ### Changed
