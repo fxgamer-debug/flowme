@@ -5549,16 +5549,21 @@ let P = class extends oe {
         }}
                     @change=${(h) => {
           if (!this.config) return;
-          const u = h.target.value.trim(), f = this.config, { [t.id]: g, ...b } = this.flowZeroThresholdDraft;
-          if (this.flowZeroThresholdDraft = b, u === "") {
-            const $ = te(f, t.id, { zero_threshold: void 0 });
-            this.pushPatch(f, $, `clear flow zero_threshold ${t.id}`);
+          const u = h.target.value.trim(), f = this.config, g = () => {
+            const { [t.id]: m, ...$ } = this.flowZeroThresholdDraft;
+            this.flowZeroThresholdDraft = $;
+          };
+          if (u === "") {
+            g();
+            const m = te(f, t.id, { zero_threshold: void 0 });
+            this.pushPatch(f, m, `clear flow zero_threshold ${t.id}`);
             return;
           }
-          const v = parseFloat(u);
-          if (!Number.isFinite(v) || v <= 0 || v > 10) return;
-          const m = te(f, t.id, { zero_threshold: v / 100 });
-          this.pushPatch(f, m, `set flow zero_threshold ${t.id}`);
+          const b = parseFloat(u);
+          if (!Number.isFinite(b) || b <= 0 || b > 10) return;
+          g();
+          const v = te(f, t.id, { zero_threshold: b / 100 });
+          this.pushPatch(f, v, `set flow zero_threshold ${t.id}`);
         }}
                   />
                   <span class="hint-sub">${p}</span>
