@@ -2,6 +2,13 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.1]
+
+### Fixed
+
+- **Editor — Add weather state:** New rows are accepted again; empty placeholder image URLs validate, and `weather_states` updates use a fresh object reference for each patch.
+- **Editor — background image browser:** Browses the **`www`** media folder (`media-source://media_source/www/.`, mapped from `/config/www` → `/local/…` when `homeassistant.media_dirs.www` is set). Shows setup instructions when browsing is unavailable; browse control added for each weather-state image URL; `.avif` included in the filter.
+
 ## [2.3]
 
 ### Added

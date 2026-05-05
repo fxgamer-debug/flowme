@@ -367,6 +367,10 @@ export const STRINGS = {
       loading: 'Loading…',
       browserUnavailable:
         'Media Source integration not available. Enable it to browse files, or enter a URL manually.',
+      browserSetupRequired:
+        'To enable image browsing, add this to configuration.yaml and restart Home Assistant:',
+      browserSetupRestart: 'After restarting, the browser will show images from /config/www/',
+      browserSetupDocs: 'View setup guide',
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',

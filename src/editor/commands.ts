@@ -286,8 +286,21 @@ export function setWeatherStateImage(
   url: string,
 ): FlowmeConfig {
   const next = cloneConfig(config);
-  next.background.weather_states ??= {};
-  next.background.weather_states[stateKey] = url;
+  const existing = next.background.weather_states ?? {};
+  next.background.weather_states = { ...existing, [stateKey]: url };
+  return next;
+}
+
+/** Adds a new placeholder weather→image row (empty URL) with a unique `state_N` key. */
+export function addWeatherStatePlaceholder(config: FlowmeConfig): FlowmeConfig {
+  const next = cloneConfig(config);
+  const existing = next.background.weather_states ?? {};
+  let i = 1;
+  while (Object.prototype.hasOwnProperty.call(existing, `state_${i}`)) {
+    i += 1;
+  }
+  const newKey = `state_${i}`;
+  next.background.weather_states = { ...existing, [newKey]: '' };
   return next;
 }
 

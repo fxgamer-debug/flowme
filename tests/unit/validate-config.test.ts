@@ -119,6 +119,20 @@ describe('validateConfig — happy path', () => {
     expect(cfg.background.default).toBe('/media/local/photo.jpg');
   });
 
+  it('allows empty weather_states image URL placeholders', () => {
+    const cfg = validateConfig({
+      ...minimalConfig(),
+      background: {
+        default: '/local/bg.jpg',
+        weather_states: { partlycloudy: '', sunny: '/local/sun.jpg' },
+      },
+    });
+    expect(cfg.background.weather_states).toEqual({
+      partlycloudy: '',
+      sunny: '/local/sun.jpg',
+    });
+  });
+
   it('omits flow label when empty or identical to id', () => {
     const mk = (label: unknown) =>
       validateConfig({

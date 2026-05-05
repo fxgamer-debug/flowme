@@ -44,6 +44,7 @@ import {
   addFlow,
   addNode,
   addOverlay,
+  addWeatherStatePlaceholder,
   clampPercent,
   deleteFlow,
   deleteNode,
@@ -103,18 +104,9 @@ import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-ef
 
 import PathfindingWorker from './pathfinding/pathfinding.worker.ts?worker&inline';
 
-const IMAGE_BROWSER_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+const IMAGE_BROWSER_NOT_CONFIGURED = 'not_configured';
 
-/** Map HA Media Source local id to a path served by the HA host (for `/media/local/...`). */
-function mediaContentIdToLocalUrl(mediaContentId: string): string {
-  const prefix = 'media-source://media_source/local/';
-  const lower = mediaContentId.toLowerCase();
-  const p = lower.indexOf(prefix);
-  if (p === -1) return mediaContentId;
-  let rest = mediaContentId.slice(p + prefix.length);
-  if (rest.startsWith('./')) rest = rest.slice(2);
-  return `/media/local/${rest}`;
-}
+const IMAGE_BROWSER_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.avif'];
 
 type DragTarget =
   | { kind: 'node'; id: string }
@@ -197,7 +189,9 @@ export class FlowmeCardEditor extends LitElement {
   @state() private imageBrowserOpen = false;
   @state() private imageBrowserLoading = false;
   @state() private imageBrowserError = '';
-  @state() private imageBrowserFiles: { name: string; url: string; thumb?: string }[] = [];
+  @state() private imageBrowserField: 'default' | 'weather' = 'default';
+  @state() private imageBrowserWeatherState?: string;
+  @state() private imageBrowserFiles: { name: string; url: string }[] = [];
   private _pathWorker?: Worker;
   private _pathWorkerPending = false;
   private _pathPendingSelection: { fromId: string; toId: string } | null = null;
@@ -3149,7 +3143,7 @@ export class FlowmeCardEditor extends LitElement {
                 class="tb-icon-btn"
                 title=${t('editor.stateA.browseImages')}
                 aria-label=${t('editor.stateA.browseImages')}
-                @click=${() => void this.openImageBrowser()}
+                @click=${() => void this.openImageBrowser('default')}
               >
                 📁
               </button>
@@ -3159,35 +3153,51 @@ export class FlowmeCardEditor extends LitElement {
                   <div class="image-browser">
                     ${this.imageBrowserLoading
                       ? html`<div class="browser-loading">${t('editor.stateA.loading')}</div>`
-                      : this.imageBrowserError
-                        ? html`<div class="browser-error">${this.imageBrowserError}</div>`
-                        : html`
-                            <div class="browser-grid">
-                              ${this.imageBrowserFiles.map(
-                                (file) => html`
-                                  <div
-                                    class="browser-item ${bg.default === file.url ? 'browser-item--selected' : ''}"
-                                    role="button"
-                                    tabindex="0"
-                                    @click=${() => this.selectBgImage(file.url)}
-                                    @keydown=${(e: KeyboardEvent) => {
-                                      if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        this.selectBgImage(file.url);
-                                      }
-                                    }}
-                                  >
-                                    <img
-                                      src=${file.thumb ?? file.url}
-                                      loading="lazy"
-                                      alt=${file.name}
-                                    />
-                                    <span class="browser-name">${file.name}</span>
-                                  </div>
-                                `,
-                              )}
+                      : this.imageBrowserError === IMAGE_BROWSER_NOT_CONFIGURED
+                        ? html`
+                            <div class="browser-setup-guide">
+                              <p>${t('editor.stateA.browserSetupRequired')}</p>
+                              <pre class="browser-code">homeassistant:
+  media_dirs:
+    www: /config/www</pre>
+                              <p>${t('editor.stateA.browserSetupRestart')}</p>
+                              <a
+                                href="https://www.home-assistant.io/more-info/local-media/setup-media/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="browser-setup-link"
+                              >
+                                ${t('editor.stateA.browserSetupDocs')} ↗
+                              </a>
                             </div>
-                          `}
+                          `
+                        : this.imageBrowserError
+                          ? html`<div class="browser-error">${this.imageBrowserError}</div>`
+                          : html`
+                              <div class="browser-grid">
+                                ${this.imageBrowserFiles.map(
+                                  (file) => html`
+                                    <div
+                                      class="browser-item ${this.currentImageBrowserTargetUrl(bg) === file.url
+                                        ? 'browser-item--selected'
+                                        : ''}"
+                                      role="button"
+                                      tabindex="0"
+                                      @click=${() => this.selectBgImage(file.url)}
+                                      @keydown=${(e: KeyboardEvent) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                          e.preventDefault();
+                                          this.selectBgImage(file.url);
+                                        }
+                                      }}
+                                    >
+                                      <img src=${file.url} loading="lazy" alt=${file.name} />
+                                      <span class="browser-name">${file.name}</span>
+                                    </div>
+                                  `,
+                                )}
+                              </div>
+                            `}
                   </div>
                 `
               : nothing}
@@ -3264,17 +3274,29 @@ export class FlowmeCardEditor extends LitElement {
                     .value=${key}
                     @change=${(e: Event) => this.onWeatherStateKeyChange(key, e)}
                   />
-                  <input
-                    type="text"
-                    .value=${url}
-                    @change=${(e: Event) => this.onWeatherStateUrlChange(key, e)}
-                    placeholder=${t('editor.inspector.weatherRowPlaceholder')}
-                  />
+                  <div class="bg-url-row weather-url-row">
+                    <input
+                      type="text"
+                      class="bg-url-input"
+                      .value=${url}
+                      @change=${(e: Event) => this.onWeatherStateUrlChange(key, e)}
+                      placeholder=${t('editor.inspector.weatherRowPlaceholder')}
+                    />
+                    <button
+                      type="button"
+                      class="tb-icon-btn"
+                      title=${t('editor.stateA.browseImages')}
+                      aria-label=${t('editor.stateA.browseImages')}
+                      @click=${() => void this.openImageBrowser('weather', key)}
+                    >
+                      📁
+                    </button>
+                  </div>
                   <div class="weather-row-end">
                     ${url
                       ? html`<img class="weather-thumb" src=${url} alt=${key} />`
                       : nothing}
-                    <button class="ghost" @click=${() => this.onWeatherStateRemove(key)}>
+                    <button type="button" class="ghost" @click=${() => this.onWeatherStateRemove(key)}>
                       ${t('editor.inspector.remove')}
                     </button>
                   </div>
@@ -3312,48 +3334,71 @@ export class FlowmeCardEditor extends LitElement {
     this.pushPatch(prev, next, 'edit default background');
   };
 
-  private async openImageBrowser(): Promise<void> {
-    this.imageBrowserOpen = !this.imageBrowserOpen;
-    if (!this.imageBrowserOpen) {
+  private currentImageBrowserTargetUrl(bg: FlowmeConfig['background']): string {
+    if (this.imageBrowserField === 'weather' && this.imageBrowserWeatherState) {
+      return bg.weather_states?.[this.imageBrowserWeatherState] ?? '';
+    }
+    return bg.default ?? '';
+  }
+
+  private async openImageBrowser(field: 'default' | 'weather', weatherState?: string): Promise<void> {
+    const sameContext =
+      this.imageBrowserOpen &&
+      this.imageBrowserField === field &&
+      (field === 'default' || this.imageBrowserWeatherState === weatherState);
+    if (sameContext) {
+      this.imageBrowserOpen = false;
       this.requestUpdate();
       return;
     }
+
+    this.imageBrowserOpen = true;
+    this.imageBrowserField = field;
+    this.imageBrowserWeatherState = weatherState;
     this.imageBrowserError = '';
-    if (this.imageBrowserFiles.length > 0) {
-      this.requestUpdate();
-      return;
-    }
+    this.imageBrowserFiles = [];
+    this.imageBrowserLoading = true;
+    this.requestUpdate();
+
     const hass = this.hass;
     if (!hass || typeof hass.callWS !== 'function') {
+      this.imageBrowserLoading = false;
       this.imageBrowserError = t('editor.stateA.browserUnavailable');
       this.requestUpdate();
       return;
     }
-    this.imageBrowserLoading = true;
-    this.requestUpdate();
+
     try {
       const result = (await hass.callWS({
         type: 'media_source/browse_media',
-        media_content_id: 'media-source://media_source/local/.',
+        media_content_id: 'media-source://media_source/www/.',
       })) as {
-        children?: Array<{ title?: string; media_content_id?: string; thumbnail?: string }>;
+        children?: Array<{ title?: string; media_content_id?: string }>;
       };
       const children = result?.children ?? [];
-      this.imageBrowserFiles = children
+      const files = children
         .filter((item) => {
           const id = (item.media_content_id ?? '').toLowerCase();
           return IMAGE_BROWSER_EXTS.some((ext) => id.endsWith(ext));
         })
         .map((item) => {
-          const mc = item.media_content_id ?? '';
+          const title = item.title ?? '';
+          const safeTitle = title.replace(/^\/+/, '');
           return {
-            name: item.title ?? mc,
-            url: mediaContentIdToLocalUrl(mc),
-            thumb: item.thumbnail,
+            name: title || (item.media_content_id ?? ''),
+            url: `/local/${safeTitle}`,
           };
-        });
+        })
+        .filter((f) => f.name.length > 0);
+
+      if (files.length === 0 && !children.length) {
+        this.imageBrowserError = IMAGE_BROWSER_NOT_CONFIGURED;
+        this.imageBrowserFiles = [];
+      } else {
+        this.imageBrowserFiles = files;
+      }
     } catch {
-      this.imageBrowserError = t('editor.stateA.browserUnavailable');
+      this.imageBrowserError = IMAGE_BROWSER_NOT_CONFIGURED;
       this.imageBrowserFiles = [];
     } finally {
       this.imageBrowserLoading = false;
@@ -3364,9 +3409,19 @@ export class FlowmeCardEditor extends LitElement {
   private selectBgImage(url: string): void {
     if (!this.config) return;
     const prev = this.config;
-    const next = setBackgroundDefault(prev, url);
-    this.pushPatch(prev, next, 'Set background image');
+    let next: FlowmeConfig;
+    let desc: string;
+    if (this.imageBrowserField === 'weather' && this.imageBrowserWeatherState) {
+      next = setWeatherStateImage(prev, this.imageBrowserWeatherState, url);
+      desc = 'Set weather state image';
+    } else {
+      next = setBackgroundDefault(prev, url);
+      desc = 'Set background image';
+    }
+    this.pushPatch(prev, next, desc);
     this.imageBrowserOpen = false;
+    this.imageBrowserField = 'default';
+    this.imageBrowserWeatherState = undefined;
   }
 
   private setWeatherEntityValue(value: string): void {
@@ -3404,11 +3459,11 @@ export class FlowmeCardEditor extends LitElement {
 
   private onWeatherStateAdd = (): void => {
     if (!this.config) return;
-    const existing = new Set(Object.keys(this.config.background.weather_states ?? {}));
-    const candidate = FlowmeCardEditor.KNOWN_WEATHER_STATES.find((s) => !existing.has(s)) ?? 'custom';
     const prev = this.config;
-    const next = setWeatherStateImage(prev, candidate, '');
-    this.pushPatch(prev, next, `add weather state ${candidate}`);
+    const next = addWeatherStatePlaceholder(prev);
+    const prevMap = prev.background.weather_states ?? {};
+    const newKey = Object.keys(next.background.weather_states ?? {}).find((k) => !(k in prevMap));
+    this.pushPatch(prev, next, newKey ? `Add weather state ${newKey}` : 'Add weather state');
   };
 
   // -- toolbar --
@@ -5647,6 +5702,32 @@ export class FlowmeCardEditor extends LitElement {
     }
     .browser-error {
       color: var(--error-color, #f87171);
+    }
+    .browser-setup-guide {
+      padding: 12px;
+      font-size: 0.85em;
+      color: var(--secondary-text-color, rgba(255, 255, 255, 0.55));
+    }
+    .browser-code {
+      background: var(--code-editor-background, #1e1e1e);
+      color: var(--token-color-text, #d4d4d4);
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      margin: 8px 0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .browser-setup-link {
+      color: var(--primary-color, #4ade80);
+      text-decoration: none;
+    }
+    .browser-setup-link:hover {
+      text-decoration: underline;
+    }
+    .weather-url-row {
+      min-width: 0;
+      width: 100%;
     }
     .browser-grid {
       display: grid;

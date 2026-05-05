@@ -657,6 +657,13 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     const entries = Object.entries(bg['weather_states'] as Record<string, unknown>);
     const states: Record<string, string> = {};
     for (const [state, url] of entries) {
+      if (url === '' || url === undefined) {
+        states[state] = '';
+        continue;
+      }
+      if (typeof url !== 'string') {
+        fail(`background.weather_states.${state}`, t('validation.mustBeString'));
+      }
       states[state] = validateUrlScheme(url, `background.weather_states.${state}`);
     }
     background.weather_states = states;

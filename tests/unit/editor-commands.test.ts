@@ -16,6 +16,7 @@ import {
   insertWaypoint,
   deleteWaypoint,
   addOverlay,
+  addWeatherStatePlaceholder,
   moveOverlay,
   deleteOverlay,
   setOverlaySize,
@@ -236,6 +237,13 @@ describe('background + weather commands', () => {
     cfg = deleteWeatherState(cfg, 'clear');
     cfg = deleteWeatherState(cfg, 'rainy');
     expect(cfg.background.weather_states).toBeUndefined();
+  });
+
+  it('addWeatherStatePlaceholder appends state_N with empty URL', () => {
+    let cfg = addWeatherStatePlaceholder(baseConfig());
+    expect(cfg.background.weather_states).toEqual({ state_1: '' });
+    cfg = addWeatherStatePlaceholder(cfg);
+    expect(cfg.background.weather_states).toEqual({ state_1: '', state_2: '' });
   });
 });
 
