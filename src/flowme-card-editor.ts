@@ -1382,15 +1382,19 @@ export class FlowmeCardEditor extends LitElement {
                       if (!this.config) return;
                       const raw = (e.target as HTMLInputElement).value.trim();
                       const prev = this.config;
-                      const { [flow.id]: _drop, ...restDraft } = this.flowZeroThresholdDraft;
-                      this.flowZeroThresholdDraft = restDraft;
+                      const clearDraft = (): void => {
+                        const { [flow.id]: _drop, ...restDraft } = this.flowZeroThresholdDraft;
+                        this.flowZeroThresholdDraft = restDraft;
+                      };
                       if (raw === '') {
+                        clearDraft();
                         const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
                         this.pushPatch(prev, next, `clear flow zero_threshold ${flow.id}`);
                         return;
                       }
                       const v = parseFloat(raw);
                       if (!Number.isFinite(v) || v <= 0 || v > 10) return;
+                      clearDraft();
                       const next = setFlowAnimation(prev, flow.id, { zero_threshold: v / 100 });
                       this.pushPatch(prev, next, `set flow zero_threshold ${flow.id}`);
                     }}
