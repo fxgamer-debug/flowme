@@ -11,3 +11,13 @@ updates:
         patterns:
           - 'vitest'
           - '@vitest/*'
+      # Vite 8 expects compatible esbuild as peer for workers/minify — bump together.
+      vite:
+        patterns:
+          - 'vite'
+          - 'esbuild'
+      # typescript-eslint meta-package + scoped plugins/parser stay aligned.
+      typescript-eslint:
+        patterns:
+          - 'typescript-eslint'
+          - '@typescript-eslint/*'

@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.6]
+
+### Changed
+
+- **Dependencies:** `lit` ^3.3.2, `custom-card-helpers` ^2.0.0.
+- **Dev dependencies:** `vite` ^8, `typescript-eslint` ^8.59.x (merged meta-package only — removed duplicate `@typescript-eslint/eslint-plugin` / `parser` pins), `esbuild` ^0.28 (required peer for Vite 8 workers).
+
+### Fixed
+
+- **Dependabot / CI:** Group `vite` + `esbuild` and `typescript-eslint` + `@typescript-eslint/*` so npm resolves cleanly; Vite 8 build updated (`build.codeSplitting: false` replaces deprecated `inlineDynamicImports`).
+
 ## [2.5.5]
 
 ### Changed

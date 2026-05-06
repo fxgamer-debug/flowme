@@ -35,6 +35,7 @@ export default defineConfig({
     open: true,
   },
   build: {
+    codeSplitting: false,
     lib: {
       entry: resolve(__dirname, 'src/flowme-card.ts'),
       formats: ['es'],
@@ -42,7 +43,6 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        inlineDynamicImports: true,
         assetFileNames: '[name][extname]',
       },
     },
