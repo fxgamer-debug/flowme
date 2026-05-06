@@ -24,8 +24,8 @@ import {
   setOverlayVisible,
   setOverlayOpacity,
   setBackgroundDefault,
+  setBackgroundTransparent,
   setTransitionDuration,
-  setWeatherEffects,
   setWeatherStateImage,
   deleteWeatherState,
   renameFlowId,
@@ -214,11 +214,11 @@ describe('background + weather commands', () => {
     expect(cfg.background.default).toBe('/local/new.jpg');
   });
 
-  it('setWeatherEffects toggles optional flag', () => {
-    let cfg = setWeatherEffects(baseConfig(), true);
-    expect(cfg.background.weather_effects).toBe(true);
-    cfg = setWeatherEffects(cfg, false);
-    expect(cfg.background.weather_effects).toBeUndefined();
+  it('setBackgroundTransparent toggles optional flag', () => {
+    let cfg = setBackgroundTransparent(baseConfig(), true);
+    expect(cfg.background.transparent).toBe(true);
+    cfg = setBackgroundTransparent(cfg, false);
+    expect(cfg.background.transparent).toBeUndefined();
   });
 
   it('setTransitionDuration floors + clamps to ≥0, undefined clears', () => {

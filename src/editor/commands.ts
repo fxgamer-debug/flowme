@@ -270,10 +270,10 @@ export function setSunEntity(
   return next;
 }
 
-export function setWeatherEffects(config: FlowmeConfig, enabled: boolean): FlowmeConfig {
+export function setBackgroundTransparent(config: FlowmeConfig, enabled: boolean): FlowmeConfig {
   const next = cloneConfig(config);
-  if (enabled) next.background.weather_effects = true;
-  else delete next.background.weather_effects;
+  if (enabled) next.background.transparent = true;
+  else delete next.background.transparent;
   return next;
 }
 

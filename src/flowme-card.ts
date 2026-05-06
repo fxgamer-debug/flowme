@@ -25,15 +25,8 @@ import { dlog, peekDebugFromRaw, setDebugEnabled } from './debug-log.js';
 import { flowDisplayName } from './utils.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
-import {
-  createWeatherEffect,
-  destroyWeatherEffect,
-  isWeatherEffectType,
-  type WeatherEffect,
-} from './weather-effects.js';
-
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.5.3';
+const CARD_VERSION = '2.5.4';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -209,8 +202,6 @@ export class FlowmeCard extends LitElement {
   private renderer: FlowRenderer | null = null;
   private readonly rendererMount: Ref<HTMLDivElement> = createRef();
   private readonly nodeFxSvgRef: Ref<SVGSVGElement> = createRef();
-  private readonly weatherFxHostRef: Ref<HTMLDivElement> = createRef();
-  private _weatherEffect?: WeatherEffect;
   private readonly nodeFx = new NodeEffectsLayerController();
   /** Drives pulse/ripple/alert time-based visuals every frame (v1.23.2). */
   private _nodeFxRaf: number | null = null;
@@ -240,9 +231,11 @@ export class FlowmeCard extends LitElement {
    * so the HA editor preview stays responsive.
    */
   private needsRendererReinit(prev: FlowmeConfig, next: FlowmeConfig): boolean {
-    if (prev.domain !== next.domain) return true;
-    const prevIds = new Set(prev.flows.map((f) => f.id));
-    const nextIds = new Set(next.flows.map((f) => f.id));
+    const p = { ...prev, background: undefined };
+    const n = { ...next, background: undefined };
+    if (p.domain !== n.domain) return true;
+    const prevIds = new Set(p.flows.map((f) => f.id));
+    const nextIds = new Set(n.flows.map((f) => f.id));
     if (prevIds.size !== nextIds.size) return true;
     for (const id of prevIds) {
       if (!nextIds.has(id)) return true;
@@ -339,7 +332,6 @@ export class FlowmeCard extends LitElement {
       const message = err instanceof FlowmeConfigError ? err.message : String(err);
       this.config = undefined;
       this.errorMessage = message;
-      this.clearWeatherEffect();
       this.teardownRenderer();
     }
   }
@@ -376,7 +368,6 @@ export class FlowmeCard extends LitElement {
       window.clearTimeout(this.toastHideTimer);
       this.toastHideTimer = null;
     }
-    this.clearWeatherEffect();
     super.disconnectedCallback();
   }
 
@@ -391,6 +382,21 @@ export class FlowmeCard extends LitElement {
     if (!this.config) return;
     const mount = this.rendererMount.value;
     if (!mount || this.rendererReadyFor === this.config) return;
+
+    if (
+      this.renderer &&
+      this.rendererReadyFor &&
+      typeof this.renderer.applyConfig === 'function' &&
+      !this.needsRendererReinit(this.rendererReadyFor, this.config)
+    ) {
+      dlog('[FlowMe] renderer applyConfig (skip reinit):', performance.now());
+      this.renderer.applyConfig(this.config);
+      this.rendererReadyFor = this.config;
+      if (this.hass) this.pushAllValuesToRenderer();
+      else this.syncRendererAriaLabels();
+      this.syncAnimationsToDocumentVisibility();
+      return;
+    }
 
     dlog('renderer init start:', performance.now());
     this.teardownRenderer();
@@ -440,7 +446,10 @@ export class FlowmeCard extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
-    if (this.config && !this.config.background?.default) {
+    const bg = this.config?.background;
+    const transparentHost =
+      !!this.config && (bg?.transparent === true || !bg?.default?.trim());
+    if (transparentHost) {
       this.style.setProperty('background', 'transparent');
       this.style.setProperty('box-shadow', 'none');
     } else if (this.config) {
@@ -457,31 +466,6 @@ export class FlowmeCard extends LitElement {
       this.nodeFx.sync(svg, this.config, this.hass, performance.now(), this.nodeEffectHooks());
     }
     this.ensureNodeEffectsRaf();
-    this.syncWeatherEffects();
-  }
-
-  /** CSS overlay matching HA weather state when `background.weather_effects` is enabled. */
-  private syncWeatherEffects(): void {
-    const cfg = this.config?.background;
-    const host = this.weatherFxHostRef.value;
-    if (!cfg?.weather_effects || !cfg.weather_entity || !this.hass || !host) {
-      this.clearWeatherEffect();
-      return;
-    }
-    const state = this.hass.states[cfg.weather_entity]?.state;
-    if (!state || !isWeatherEffectType(state)) {
-      this.clearWeatherEffect();
-      return;
-    }
-    if (this._weatherEffect?.type === state) return;
-    this.clearWeatherEffect();
-    this._weatherEffect = createWeatherEffect(state, host);
-  }
-
-  private clearWeatherEffect(): void {
-    if (!this._weatherEffect) return;
-    destroyWeatherEffect(this._weatherEffect);
-    this._weatherEffect = undefined;
   }
 
   private syncPauseWhenHiddenListener(): void {
@@ -836,6 +820,7 @@ export class FlowmeCard extends LitElement {
 
     const opacityVars = buildOpacityVars(config.opacity);
     const visibilityVars = buildVisibilityVars(config.visibility);
+    const suppressCardBackground = config.background.transparent === true;
 
     return html`
       <ha-card role="region" aria-label=${t('aria.card')}>
@@ -845,13 +830,16 @@ export class FlowmeCard extends LitElement {
         >
           <div
             class=${`background ${this.activeLayer === 'A' ? 'visible' : ''}`}
-            style=${this.buildLayerStyle(this.bgLayerA, transitionMs)}
+            style=${suppressCardBackground
+              ? 'opacity:0;pointer-events:none;'
+              : this.buildLayerStyle(this.bgLayerA, transitionMs)}
           ></div>
           <div
             class=${`background ${this.activeLayer === 'B' ? 'visible' : ''}`}
-            style=${this.buildLayerStyle(this.bgLayerB, transitionMs)}
+            style=${suppressCardBackground
+              ? 'opacity:0;pointer-events:none;'
+              : this.buildLayerStyle(this.bgLayerB, transitionMs)}
           ></div>
-          <div class="flowme-weather-fx-host" ${ref(this.weatherFxHostRef)}></div>
           <div class="renderer-mount" ${ref(this.rendererMount)}></div>
           <svg
             class="node-effects-svg"
@@ -1140,13 +1128,6 @@ export class FlowmeCard extends LitElement {
     }
     .background.visible {
       opacity: var(--flowme-opacity-bg, 1);
-    }
-    .flowme-weather-fx-host {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      overflow: hidden;
-      z-index: 1;
     }
     .stage::after {
       content: '';

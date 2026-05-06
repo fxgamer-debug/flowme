@@ -375,9 +375,8 @@ export const STRINGS = {
       browserSetupNote:
         'Images placed in this folder will appear in the browser automatically.',
       browserSetupDocs: 'View setup guide',
-      weatherEffects: 'Weather effects',
-      weatherEffectsHelper:
-        'Animate weather conditions with CSS overlays. Not recommended with animated backgrounds on low-powered devices.',
+      transparentMode: 'Transparent background',
+      transparentModeHelper: 'Show transparent background instead of image',
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',

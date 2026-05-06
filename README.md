@@ -117,8 +117,6 @@ background:
   default: /local/community/flowme/backgrounds/rain.gif
 ```
 
-**Note:** Using animated backgrounds together with **CSS weather effects** (see **FEATURES.md**) is not recommended on low-powered or always-on devices; it may reduce performance. Prefer one or the other.
-
 Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP under 1MB; APNG under 1MB (WebP often looks better than GIF at a smaller size).
 
 ---
@@ -144,7 +142,11 @@ Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP unde
 | `background.sun_entity`       | string | Sun entity (e.g. `sun.sun`) for night variant keys |
 | `background.transition_duration` | number | Crossfade duration in **milliseconds** (default 5000 if omitted) |
 | `background.weather_states`   | object | Map of weather state → image URL |
-| `background.weather_effects`  | bool   | When `true` and `weather_entity` is set, animated CSS overlays match the current weather (default `false`) |
+| `background.transparent`      | bool   | When `true`, transparent card chrome and hide background imagery; URLs stay in config (default `false`) |
+
+### Transparent background
+
+Use **`background.transparent: true`** when you want the Lovelace theme to show through: the card uses a transparent host and does not paint the default or weather-driven background layers, while your URLs remain in YAML for when you set the flag back to `false`. You can also omit or leave **`background.default`** empty for a transparent card without setting the flag.
 
 ### Nodes
 
@@ -173,8 +175,10 @@ Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP unde
 | `line_style`      | string | `corner` \| `diagonal` \| `curve` \| `smooth` |
 | `color`           | string | Override flow colour |
 | `value_gradient`  | object | Gradient colour config |
+| `label`           | string | Optional display label for the flow (inspector and ARIA); omit or match `id` to hide |
+| `visible`         | boolean | When `false`, hides the flow line and particles on the dashboard card (default `true`) |
 
-Per-flow animation options (`animation_style`, `particle_shape`, `direction`, spacing, etc.) belong under a **`animation`** object on each flow in YAML (see **`FEATURES.md`**).
+Per-flow animation options (`animation_style`, `particle_shape`, `direction`, spacing, etc.) belong under an **`animation`** object on each flow in YAML (see **`FEATURES.md`**).
 
 ### Overlays
 
@@ -193,18 +197,18 @@ overlays:
 
 ## Domains
 
-FlowMe includes built-in profiles for:
+FlowMe includes built-in profiles for six domains. Default **peak** values used for speed-curve calibration:
 
-| Domain   | Roles                              | Units        |
-| -------- | ---------------------------------- | ------------ |
-| energy   | Solar, Grid, Battery, Load         | sensor unit  |
-| water    | Supply, Drain, Storage, Transfer | sensor unit  |
-| network  | Upload, Download, Local, External | sensor unit  |
-| hvac     | Supply air, Return air, Fresh, Exhaust | sensor unit  |
-| gas      | Inlet, Outlet, Bypass, Vent      | sensor unit  |
-| generic  | Flow 1–4                           | sensor unit  |
+| Domain  | Roles | Default peak |
+| ------- | ----- | ------------- |
+| `energy` | Solar, Grid, Battery, Load | **5000** W |
+| `water` | Supply, Drain, Storage, Transfer | **25** L/min |
+| `network` | Upload, Download, Local, External | **100** Mbps |
+| `hvac` | Supply air, Return air, Fresh, Exhaust | **600** m³/h |
+| `gas` | Inlet, Outlet, Bypass, Vent | **5** m³/h |
+| `generic` | Flow 1–4 | **100** (dimensionless) |
 
-FlowMe reads `unit_of_measurement` directly from the HA sensor and displays it as-is. The speed curve for each domain is calibrated to watts (energy), litres per minute (water), and Mbps (network) but accepts any sensor unit — adjust peak_value in the speed curve config to match your sensor’s scale.
+FlowMe reads `unit_of_measurement` from the HA sensor and displays it as-is. Adjust **`defaults.peak_value`** (or per-flow overrides) if your sensors use a different scale than these defaults.
 
 ---
 

@@ -245,9 +245,10 @@ export class HoudiniRenderer implements FlowRenderer {
     const belowCutoff = isFlowMotionBelowCutoff(numValue, timing, { flowId });
 
     if (flow.visible === false) {
-      div.el.style.opacity = '0';
+      div.el.style.display = 'none';
       return;
     }
+    div.el.style.display = '';
     div.el.style.opacity = '1';
 
     const speedMultiplier = flow.speed_multiplier ?? 1;

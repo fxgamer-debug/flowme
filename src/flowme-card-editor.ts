@@ -83,7 +83,7 @@ import {
   setVisibility,
   setWeatherEntity,
   setSunEntity,
-  setWeatherEffects,
+  setBackgroundTransparent,
   setWeatherStateImage,
   snapToGrid,
   bulkMoveNodes,
@@ -3225,6 +3225,18 @@ export class FlowmeCardEditor extends LitElement {
       <details class="weather-panel" ?open=${stateEntries.length > 0 || !!bg.weather_entity}>
         <summary>${t('editor.inspector.weatherPanelSummary')}</summary>
         <div class="weather-body">
+          <div class="field-row">
+            <label class="field-label">${t('editor.stateA.transparentMode')}</label>
+            <div>
+              <input
+                type="checkbox"
+                .checked=${bg.transparent ?? false}
+                @change=${(e: Event) =>
+                  this.onTransparentModeChange((e.target as HTMLInputElement).checked)}
+              />
+              <p class="field-hint">${t('editor.stateA.transparentModeHelper')}</p>
+            </div>
+          </div>
           <label>
             ${t('editor.inspector.defaultImageUrl')}
             <div class="bg-url-row">
@@ -3261,21 +3273,6 @@ export class FlowmeCardEditor extends LitElement {
               { includeDomains: ['weather'], placeholder: t('editor.inspector.weatherPlaceholder') },
             )}
           </label>
-          ${bg.weather_entity?.trim()
-            ? html`
-                <div class="weather-effects-row">
-                  <label class="weather-effects-toggle">
-                    <input
-                      type="checkbox"
-                      .checked=${bg.weather_effects ?? false}
-                      @change=${this.onWeatherEffectsChange}
-                    />
-                    ${t('editor.stateA.weatherEffects')}
-                  </label>
-                  <p class="weather-effects-hint">${t('editor.stateA.weatherEffectsHelper')}</p>
-                </div>
-              `
-            : nothing}
           ${liveWeatherState !== undefined
             ? html`<div class="weather-live-state">
                 ${t('editor.inspector.currentState')} <strong>${liveWeatherState}</strong>
@@ -3509,13 +3506,12 @@ export class FlowmeCardEditor extends LitElement {
     this.pushPatch(prev, next, 'edit weather entity');
   }
 
-  private onWeatherEffectsChange = (e: Event): void => {
+  private onTransparentModeChange(enabled: boolean): void {
     if (!this.config) return;
-    const checked = (e.target as HTMLInputElement).checked;
-    const prev = this.config;
-    const next = setWeatherEffects(prev, checked);
-    this.pushPatch(prev, next, 'toggle weather effects');
-  };
+    const prev = this.deepCloneConfig(this.config);
+    const next = setBackgroundTransparent(prev, enabled);
+    this.pushPatch(prev, next, enabled ? 'Enable transparent mode' : 'Disable transparent mode');
+  }
 
   private onWeatherStateKeyChange(oldKey: string, event: Event): void {
     if (!this.config) return;
@@ -5753,20 +5749,8 @@ export class FlowmeCardEditor extends LitElement {
       gap: 4px;
       font-size: 12px;
     }
-    .weather-effects-row {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      font-size: 12px;
-    }
-    .weather-effects-toggle {
-      flex-direction: row;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-    }
-    .weather-effects-hint {
-      margin: 0;
+    .weather-body .field-hint {
+      margin: 4px 0 0;
       font-size: 11px;
       opacity: 0.75;
       line-height: 1.35;

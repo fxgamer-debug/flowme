@@ -440,10 +440,10 @@ export interface BackgroundConfig {
   /** Fade duration between background images, in milliseconds. Default 2000. */
   transition_duration?: number;
   /**
-   * When true and `weather_entity` is set, draw animated CSS weather overlays
-   * matching the current HA weather state. Default false.
+   * When true, the card uses a transparent host and hides background imagery
+   * (default and weather-driven layers) while keeping URLs in config. Default false.
    */
-  weather_effects?: boolean;
+  transparent?: boolean;
 }
 
 export interface FlowmeConfig {

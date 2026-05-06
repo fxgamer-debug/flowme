@@ -2,6 +2,30 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.4]
+
+### Added
+
+- **`background.transparent`:** Optional boolean; when true, transparent card chrome and hidden background layers while keeping image URLs in config. Editor **State A** toggle in the weather/background panel.
+- **Dependabot:** `.github/dependabot.yml` for weekly npm dependency PRs.
+
+### Removed
+
+- **CSS weather overlays:** `background.weather_effects`, `weather-effects.ts`, and related editor/UI/validation. Weather-reactive **image** switching via `weather_entity` / `weather_states` is unchanged.
+
+### Fixed
+
+- **Per-flow `visible: false`:** SvgRenderer and HoudiniRenderer now hide the entire flow group (line + particles) when a flow is hidden, and show it again when toggled on (dashboard card only).
+- **Renderer reinit flash:** `needsRendererReinit` ignores `background` differences; `beginRendererInitIfNeeded` applies config in place when topology is unchanged so weather/sun-driven config churn does not tear down the renderer.
+
+### Documentation
+
+- **README** / **FEATURES:** Transparent mode, flow labels, domain peak table, removal of CSS weather-effect references.
+
+### Notes
+
+- **Burst defaults** (`burst_trigger_ratio`, `burst_sustain_ms`, `burst_max_particles`) remain in the schema and editor: they are still used by the SVG renderer for particle-density burst behaviour on active animation styles.
+
 ## [2.5.3]
 
 ### Added

@@ -533,9 +533,10 @@ export class SvgRenderer implements FlowRenderer {
         : DEFAULT_ANIM_EPSILON;
     const isShimmer = shimmer && magnitude <= thresholdHint && magnitude > 0;
     if (flow.visible === false) {
-      this.setGroupOpacity(dom, 0);
+      dom.group.style.display = 'none';
       return;
     }
+    dom.group.style.display = '';
 
     const rawSpeed = DEBUG
       ? DEBUG_DUR_MS

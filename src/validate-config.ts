@@ -680,11 +680,11 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     }
     background.transition_duration = bg['transition_duration'] as number;
   }
-  if (bg['weather_effects'] !== undefined) {
-    if (typeof bg['weather_effects'] !== 'boolean') {
-      fail('background.weather_effects', t('validation.mustBeBoolean'));
+  if (bg['transparent'] !== undefined) {
+    if (typeof bg['transparent'] !== 'boolean') {
+      fail('background.transparent', t('validation.mustBeBoolean'));
     }
-    if (bg['weather_effects']) background.weather_effects = true;
+    if (bg['transparent']) background.transparent = true;
   }
 
   const nodesRaw = c['nodes'];

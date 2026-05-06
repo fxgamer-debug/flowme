@@ -133,21 +133,20 @@ describe('validateConfig — happy path', () => {
     });
   });
 
-  it('parses background.weather_effects boolean', () => {
+  it('parses background.transparent boolean', () => {
     const on = validateConfig({
       ...minimalConfig(),
       background: {
         default: '/local/bg.jpg',
-        weather_entity: 'weather.home',
-        weather_effects: true,
+        transparent: true,
       },
     });
-    expect(on.background.weather_effects).toBe(true);
+    expect(on.background.transparent).toBe(true);
     const off = validateConfig({
       ...minimalConfig(),
-      background: { default: '/local/bg.jpg', weather_effects: false },
+      background: { default: '/local/bg.jpg', transparent: false },
     });
-    expect(off.background.weather_effects).toBeUndefined();
+    expect(off.background.transparent).toBeUndefined();
   });
 
   it('omits flow label when empty or identical to id', () => {

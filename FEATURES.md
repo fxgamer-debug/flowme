@@ -24,7 +24,7 @@ Without this setup, you can still set `background.default` and weather image URL
 
 GIF, animated WebP, and APNG files work as ordinary background images (browser/CSS `background-image`). Store them under `/config/www/community/flowme/backgrounds/` and reference `/local/community/flowme/backgrounds/…` in YAML.
 
-Combining animated backgrounds with **`background.weather_effects`** (see below) can be heavy on low-powered or wall-mounted tablets; use one or the other where performance matters. Rough file-size guidance: GIF < 2MB; animated WebP < 1MB; APNG < 1MB.
+Rough file-size guidance: GIF < 2MB; animated WebP < 1MB; APNG < 1MB.
 
 ### Generating custom animated backgrounds
 
@@ -38,35 +38,13 @@ Prefer **animated WebP** for quality vs file size, or **GIF** for widest compati
 
 Practical target: a **3–5 second** seamless loop at your card background resolution; keep files **under ~2MB** for smooth playback.
 
-### Weather effects (CSS overlays)
+### Weather effects
 
-When **`background.weather_effects`** is `true` and **`background.weather_entity`** points at a weather entity, FlowMe draws a **pure CSS** animated layer above the background image (below flows and nodes). States come from Home Assistant’s weather integration (`weather.state`). Animations honour **`prefers-reduced-motion`**.
+CSS weather overlay animations were investigated and implemented but were not found to be visually pleasing enough to include in FlowMe.
 
-| YAML | Role |
-|------|------|
-| `background.weather_effects: true` | Enable overlays (requires `weather_entity`) |
+For atmospheric weather effects, use animated background images instead. AI generation tools (Runway, Pika, Kling) can create beautiful seamless looping backgrounds for any weather condition.
 
-Supported HA weather states and overlay behaviour:
-
-| State | Effect |
-| ----- | ------ |
-| `sunny` | Radial glow plus several golden ray beams from the top centre |
-| `clear-night` | Many star dots with independent twinkle timing |
-| `cloudy` | Few large blurred clouds drifting slowly |
-| `partlycloudy` | Fewer / lighter clouds, slightly faster drift |
-| `rainy` | Diagonal rain streaks |
-| `pouring` | Denser, faster rain |
-| `snowy` | Falling snowflakes with mild lateral drift |
-| `snowy-rainy` | Mix of rain streaks and snowflakes |
-| `windy` | Horizontal sweep lines |
-| `windy-variant` | More / faster wind streaks |
-| `fog` | Soft drifting fog layers; optional light blur where supported |
-| `hail` | Small pellets falling quickly |
-| `lightning` | Occasional full-area flash |
-| `lightning-rainy` | Rain plus lightning flashes |
-| `exceptional` | Pulsing FlowMe-orange edge glow |
-
-Unknown or unsupported states hide the overlay. **`weather_effects`** defaults to **false**.
+Weather-reactive background switching is still fully supported via `background.weather_states`.
 
 ---
 
