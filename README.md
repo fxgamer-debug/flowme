@@ -14,9 +14,15 @@ A custom Lovelace card that renders animated flow visualisations between freely 
 
 **Multi-domain support.** Built-in profiles for energy, water, network, HVAC, gas and generic domains. Each domain has calibrated speed curves and colour profiles.
 
+**Transparent mode.** Omit `background` / leave `background.default` empty to render a transparent card that shows your dashboard theme behind the flows.
+
 **Weather-reactive backgrounds.** Background image switches automatically based on HA weather entity state. Sun entity support for automatic day/night variants.
 
 **Visual drag-and-drop editor.** Full visual editor with zoom, pan, node dragging, waypoint editing, suggest path (A\* pathfinding with Sobel edge detection), undo/redo, and element selection.
+
+**Image browser.** Browse background images from a configured Home Assistant Media Source folder directly in the editor.
+
+**Flow labels.** Optional `flows[].label` for display/UI while keeping `id` as the internal key.
 
 **Value gradient.** Flow colour interpolates between two colours based on a secondary sensor value. Useful for temperature-driven HVAC flows, battery health, grid frequency deviation and more.
 
@@ -28,7 +34,7 @@ A custom Lovelace card that renders animated flow visualisations between freely 
 
 **Custom SVG particle shapes.** User-supplied SVG path string as particle shape. Stamps along the flow path with correct orientation.
 
-**i18n.** All UI strings extractable. Drop a JSON translation file in `/local/flowme/translations/` and FlowMe loads it automatically based on HA language setting.
+**i18n.** All UI strings extractable. Place a JSON translation file under `/config/www/flowme/translations/` (served at `/local/flowme/translations/`) and FlowMe loads it automatically based on HA language setting.
 
 **Accessibility.** ARIA roles, focus outlines, high contrast mode support, prefers-reduced-motion support.
 
@@ -230,7 +236,7 @@ FlowMe ships with English as the default. To add a translation:
 1. Copy `translations/en.json` from this repository
 2. Translate all values (keep keys unchanged)
 3. Save as your language code, e.g. `fr.json`
-4. Place at `/config/www/flowme/translations/fr.json`
+4. Place at `/config/www/flowme/translations/fr.json` (served at `/local/flowme/translations/fr.json`)
 
 FlowMe loads it automatically when HA is set to that language. Partial translations are supported — missing keys fall back to English.
 

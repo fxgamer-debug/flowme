@@ -375,6 +375,7 @@ export const STRINGS = {
       browserSetupNote:
         'Images placed in this folder will appear in the browser automatically.',
       browserSetupDocs: 'View setup guide',
+      transparentMode: 'Transparent background',
     },
     suggestBar: {
       message: 'Suggested path ready — accept or cancel',

@@ -101,9 +101,6 @@ import {
 } from './pathfinding/cover-projection.js';
 import { DEFAULT_CELL_SIZE } from './pathfinding/grid-builder.js';
 import type { Point } from './pathfinding/types.js';
-
-/** Minimum zoom scale (user zoom-out limit); fit level is 1.0. */
-const MIN_EDITOR_ZOOM = 0.5;
 import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
 import { dlog, isDebugEnabled, peekDebugFromRaw, setDebugEnabled } from './debug-log.js';
 import { flowmeBrowseMediaContentId, resolveMediaBrowseItemUrl } from './media-browser.js';
@@ -534,12 +531,6 @@ export class FlowmeCardEditor extends LitElement {
             @contextmenu=${this.onStageContextMenu}
             ${ref(this.stageRef)}
           >
-            ${bgUrl
-              ? html`<div
-                  class="editor-background"
-                  style="background-image: url('${bgUrl}'); background-size: cover; background-position: center; background-repeat: no-repeat;"
-                ></div>`
-              : nothing}
             <div
               class=${`canvas-content${sceneOk ? '' : ' canvas-content--pending'}${
                 transparentCanvas ? ' canvas-content--transparent' : ''
@@ -548,6 +539,12 @@ export class FlowmeCardEditor extends LitElement {
                 ? `width: ${this.sceneW}px; height: ${this.sceneH}px; transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`
                 : 'left:0;top:0;width:100%;height:100%;'}
             >
+              ${bgUrl
+                ? html`<div
+                    class="editor-background"
+                    style="background-image: url('${bgUrl}');"
+                  ></div>`
+                : nothing}
               ${sceneOk
                 ? html`
                     <svg
@@ -606,7 +603,7 @@ export class FlowmeCardEditor extends LitElement {
                 type="button"
                 class="tb-icon-btn"
                 aria-label=${t('editor.toolbar.zoomOut')}
-                ?disabled=${this.scale <= MIN_EDITOR_ZOOM}
+                ?disabled=${this.scale <= this.fitScale}
                 title=${t('editor.toolbar.zoomOut')}
                 @click=${() => this.adjustZoom(0.8)}
               >−</button>
@@ -3207,6 +3204,7 @@ export class FlowmeCardEditor extends LitElement {
   private renderWeatherPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const bg = this.config.background;
+    const transparentEnabled = !bg.default;
     const stateEntries = Object.entries(bg.weather_states ?? {});
     const liveWeatherState =
       bg.weather_entity && this.hass ? this.hass.states[bg.weather_entity]?.state : undefined;
@@ -3214,34 +3212,46 @@ export class FlowmeCardEditor extends LitElement {
       <details class="weather-panel" ?open=${stateEntries.length > 0 || !!bg.weather_entity}>
         <summary>${t('editor.inspector.weatherPanelSummary')}</summary>
         <div class="weather-body">
-          <label>
-            ${t('editor.inspector.defaultImageUrl')}
-            <div class="bg-url-row">
-              <input
-                type="text"
-                class="bg-url-input"
-                .value=${bg.default}
-                @change=${this.onDefaultBgChange}
-                placeholder=${t('editor.inspector.defaultBgPlaceholder')}
-              />
-              <button
-                type="button"
-                class="tb-icon-btn"
-                title=${t('editor.stateA.browseImages')}
-                aria-label=${t('editor.stateA.browseImages')}
-                @click=${(e: Event) => {
-                  e.stopPropagation();
-                  void this.openImageBrowser('default');
-                }}
-              >
-                📁
-              </button>
-            </div>
-            ${this.imageBrowserOpen && this.imageBrowserField === 'default' ? this.renderBrowserPanel(bg) : nothing}
-            ${bg.default
-              ? html`<img class="weather-thumb" src=${bg.default} alt=${t('editor.inspector.defaultBgAlt')} />`
-              : nothing}
-          </label>
+          <div class="field-row">
+            <label class="field-label">${t('editor.stateA.transparentMode')}</label>
+            <input
+              type="checkbox"
+              .checked=${transparentEnabled}
+              @change=${(e: Event) => this.onTransparentModeChange((e.target as HTMLInputElement).checked)}
+            />
+          </div>
+          ${transparentEnabled
+            ? nothing
+            : html`<label>
+                ${t('editor.inspector.defaultImageUrl')}
+                <div class="bg-url-row">
+                  <input
+                    type="text"
+                    class="bg-url-input"
+                    .value=${bg.default}
+                    @change=${this.onDefaultBgChange}
+                    placeholder=${t('editor.inspector.defaultBgPlaceholder')}
+                  />
+                  <button
+                    type="button"
+                    class="tb-icon-btn"
+                    title=${t('editor.stateA.browseImages')}
+                    aria-label=${t('editor.stateA.browseImages')}
+                    @click=${(e: Event) => {
+                      e.stopPropagation();
+                      void this.openImageBrowser('default');
+                    }}
+                  >
+                    📁
+                  </button>
+                </div>
+                ${this.imageBrowserOpen && this.imageBrowserField === 'default'
+                  ? this.renderBrowserPanel(bg)
+                  : nothing}
+                ${bg.default
+                  ? html`<img class="weather-thumb" src=${bg.default} alt=${t('editor.inspector.defaultBgAlt')} />`
+                  : nothing}
+              </label>`}
           <label>
             ${t('editor.inspector.weatherEntityOptional')}
             ${this.renderEntityPicker(
@@ -3481,6 +3491,19 @@ export class FlowmeCardEditor extends LitElement {
     const prev = this.config;
     const next = setWeatherEntity(prev, trimmed || undefined);
     this.pushPatch(prev, next, 'edit weather entity');
+  }
+
+  private onTransparentModeChange(enabled: boolean): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next: FlowmeConfig = {
+      ...prev,
+      background: {
+        ...prev.background,
+        default: enabled ? '' : prev.background.default,
+      },
+    };
+    this.pushPatch(prev, next, enabled ? 'Enable transparent mode' : 'Disable transparent mode');
   }
 
   private onWeatherStateKeyChange(oldKey: string, event: Event): void {
@@ -4530,7 +4553,7 @@ export class FlowmeCardEditor extends LitElement {
     const canvas = this.canvasRef.value;
     const ox = originX ?? (canvas ? canvas.offsetWidth / 2 : 0);
     const oy = originY ?? (canvas ? canvas.offsetHeight / 2 : 0);
-    const newScale = Math.min(5, Math.max(MIN_EDITOR_ZOOM, this.scale * factor));
+    const newScale = Math.min(5, Math.max(this.fitScale, this.scale * factor));
     if (newScale === this.scale) return;
     // Adjust pan so the point under the origin stays fixed
     this.panX = ox - (ox - this.panX) * (newScale / this.scale);
@@ -4931,8 +4954,13 @@ export class FlowmeCardEditor extends LitElement {
     .editor-background {
       position: absolute;
       inset: 0;
+      width: 100%;
+      height: 100%;
       z-index: 0;
       pointer-events: none;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
     }
     /* canvas-content: same pixel size as .stage; transform pans/zooms the scene. */
     .canvas-content {
@@ -4947,9 +4975,9 @@ export class FlowmeCardEditor extends LitElement {
       transform: none;
     }
     .canvas-content--transparent {
-      background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-      background-size: 50px 50px;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+      background-size: 25px 25px;
     }
     .connectors {
       position: absolute;

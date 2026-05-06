@@ -100,7 +100,8 @@
       "browserSetupStep3": "Add to configuration.yaml:",
       "browserSetupStep4": "Restart Home Assistant.",
       "browserSetupNote": "Images placed in this folder will appear in the browser automatically.",
-      "browserSetupDocs": "View setup guide"
+      "browserSetupDocs": "View setup guide",
+      "transparentMode": "Transparent background"
     },
     "suggestBar": {
       "message": "Suggested path ready — accept or cancel"

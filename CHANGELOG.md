@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.1]
+
+### Fixed
+
+- **Editor background transform:** The editor background image is rendered inside the transformed `canvas-content` again, so zoom/pan affects both the background and the flow content together (restoring pre-v2.5 behaviour).
+- **Editor zoom floor:** Users can no longer zoom out below the fit level (min zoom = 1.0, max = 5.0).
+- **Transparent mode UX:** Added a “Transparent background” toggle in State A to clear/restore the default background URL without removing the whole `background` block.
+- **Transparent grid density:** Increased grid density and contrast (25px cells, slightly brighter lines).
+- **Renderer reinit diagnostics:** When `debug: true`, logs why a renderer reinit is (or is not) needed.
+
 ## [2.5]
 
 ### Added

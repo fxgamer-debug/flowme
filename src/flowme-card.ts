@@ -27,7 +27,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.5';
+const CARD_VERSION = '2.5.1';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -232,13 +232,23 @@ export class FlowmeCard extends LitElement {
    * so the HA editor preview stays responsive.
    */
   private needsRendererReinit(prev: FlowmeConfig, next: FlowmeConfig): boolean {
-    if (prev.domain !== next.domain) return true;
+    if (prev.domain !== next.domain) {
+      dlog('[FlowMe] needsRendererReinit: true (domain changed)', prev.domain, '→', next.domain);
+      return true;
+    }
     const prevIds = new Set(prev.flows.map((f) => f.id));
     const nextIds = new Set(next.flows.map((f) => f.id));
-    if (prevIds.size !== nextIds.size) return true;
-    for (const id of prevIds) {
-      if (!nextIds.has(id)) return true;
+    if (prevIds.size !== nextIds.size) {
+      dlog('[FlowMe] needsRendererReinit: true (flow count changed)', prevIds.size, '→', nextIds.size);
+      return true;
     }
+    for (const id of prevIds) {
+      if (!nextIds.has(id)) {
+        dlog('[FlowMe] needsRendererReinit: true (flow id removed)', id);
+        return true;
+      }
+    }
+    dlog('[FlowMe] needsRendererReinit: false');
     return false;
   }
 
