@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 
-import type { FlowmeConfig } from '../../src/types.js';
-import { finalizeConfigForHa } from '../../src/editor/commands.js';
 import { validateConfig, FlowmeConfigError } from '../../src/validate-config.js';
 
 function minimalConfig(): Record<string, unknown> {
@@ -301,51 +299,28 @@ describe('validateConfig — happy path', () => {
     expect(cfg.overlays?.[0]?.type).toBe('custom');
   });
 
-  it('maps legacy FlowMe visibility block to compact layer_visibility', () => {
+  it('stores node show_label and show_value only when false', () => {
     const cfg = validateConfig({
       ...minimalConfig(),
-      visibility: { nodes: true, lines: false, dots: true },
+      nodes: [
+        { id: 'a', position: { x: 10, y: 10 }, show_label: false, show_value: false },
+        { id: 'b', position: { x: 80, y: 80 }, show_label: true, show_value: true },
+      ],
     });
-    expect(cfg.layer_visibility).toEqual({ lines: false });
+    expect(cfg.nodes[0]?.show_label).toBe(false);
+    expect(cfg.nodes[0]?.show_value).toBe(false);
+    expect(cfg.nodes[1]?.show_label).toBeUndefined();
+    expect(cfg.nodes[1]?.show_value).toBeUndefined();
   });
 
-  it('reads layer_visibility and drops default trues', () => {
+  it('silently ignores legacy visibility and layer_visibility keys on raw config', () => {
     const cfg = validateConfig({
       ...minimalConfig(),
-      layer_visibility: { dots: false, labels: true },
+      visibility: { nodes: true, lines: false } as Record<string, unknown>,
+      layer_visibility: { dots: false } as Record<string, unknown>,
     });
-    expect(cfg.layer_visibility).toEqual({ dots: false });
-  });
-
-  it('merges legacy visibility with layer_visibility (later wins)', () => {
-    const cfg = validateConfig({
-      ...minimalConfig(),
-      visibility: { lines: false, dots: true },
-      layer_visibility: { lines: true, dots: false },
-    });
-    expect(cfg.layer_visibility).toEqual({ dots: false });
-  });
-
-  it('ignores non-FlowMe visibility objects', () => {
-    const cfg = validateConfig({
-      ...minimalConfig(),
-      visibility: { foo: true } as Record<string, unknown>,
-    });
-    expect(cfg.layer_visibility).toBeUndefined();
-  });
-});
-
-describe('finalizeConfigForHa', () => {
-  it('strips reserved visibility key and compacts layer_visibility', () => {
-    const base = validateConfig(minimalConfig());
-    const raw = {
-      ...base,
-      visibility: { nodes: true },
-      layer_visibility: { lines: false, nodes: true },
-    };
-    const out = finalizeConfigForHa(raw as FlowmeConfig);
-    expect((out as unknown as Record<string, unknown>)['visibility']).toBeUndefined();
-    expect(out.layer_visibility).toEqual({ lines: false });
+    expect((cfg as unknown as Record<string, unknown>)['visibility']).toBeUndefined();
+    expect((cfg as unknown as Record<string, unknown>)['layer_visibility']).toBeUndefined();
   });
 });
 

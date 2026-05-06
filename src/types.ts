@@ -403,25 +403,6 @@ export interface OpacityConfig {
   overlays?: number;
 }
 
-/**
- * Global layer visibility toggles (v1.0.11+). Binary show/hide for entire
- * rendering layers, independent of opacity settings. All fields default to true.
- */
-export interface VisibilityConfig {
-  /** Show/hide all node circles, labels and values. Default: true. */
-  nodes?: boolean;
-  /** Show/hide all flow lines. Default: true. */
-  lines?: boolean;
-  /** Show/hide animated dots on all flows. Default: true. */
-  dots?: boolean;
-  /** Show/hide all node labels. Default: true. */
-  labels?: boolean;
-  /** Show/hide all sensor values on nodes. Default: true. */
-  values?: boolean;
-  /** Show/hide all custom overlays. Default: true. */
-  overlays?: boolean;
-}
-
 export interface BackgroundConfig {
   /** Default background image path. */
   default: string;
@@ -476,12 +457,6 @@ export interface FlowmeConfig {
    * Card-level opacity overrides (v1.0.10+). All fields are optional.
    */
   opacity?: OpacityConfig;
-  /**
-   * Global layer visibility toggles (v1.0.11+). All fields default to true.
-   * Named `layer_visibility` so we never collide with Home Assistant's own
-   * top-level Lovelace `visibility` key (conditions UI / internal merge).
-   */
-  layer_visibility?: VisibilityConfig;
   /**
    * Global animation settings (v1.0.12+).
    */

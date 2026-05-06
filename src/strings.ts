@@ -267,13 +267,6 @@ export const STRINGS = {
         'Override default colours for each role in the selected domain. Changes apply to all flows unless a per-flow colour is set.',
       colourDefaultSuffix: (hex: string) => `${hex} (default)`,
       reset: 'Reset',
-      visibilitySummary: 'Visibility',
-      visibilityHint:
-        'Binary show/hide for each rendering layer. Independent of opacity.',
-      visibilityFlowLines: 'Flow lines',
-      visibilityAnimatedDots: 'Animated dots',
-      visibilityVisible: 'visible',
-      visibilityHidden: 'hidden',
       defaultsSummary: 'Defaults',
       defaultsHint:
         'Card-level rendering defaults. All fields are optional — omitting them keeps the built-in values shown in parentheses.',
@@ -480,8 +473,6 @@ export const STRINGS = {
     gradientMode: 'must be one of: flow, line, both',
     animationRootMustBeObject: 'must be an object',
     fpsRange: 'must be a number between 1 and 120',
-    visibilityRootMustBeObject: 'must be an object',
-    layerVisibilityRootMustBeObject: 'must be an object',
     domainColorsRootMustBeObject: 'must be an object',
     stringColourValue: 'must be a string colour value',
     typeMustBeFlowme: (got: string) =>

@@ -12,7 +12,6 @@ import type {
   OverlayConfig,
   SpeedCurveOverride,
   ValueGradientConfig,
-  VisibilityConfig,
 } from '../types.js';
 
 /** Deep-ish clone that preserves only the shapes we care about. */
@@ -556,44 +555,27 @@ export function setFlowVisible(
   return next;
 }
 
-export function setVisibility<K extends keyof VisibilityConfig>(
-  config: FlowmeConfig,
-  key: K,
-  value: boolean,
-): FlowmeConfig {
+export function setNodeShowLabel(config: FlowmeConfig, nodeId: string, show: boolean): FlowmeConfig {
   const next = cloneConfig(config);
-  const merged: VisibilityConfig = { ...(next.layer_visibility ?? {}) };
-  if (value) delete merged[key];
-  else merged[key] = false;
-  if (Object.keys(merged).length === 0) delete next.layer_visibility;
-  else next.layer_visibility = merged;
+  next.nodes = next.nodes.map((n) => {
+    if (n.id !== nodeId) return n;
+    const out = { ...n };
+    if (show) delete out.show_label;
+    else out.show_label = false;
+    return out;
+  });
   return next;
 }
 
-/**
- * Shape stored in HA YAML / Lovelace: never use reserved key `visibility`.
- * Omit `layer_visibility` when empty; only keys explicitly false are kept.
- * Also strips any legacy `visibility` key so it cannot be re-saved.
- */
-export function finalizeConfigForHa(config: FlowmeConfig): FlowmeConfig {
+export function setNodeShowValue(config: FlowmeConfig, nodeId: string, show: boolean): FlowmeConfig {
   const next = cloneConfig(config);
-  delete (next as unknown as Record<string, unknown>)['visibility'];
-  if (next.layer_visibility) {
-    const lv = next.layer_visibility;
-    const compact: VisibilityConfig = {};
-    for (const key of [
-      'nodes',
-      'lines',
-      'dots',
-      'labels',
-      'values',
-      'overlays',
-    ] as const) {
-      if (lv[key] === false) compact[key] = false;
-    }
-    if (Object.keys(compact).length === 0) delete next.layer_visibility;
-    else next.layer_visibility = compact;
-  }
+  next.nodes = next.nodes.map((n) => {
+    if (n.id !== nodeId) return n;
+    const out = { ...n };
+    if (show) delete out.show_value;
+    else out.show_value = false;
+    return out;
+  });
   return next;
 }
 

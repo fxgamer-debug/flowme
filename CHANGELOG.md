@@ -2,6 +2,19 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.8]
+
+### Removed
+
+- **Global layer visibility:** Removed `layer_visibility` / `VisibilityConfig` and the State A layer toggles. Per-flow `visible`, per-node `visible`, `show_label`, and `show_value` are unchanged.
+
+### Fixed
+
+- **Node label/value YAML:** Inspector toggles use `setNodeShowLabel` / `setNodeShowValue` so `show_label: false` / `show_value: false` persist; `true` is omitted (default). Validation normalises away explicit `true`.
+- **Dashboard node label/value:** Host CSS no longer used global `--flowme-vis-*` layer vars — labels and values respect opacity and per-node flags on the card.
+- **Dash animation direction:** Dash style honours travel sign (forward vs reverse along path); `direction: both` renders two dash strokes on forward and reversed paths.
+- **Renderer reinit vs weather:** `needsRendererReinit` compares configs with `background` omitted via destructuring so background/weather-only churn does not force a full SVG rebuild.
+
 ## [2.5.7]
 
 ### Fixed

@@ -10,7 +10,6 @@ import type {
   NodeConfig,
   OpacityConfig,
   OverlayConfig,
-  VisibilityConfig,
 } from './types.js';
 import { FlowmeConfigError, validateConfig } from './validate-config.js';
 import { createRenderer } from './animation/renderer-factory.js';
@@ -26,7 +25,7 @@ import { flowDisplayName } from './utils.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.5.7';
+const CARD_VERSION = '2.5.8';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -52,26 +51,6 @@ function buildOpacityVars(opacity?: OpacityConfig): string {
   add('labels', '--flowme-opacity-labels');
   add('values', '--flowme-opacity-values');
   add('overlays', '--flowme-opacity-overlays');
-  return pairs.join('');
-}
-
-/**
- * Build CSS custom-property inline-style string from the visibility config block.
- * A layer value of `false` maps to `display:none` via a CSS variable set to `none`.
- */
-function buildVisibilityVars(visibility?: VisibilityConfig): string {
-  if (!visibility) return '';
-  const pairs: string[] = [];
-  const add = (key: keyof VisibilityConfig, cssVar: string) => {
-    const v = visibility[key];
-    if (v === false) pairs.push(`${cssVar}:none;`);
-  };
-  add('nodes', '--flowme-vis-nodes');
-  add('lines', '--flowme-vis-lines');
-  add('dots', '--flowme-vis-dots');
-  add('labels', '--flowme-vis-labels');
-  add('values', '--flowme-vis-values');
-  add('overlays', '--flowme-vis-overlays');
   return pairs.join('');
 }
 
@@ -231,8 +210,10 @@ export class FlowmeCard extends LitElement {
    * so the HA editor preview stays responsive.
    */
   private needsRendererReinit(prev: FlowmeConfig, next: FlowmeConfig): boolean {
-    const p = { ...prev, background: undefined };
-    const n = { ...next, background: undefined };
+    const { background: _pb, ...p } = prev;
+    const { background: _nb, ...n } = next;
+    void _pb;
+    void _nb;
     if (p.domain !== n.domain) return true;
     const prevIds = new Set(p.flows.map((f) => f.id));
     const nextIds = new Set(n.flows.map((f) => f.id));
@@ -819,14 +800,13 @@ export class FlowmeCard extends LitElement {
     const transitionMs = config.background.transition_duration ?? DEFAULT_TRANSITION_MS;
 
     const opacityVars = buildOpacityVars(config.opacity);
-    const visibilityVars = buildVisibilityVars(config.layer_visibility);
     const suppressCardBackground = config.background.transparent === true;
 
     return html`
       <ha-card role="region" aria-label=${t('aria.card')}>
         <div
           class="stage"
-          style=${`padding-top: ${paddingTop};${opacityVars}${visibilityVars}`}
+          style=${`padding-top: ${paddingTop};${opacityVars}`}
         >
           <div
             class=${`background ${this.activeLayer === 'A' ? 'visible' : ''}`}
@@ -1174,7 +1154,7 @@ export class FlowmeCard extends LitElement {
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
       pointer-events: none;
       opacity: var(--flowme-opacity-nodes, 1);
-      display: var(--flowme-vis-nodes, flex);
+      display: flex;
     }
     .node-dot-wrap {
       position: relative;
@@ -1191,15 +1171,16 @@ export class FlowmeCard extends LitElement {
       font-weight: 600;
       white-space: nowrap;
       opacity: var(--flowme-opacity-labels, 1);
-      display: var(--flowme-vis-labels, block);
+      display: block;
     }
     .node-value {
       opacity: calc(0.85 * var(--flowme-opacity-values, 1));
       white-space: nowrap;
-      display: var(--flowme-vis-values, block);
+      display: block;
     }
     .overlay {
       position: absolute;
+      display: block;
       min-width: 24px;
       min-height: 24px;
       border-radius: 8px;
@@ -1221,9 +1202,6 @@ export class FlowmeCard extends LitElement {
       font-family: var(--paper-font-body1_-_font-family, inherit);
       line-height: 1.4;
       overflow-wrap: break-word;
-    }
-    .overlay {
-      display: var(--flowme-vis-overlays, block);
     }
     .overlay-custom {
       padding: 0;

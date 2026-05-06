@@ -113,6 +113,8 @@ interface FlowDomNodes {
   particles: ParticleDom[];
   /** dash/fluid: the stroke-animated <use> element */
   lineStroke?: SVGUseElement;
+  /** dash + direction both: second stroke on reversed path */
+  lineStrokeRev?: SVGUseElement;
   /** fluid: linear gradient element */
   fluidGradient?: SVGLinearGradientElement;
   /** fluid: first paint fade-in done for this flow (not reset on hass ticks) */
@@ -654,7 +656,7 @@ export class SvgRenderer implements FlowRenderer {
         this.applyDots(dom, flow, profile, numValue, durMs, color, direction, burstMultiplier, belowCutoff);
     }
 
-    if (directionMode === 'both' && (style === 'dots' || style === 'arrow' || style === 'trail')) {
+    if (directionMode === 'both' && (style === 'dots' || style === 'dash' || style === 'arrow' || style === 'trail')) {
       dlog(
         'direction both:',
         flowId,
@@ -706,10 +708,14 @@ export class SvgRenderer implements FlowRenderer {
     if (dom.particlesBack) for (const p of dom.particlesBack) p.shape.setAttribute('opacity', op);
     if (dom.fluidGradient) {
       dom.group.setAttribute('opacity', opacity <= 0 ? '0' : op);
-      if (opacity <= 0) dom.lineStroke?.setAttribute('opacity', '0');
+      if (opacity <= 0) {
+        dom.lineStroke?.setAttribute('opacity', '0');
+        dom.lineStrokeRev?.setAttribute('opacity', '0');
+      }
     } else {
       dom.group.removeAttribute('opacity');
       if (dom.lineStroke) dom.lineStroke.setAttribute('opacity', opacity > 0 ? '0.9' : '0');
+      if (dom.lineStrokeRev) dom.lineStrokeRev.setAttribute('opacity', opacity > 0 ? '0.9' : '0');
     }
   }
 
@@ -722,6 +728,8 @@ export class SvgRenderer implements FlowRenderer {
       for (const p of dom.particlesBack) p.shape.remove();
       dom.particlesBack = undefined;
     }
+    dom.lineStrokeRev?.remove();
+    dom.lineStrokeRev = undefined;
     dom.lineStroke?.remove();
     dom.lineStroke = undefined;
     dom.fluidInitialised = undefined;
@@ -1219,10 +1227,78 @@ export class SvgRenderer implements FlowRenderer {
     for (const p of dom.particles) p.shape.remove();
     dom.particles = [];
 
+    const dirMode = flow.animation?.direction ?? 'auto';
+    const strokeWidth = this.config?.defaults?.line_width ?? STROKE_WIDTH;
+    const anim = flow.animation ?? {};
+    const baseGap = anim.dash_gap ?? 0.5;
+    const gap = Math.max(0.1, baseGap / burstMultiplier);
+    const dashLen = 14;
+    const gapLen = dashLen * gap;
+    const patternLength = dashLen + gapLen;
+    const glow = this.glowFilter(flow, this.profileFor(flow), color);
+    const durStr = `${(durMs / 1000).toFixed(3)}s`;
+
+    const applyDashAnim = (strokeEl: SVGUseElement, travelSign: number) => {
+      strokeEl.setAttribute('stroke', color);
+      strokeEl.setAttribute('stroke-width', String(strokeWidth * 2));
+      strokeEl.setAttribute('stroke-dasharray', `${dashLen} ${gapLen}`);
+      if (glow) strokeEl.setAttribute('filter', glow);
+      else strokeEl.removeAttribute('filter');
+
+      const prevAnim = strokeEl.querySelector('animate');
+      if (prevAnim) prevAnim.remove();
+      if (!motionStopped) {
+        const dashAnim = document.createElementNS(SVG_NS, 'animate');
+        dashAnim.setAttribute('attributeName', 'stroke-dashoffset');
+        if (travelSign > 0) {
+          dashAnim.setAttribute('from', '0');
+          dashAnim.setAttribute('to', `-${patternLength}`);
+        } else {
+          dashAnim.setAttribute('from', `-${patternLength}`);
+          dashAnim.setAttribute('to', '0');
+        }
+        dashAnim.setAttribute('dur', durStr);
+        dashAnim.setAttribute('repeatCount', 'indefinite');
+        strokeEl.appendChild(dashAnim);
+      }
+    };
+
+    if (dirMode === 'both') {
+      this.ensurePathRev(dom);
+      const revRef = dom.pathRevId ?? dom.pathId;
+
+      if (!dom.lineStroke) {
+        const stroke = document.createElementNS(SVG_NS, 'use');
+        stroke.setAttribute('fill', 'none');
+        stroke.setAttribute('stroke-linecap', 'round');
+        stroke.setAttribute('stroke-linejoin', 'round');
+        dom.group.appendChild(stroke);
+        dom.lineStroke = stroke;
+      }
+      if (!dom.lineStrokeRev) {
+        const strokeR = document.createElementNS(SVG_NS, 'use');
+        strokeR.setAttribute('fill', 'none');
+        strokeR.setAttribute('stroke-linecap', 'round');
+        strokeR.setAttribute('stroke-linejoin', 'round');
+        dom.group.appendChild(strokeR);
+        dom.lineStrokeRev = strokeR;
+      }
+
+      dom.lineStroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
+      dom.lineStroke.setAttribute('href', `#${dom.pathId}`);
+      dom.lineStrokeRev.setAttributeNS(XLINK_NS, 'href', `#${revRef}`);
+      dom.lineStrokeRev.setAttribute('href', `#${revRef}`);
+
+      applyDashAnim(dom.lineStroke, 1);
+      applyDashAnim(dom.lineStrokeRev, 1);
+      return;
+    }
+
+    dom.lineStrokeRev?.remove();
+    dom.lineStrokeRev = undefined;
+
     if (!dom.lineStroke) {
       const stroke = document.createElementNS(SVG_NS, 'use');
-      stroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
-      stroke.setAttribute('href', `#${dom.pathId}`);
       stroke.setAttribute('fill', 'none');
       stroke.setAttribute('stroke-linecap', 'round');
       stroke.setAttribute('stroke-linejoin', 'round');
@@ -1230,32 +1306,9 @@ export class SvgRenderer implements FlowRenderer {
       dom.lineStroke = stroke;
     }
 
-    const strokeWidth = this.config?.defaults?.line_width ?? STROKE_WIDTH;
-    const anim = flow.animation ?? {};
-    const baseGap = anim.dash_gap ?? 0.5;
-    // burst: reduce gap ratio (denser dashes)
-    const gap = Math.max(0.1, baseGap / burstMultiplier);
-    const dashLen = 14;
-    const gapLen = dashLen * gap;
-    const glow = this.glowFilter(flow, this.profileFor(flow), color);
-
-    dom.lineStroke.setAttribute('stroke', color);
-    dom.lineStroke.setAttribute('stroke-width', String(strokeWidth * 2));
-    dom.lineStroke.setAttribute('stroke-dasharray', `${dashLen} ${gapLen}`);
-    if (glow) dom.lineStroke.setAttribute('filter', glow);
-
-    const patternLength = dashLen + gapLen;
-    const existing = dom.lineStroke.querySelector('animate');
-    if (existing) existing.remove();
-    if (!motionStopped) {
-      const anim0 = document.createElementNS(SVG_NS, 'animate');
-      anim0.setAttribute('attributeName', 'stroke-dashoffset');
-      anim0.setAttribute('from', direction > 0 ? '0' : `-${patternLength}`);
-      anim0.setAttribute('to', direction > 0 ? `-${patternLength}` : '0');
-      anim0.setAttribute('dur', `${(durMs / 1000).toFixed(3)}s`);
-      anim0.setAttribute('repeatCount', 'indefinite');
-      dom.lineStroke.appendChild(anim0);
-    }
+    dom.lineStroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
+    dom.lineStroke.setAttribute('href', `#${dom.pathId}`);
+    applyDashAnim(dom.lineStroke, direction);
   }
 
   /**

@@ -18,7 +18,6 @@ import type {
   OpacityConfig,
   OverlayConfig,
   ValueGradientConfig,
-  VisibilityConfig,
 } from './types.js';
 import {
   FLOW_DOMAINS,
@@ -51,7 +50,6 @@ import {
   deleteOverlay,
   deleteWaypoint,
   deleteWeatherState,
-  finalizeConfigForHa,
   insertWaypoint,
   moveNode,
   moveOverlay,
@@ -81,7 +79,8 @@ import {
   setPauseWhenHidden,
   setFlowAnimation,
   clearFlowAnimation,
-  setVisibility,
+  setNodeShowLabel,
+  setNodeShowValue,
   setWeatherEntity,
   setSunEntity,
   setBackgroundTransparent,
@@ -1137,8 +1136,12 @@ export class FlowmeCardEditor extends LitElement {
                 type="checkbox"
                 .checked=${node.show_value !== false}
                 @change=${(e: Event) => {
+                  if (!this.config) return;
                   const checked = (e.target as HTMLInputElement).checked;
-                  patchNode({ show_value: checked || undefined }, `set show_value of ${node.id}`);
+                  dlog('[FlowMe] show_value change:', node.id, 'value:', checked);
+                  const prev = this.config;
+                  const next = setNodeShowValue(prev, node.id, checked);
+                  this.pushPatch(prev, next, `set show_value of ${node.id}`);
                 }}
               />
               <span class="node-cell-label">${t('editor.inspector.showValue')}</span>
@@ -1148,8 +1151,12 @@ export class FlowmeCardEditor extends LitElement {
                 type="checkbox"
                 .checked=${node.show_label !== false}
                 @change=${(e: Event) => {
+                  if (!this.config) return;
                   const checked = (e.target as HTMLInputElement).checked;
-                  patchNode({ show_label: checked || undefined }, `set show_label of ${node.id}`);
+                  dlog('[FlowMe] show_label change:', node.id, 'value:', checked);
+                  const prev = this.config;
+                  const next = setNodeShowLabel(prev, node.id, checked);
+                  this.pushPatch(prev, next, `set show_label of ${node.id}`);
                 }}
               />
               <span class="node-cell-label">${t('editor.inspector.showLabel')}</span>
@@ -2851,49 +2858,6 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
-  private renderVisibilityPanel(): TemplateResult | typeof nothing {
-    if (!this.config) return nothing;
-    const vis: VisibilityConfig = this.config.layer_visibility ?? {};
-
-    const toggle = <K extends keyof VisibilityConfig>(key: K, label: string) => {
-      const value = vis[key] !== false;
-      return html`
-        <label class="visibility-row">
-          <span class="visibility-label">${label}</span>
-          <input
-            type="checkbox"
-            .checked=${value}
-            @change=${(e: Event) => {
-              if (!this.config) return;
-              const checked = (e.target as HTMLInputElement).checked;
-              const prev = this.config;
-              const next = setVisibility(prev, key, checked);
-              this.pushPatch(prev, next, `set layer_visibility.${key}`);
-            }}
-          />
-          <span class="visibility-val">${value ? t('editor.inspector.visibilityVisible') : t('editor.inspector.visibilityHidden')}</span>
-        </label>
-      `;
-    };
-
-    return html`
-      <details class="panel visibility-panel">
-        <summary>${t('editor.inspector.visibilitySummary')}</summary>
-        <div class="panel-body">
-          <p class="hint-sub">
-            ${t('editor.inspector.visibilityHint')}
-          </p>
-          ${toggle('nodes', t('editor.inspector.opacityNodes'))}
-          ${toggle('lines', t('editor.inspector.visibilityFlowLines'))}
-          ${toggle('dots', t('editor.inspector.visibilityAnimatedDots'))}
-          ${toggle('labels', t('editor.inspector.opacityLabels'))}
-          ${toggle('values', t('editor.inspector.opacityValues'))}
-          ${toggle('overlays', t('editor.toolbar.overlays'))}
-        </div>
-      </details>
-    `;
-  }
-
   private renderDefaultsPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const d: FlowmeDefaults = this.config.defaults ?? {};
@@ -3018,7 +2982,6 @@ export class FlowmeCardEditor extends LitElement {
         ${this.renderGlobalAnimationPanel()}
         ${this.renderOpacityPanel()}
         ${this.renderDomainColorsPanel()}
-        ${this.renderVisibilityPanel()}
         ${this.renderDefaultsPanel()}
       </div>
     `;
@@ -4708,9 +4671,8 @@ export class FlowmeCardEditor extends LitElement {
     // asynchronously (microtask / setTimeout) the flag remains true until
     // setConfig consumes and clears it — never reset it here.
     this._ownCommit = true;
-    const outgoing = finalizeConfigForHa(config);
     const event = new CustomEvent('config-changed', {
-      detail: { config: outgoing },
+      detail: { config },
       bubbles: true,
       composed: true,
     });
