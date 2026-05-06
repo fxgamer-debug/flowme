@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.9]
+
+### Fixed
+
+- **Dash `direction: reverse`:** Single-stream dash animation always advances along the **rendered** path (`stroke-dashoffset` 0 → −patternLength). Semantic direction (`forward` / `reverse` / `auto`) comes from `syncFlowPathGeometry` (forward vs reversed polyline). Flipping the dash sweep when the path was already reversed made motion match forward mode on screen (double reversal).
+
 ## [2.5.8]
 
 ### Removed

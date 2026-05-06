@@ -1220,7 +1220,7 @@ export class SvgRenderer implements FlowRenderer {
     flow: FlowConfig,
     durMs: number,
     color: string,
-    direction: number,
+    _direction: number,
     burstMultiplier: number,
     motionStopped = false,
   ): void {
@@ -1238,7 +1238,14 @@ export class SvgRenderer implements FlowRenderer {
     const glow = this.glowFilter(flow, this.profileFor(flow), color);
     const durStr = `${(durMs / 1000).toFixed(3)}s`;
 
-    const applyDashAnim = (strokeEl: SVGUseElement, travelSign: number) => {
+    /**
+     * Animate dashes along the **current** path `d` in the positive path-parameter
+     * direction (0 → −patternLength). Semantic travel (from→to vs to→from) is
+     * already encoded by {@link syncFlowPathGeometry} (forward vs reversed polyline).
+     * Using a negative sweep here would double-reverse with a reversed path and look
+     * “always forward” on screen — see v2.5.9 dash reverse fix.
+     */
+    const applyDashAnimForwardAlongPath = (strokeEl: SVGUseElement) => {
       strokeEl.setAttribute('stroke', color);
       strokeEl.setAttribute('stroke-width', String(strokeWidth * 2));
       strokeEl.setAttribute('stroke-dasharray', `${dashLen} ${gapLen}`);
@@ -1250,13 +1257,8 @@ export class SvgRenderer implements FlowRenderer {
       if (!motionStopped) {
         const dashAnim = document.createElementNS(SVG_NS, 'animate');
         dashAnim.setAttribute('attributeName', 'stroke-dashoffset');
-        if (travelSign > 0) {
-          dashAnim.setAttribute('from', '0');
-          dashAnim.setAttribute('to', `-${patternLength}`);
-        } else {
-          dashAnim.setAttribute('from', `-${patternLength}`);
-          dashAnim.setAttribute('to', '0');
-        }
+        dashAnim.setAttribute('from', '0');
+        dashAnim.setAttribute('to', `-${patternLength}`);
         dashAnim.setAttribute('dur', durStr);
         dashAnim.setAttribute('repeatCount', 'indefinite');
         strokeEl.appendChild(dashAnim);
@@ -1289,8 +1291,8 @@ export class SvgRenderer implements FlowRenderer {
       dom.lineStrokeRev.setAttributeNS(XLINK_NS, 'href', `#${revRef}`);
       dom.lineStrokeRev.setAttribute('href', `#${revRef}`);
 
-      applyDashAnim(dom.lineStroke, 1);
-      applyDashAnim(dom.lineStrokeRev, 1);
+      applyDashAnimForwardAlongPath(dom.lineStroke);
+      applyDashAnimForwardAlongPath(dom.lineStrokeRev);
       return;
     }
 
@@ -1308,7 +1310,7 @@ export class SvgRenderer implements FlowRenderer {
 
     dom.lineStroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
     dom.lineStroke.setAttribute('href', `#${dom.pathId}`);
-    applyDashAnim(dom.lineStroke, direction);
+    applyDashAnimForwardAlongPath(dom.lineStroke);
   }
 
   /**
