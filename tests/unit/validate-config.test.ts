@@ -133,23 +133,6 @@ describe('validateConfig — happy path', () => {
     });
   });
 
-  it('parses background.weather_effects boolean', () => {
-    const on = validateConfig({
-      ...minimalConfig(),
-      background: {
-        default: '/local/bg.jpg',
-        weather_entity: 'weather.home',
-        weather_effects: true,
-      },
-    });
-    expect(on.background.weather_effects).toBe(true);
-    const off = validateConfig({
-      ...minimalConfig(),
-      background: { default: '/local/bg.jpg', weather_effects: false },
-    });
-    expect(off.background.weather_effects).toBeUndefined();
-  });
-
   it('omits flow label when empty or identical to id', () => {
     const mk = (label: unknown) =>
       validateConfig({

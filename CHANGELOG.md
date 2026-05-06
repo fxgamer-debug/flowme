@@ -2,6 +2,24 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5]
+
+### Added
+
+- **Transparent mode:** Omit `background` or `background.default` to render the card with a transparent background so the Lovelace theme shows through. Node and flow positions use the same percentage coordinates as when a background is set (`aspect_ratio` controls card proportions; default `16:10` if unset).
+- **Editor — transparent canvas:** When no default background URL is set, a subtle light grid is drawn on the editor canvas (editor only, not on the dashboard card).
+- **Coordinate system:** The visual editor’s logical scene matches the card **stage** (same % semantics as the live card). Background images are a separate CSS `cover` layer and no longer define layout dimensions.
+- **Pathfinding (Suggest Path):** Endpoints and waypoints are mapped between stage % and image % using the same **cover** projection as the runtime background, so suggested routes align with the bitmap when aspect ratios differ.
+
+### Removed
+
+- **CSS weather effects:** The experimental `background.weather_effects` option, bundled CSS animations, editor checkbox, and `weather-effects.ts` implementation were removed (they were not satisfactory visually). **Weather-reactive background switching** via `background.weather_states`, `weather_entity`, `sun_entity`, and crossfades is unchanged.
+
+### Changed
+
+- **Editor zoom:** Minimum zoom-out level is **0.5×** (maximum zoom-in remains **5×**); fit view uses scale **1.0**.
+- **README / FEATURES:** Document transparent mode and remove references to removed CSS weather overlays.
+
 ## [2.4.1]
 
 ### Changed

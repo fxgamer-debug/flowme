@@ -680,12 +680,6 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     }
     background.transition_duration = bg['transition_duration'] as number;
   }
-  if (bg['weather_effects'] !== undefined) {
-    if (typeof bg['weather_effects'] !== 'boolean') {
-      fail('background.weather_effects', t('validation.mustBeBoolean'));
-    }
-    if (bg['weather_effects']) background.weather_effects = true;
-  }
 
   const nodesRaw = c['nodes'];
   if (!Array.isArray(nodesRaw)) fail('nodes', t('validation.nodesMustBeArray'));

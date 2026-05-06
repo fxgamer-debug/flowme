@@ -24,7 +24,7 @@ Without this setup, you can still set `background.default` and weather image URL
 
 GIF, animated WebP, and APNG files work as ordinary background images (browser/CSS `background-image`). Store them under `/config/www/community/flowme/backgrounds/` and reference `/local/community/flowme/backgrounds/…` in YAML.
 
-Combining animated backgrounds with **`background.weather_effects`** (see below) can be heavy on low-powered or wall-mounted tablets; use one or the other where performance matters. Rough file-size guidance: GIF < 2MB; animated WebP < 1MB; APNG < 1MB.
+Very large animated backgrounds can be heavy on low-powered or wall-mounted tablets. Rough file-size guidance: GIF < 2MB; animated WebP < 1MB; APNG < 1MB.
 
 ### Generating custom animated backgrounds
 
@@ -38,35 +38,29 @@ Prefer **animated WebP** for quality vs file size, or **GIF** for widest compati
 
 Practical target: a **3–5 second** seamless loop at your card background resolution; keep files **under ~2MB** for smooth playback.
 
-### Weather effects (CSS overlays)
+### Weather effects
 
-When **`background.weather_effects`** is `true` and **`background.weather_entity`** points at a weather entity, FlowMe draws a **pure CSS** animated layer above the background image (below flows and nodes). States come from Home Assistant’s weather integration (`weather.state`). Animations honour **`prefers-reduced-motion`**.
+CSS weather overlay animations were investigated and implemented but were not found to be visually pleasing enough to include in FlowMe.
 
-| YAML | Role |
-|------|------|
-| `background.weather_effects: true` | Enable overlays (requires `weather_entity`) |
+For atmospheric weather effects we recommend using **animated background images** instead — see the **Animated backgrounds** section above. AI generation tools (Runway, Pika, Kling) can create beautiful seamless looping backgrounds for any weather condition.
 
-Supported HA weather states and overlay behaviour:
+**Weather-reactive background switching** is still fully supported via **`background.weather_states`** — FlowMe will automatically switch between your background images based on the current weather state (together with **`weather_entity`** and optional **`sun_entity`**).
 
-| State | Effect |
-| ----- | ------ |
-| `sunny` | Radial glow plus several golden ray beams from the top centre |
-| `clear-night` | Many star dots with independent twinkle timing |
-| `cloudy` | Few large blurred clouds drifting slowly |
-| `partlycloudy` | Fewer / lighter clouds, slightly faster drift |
-| `rainy` | Diagonal rain streaks |
-| `pouring` | Denser, faster rain |
-| `snowy` | Falling snowflakes with mild lateral drift |
-| `snowy-rainy` | Mix of rain streaks and snowflakes |
-| `windy` | Horizontal sweep lines |
-| `windy-variant` | More / faster wind streaks |
-| `fog` | Soft drifting fog layers; optional light blur where supported |
-| `hail` | Small pellets falling quickly |
-| `lightning` | Occasional full-area flash |
-| `lightning-rainy` | Rain plus lightning flashes |
-| `exceptional` | Pulsing FlowMe-orange edge glow |
+### Transparent mode
 
-Unknown or unsupported states hide the overlay. **`weather_effects`** defaults to **false**.
+FlowMe can be used without a background image — omit the `background` section from your config or leave **`background.default`** empty. The card background is transparent, showing your Home Assistant dashboard theme behind the flow animations. Node positions remain percentages on the card **stage**; use **`aspect_ratio`** (default **`16:10`** if not set) for proportions. Explicit card height can still be set via Home Assistant layout, card-mod, or grid wrappers (standard HA practice).
+
+When no default background URL is set, the **editor** draws a subtle grid on the canvas so you can see the coordinate space (this grid does not appear on the dashboard card).
+
+```yaml
+type: custom:flowme-card
+aspect_ratio: "16:9"
+nodes:
+  - id: solar
+    position: { x: 20, y: 40 }
+    entity: sensor.solar_power
+flows: []
+```
 
 ---
 

@@ -117,9 +117,25 @@ background:
   default: /local/community/flowme/backgrounds/rain.gif
 ```
 
-**Note:** Using animated backgrounds together with **CSS weather effects** (see **FEATURES.md**) is not recommended on low-powered or always-on devices; it may reduce performance. Prefer one or the other.
+**Note:** Very large animated files can be heavy on low-powered or always-on wall tablets; use modest resolution and file size (see **FEATURES.md** for guidance).
 
 Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP under 1MB; APNG under 1MB (WebP often looks better than GIF at a smaller size).
+
+### Transparent mode
+
+FlowMe can be used **without** a background image — omit the `background` section from your config (or leave `background.default` empty). The card background is transparent, so your Home Assistant theme and panels show through. Flows and nodes still use percentage positions on the card’s **stage**; set `aspect_ratio` (for example `16:9`) to control proportions. The editor shows a light grid on the canvas when there is no background (editor only).
+
+```yaml
+type: custom:flowme-card
+domain: energy
+aspect_ratio: "16:9"
+nodes:
+  - id: solar
+    position: { x: 20, y: 40 }
+    entity: sensor.solar_power
+    label: Solar
+flows: []
+```
 
 ---
 
@@ -131,7 +147,7 @@ Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP unde
 | ------------- | ------- | -------------- | ------------------------------------------------ |
 | `domain`      | string  | `energy`       | Flow domain: `energy`, `water`, `network`, `hvac`, `gas`, `generic` |
 | `debug`       | boolean | `false`        | Enable console logging                          |
-| `aspect_ratio`| string  | (image native) | Canvas aspect ratio, e.g. `16:10`               |
+| `aspect_ratio`| string  | `16:10`        | Card aspect ratio, e.g. `16:10` or `16:9`       |
 | `fullscreen`  | boolean | `false`        | Panel / fullscreen style                        |
 | `edit_mode_password` | string | —        | Optional password before the visual editor opens |
 
@@ -139,12 +155,11 @@ Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP unde
 
 | Option                        | Type   | Description |
 | ----------------------------- | ------ | ----------- |
-| `background.default`          | string | Default background image URL |
+| `background.default`          | string | Default background image URL (omit or empty for transparent card) |
 | `background.weather_entity`   | string | Weather entity ID for state-based images |
 | `background.sun_entity`       | string | Sun entity (e.g. `sun.sun`) for night variant keys |
 | `background.transition_duration` | number | Crossfade duration in **milliseconds** (default 5000 if omitted) |
 | `background.weather_states`   | object | Map of weather state → image URL |
-| `background.weather_effects`  | bool   | When `true` and `weather_entity` is set, animated CSS overlays match the current weather (default `false`) |
 
 ### Nodes
 
