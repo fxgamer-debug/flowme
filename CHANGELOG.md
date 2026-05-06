@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6]
+
+### Changed
+
+- **Editor UI (v2.6):** Tab-based layout (Card, Nodes, Flows, Overlays, Settings) below the toolbar with FlowMe orange active state; canvas collapse toggle; section cards and HA theme variables for styling; chip pickers for nodes, flows, and overlays; advanced options as checkboxes; weather state rows on a fixed grid; tab selection follows canvas selection (empty canvas → Card tab). Card rendering, animation, validation, and config commands are unchanged.
+
+### Documentation
+
+- **FEATURES.md:** Added notes on limited real-world coverage for node effects and value gradient.
+
 ## [2.5.10]
 
 ### Fixed

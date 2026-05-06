@@ -132,6 +132,8 @@ interface SuggestPreview {
   elapsedMs: number;
 }
 
+type EditorTab = 'card' | 'nodes' | 'flows' | 'overlays' | 'settings';
+
 function parseAspectRatioDimensions(value: string | undefined): { w: number; h: number } {
   const v = value ?? '16:10';
   const m = /^(\d+):(\d+)$/.exec(v);
@@ -196,8 +198,6 @@ export class FlowmeCardEditor extends LitElement {
   @state() private flowEndpointError: string | null = null;
   /** Live zero-threshold % text while editing (per flow id) — drives reactive cutoff hint. */
   @state() private flowZeroThresholdDraft: Record<string, string> = {};
-  /** Advanced-options `<details>` open state per flow (undefined = derive from `zero_threshold` in config). */
-  @state() private flowInspectorAdvancedOpen: Record<string, boolean> = {};
   @state() private imageBrowserOpen = false;
   @state() private imageBrowserLoading = false;
   @state() private imageBrowserError = '';
@@ -207,8 +207,10 @@ export class FlowmeCardEditor extends LitElement {
   private _pathWorker?: Worker;
   private _pathWorkerPending = false;
   private _pathPendingSelection: { fromId: string; toId: string } | null = null;
-  /** Right-column toolbar selector: which type is shown in the element dropdown. */
-  @state() private selectorType: 'nodes' | 'flows' | 'overlays' | '' = '';
+  @state() private activeTab: EditorTab = 'card';
+  @state() private canvasCollapsed = false;
+  /** Per-section "Show advanced options" checkboxes (keys: nodes, flows, overlays, weatherMaps). */
+  @state() private showAdvanced: Record<string, boolean> = {};
   /** Config snapshot captured when the editor first opens (external setConfig).
    *  Used by the Cancel button to discard all in-session edits. */
   @state() private savedConfig?: FlowmeConfig;
@@ -302,6 +304,15 @@ export class FlowmeCardEditor extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
+    const selChanged =
+      changed.has('selectedNodeId') ||
+      changed.has('selectedFlowId') ||
+      changed.has('selectedOverlayId');
+    if (selChanged) {
+      if (this.selectedOverlayId) this.activeTab = 'overlays';
+      else if (this.selectedFlowId) this.activeTab = 'flows';
+      else if (this.selectedNodeId) this.activeTab = 'nodes';
+    }
     if (changed.has('selectedFlowId')) {
       this.flowEndpointError = null;
     }
@@ -331,6 +342,21 @@ export class FlowmeCardEditor extends LitElement {
       }
       this.ensureEditorNodeFxRaf();
     });
+  }
+
+  private toggleAdvanced(sectionId: string, v: boolean): void {
+    this.showAdvanced = { ...this.showAdvanced, [sectionId]: v };
+    if (sectionId === 'flows' && !v && this.config && this.selectedFlowId) {
+      const flowId = this.selectedFlowId;
+      const flow = this.config.flows.find((f) => f.id === flowId);
+      const { [flowId]: _z, ...restDraft } = this.flowZeroThresholdDraft;
+      this.flowZeroThresholdDraft = restDraft;
+      if (flow?.animation?.zero_threshold !== undefined) {
+        const prev = this.config;
+        const next = setFlowAnimation(prev, flowId, { zero_threshold: undefined });
+        this.pushPatch(prev, next, `advanced closed: clear zero_threshold ${flowDisplayName(flow)}`);
+      }
+    }
   }
 
   private ensureEditorNodeFxRaf(): void {
@@ -503,17 +529,6 @@ export class FlowmeCardEditor extends LitElement {
     const bgUrl = this.config.background.default;
     const multiSelect = this.selectedNodeIds.size >= 2;
 
-    // Derive selector dropdown values from canvas selection so they stay in sync.
-    // When something is selected on canvas, reflect it in the dropdowns.
-    // When nothing is selected, keep whatever the user last picked in the type dropdown.
-    const derivedType: typeof this.selectorType =
-      this.selectedNodeId ? 'nodes'
-      : this.selectedFlowId ? 'flows'
-      : this.selectedOverlayId ? 'overlays'
-      : this.selectorType;
-    const derivedElement =
-      this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? '';
-
     const imageReady =
       this.imageLayoutReady && this.imageNaturalW > 0 && this.imageNaturalH > 0;
 
@@ -522,7 +537,7 @@ export class FlowmeCardEditor extends LitElement {
 
         <!-- ZONE 1 — Canvas -->
         <div
-          class="z-canvas"
+          class=${`z-canvas${this.canvasCollapsed ? ' z-canvas--collapsed' : ''}`}
           role="application"
           aria-label=${t('editor.canvas.ariaLabel')}
           ${ref(this.canvasRef)}
@@ -698,66 +713,47 @@ export class FlowmeCardEditor extends LitElement {
             </div>
           </div>
 
-          <!-- Right (35%): Type + Element dropdowns stacked -->
-          <div class="tb-col-selector">
-            <select
-              class="tb-select"
-              aria-label=${t('editor.canvas.selectTypeAria')}
-              .value=${derivedType}
-              @change=${(e: Event) => {
-                this.selectorType = (e.target as HTMLSelectElement).value as typeof this.selectorType;
-                // Clear canvas selection when manually switching type
-                this.selectedNodeId = null;
-                this.selectedNodeIds = new Set();
-                this.selectedFlowId = null;
-                this.selectedOverlayId = null;
+          <!-- Right (35%): Canvas collapse -->
+          <div class="tb-col-canvas-toggle">
+            <button
+              type="button"
+              class="tb-btn tb-btn-canvas-toggle"
+              aria-expanded=${this.canvasCollapsed ? 'false' : 'true'}
+              @click=${() => {
+                this.canvasCollapsed = !this.canvasCollapsed;
               }}
             >
-              <option value="">${t('editor.toolbar.selectType')}</option>
-              <option value="nodes">${t('editor.toolbar.nodes')}</option>
-              <option value="flows">${t('editor.toolbar.flows')}</option>
-              <option value="overlays">${t('editor.toolbar.overlays')}</option>
-            </select>
-            <select
-              class="tb-select"
-              aria-label=${t('editor.canvas.selectElementAria')}
-              ?disabled=${!derivedType}
-              .value=${derivedElement}
-              @change=${(e: Event) => {
-                const id = (e.target as HTMLSelectElement).value;
-                if (!id) return;
-                if (derivedType === 'nodes') {
-                  this.selectedNodeId = id;
-                  this.selectedNodeIds = new Set([id]);
-                  this.selectedFlowId = null;
-                  this.selectedOverlayId = null;
-                } else if (derivedType === 'flows') {
-                  this.selectedFlowId = id;
-                  this.selectedNodeId = null;
-                  this.selectedNodeIds = new Set();
-                  this.selectedOverlayId = null;
-                } else if (derivedType === 'overlays') {
-                  this.selectedOverlayId = id;
-                  this.selectedNodeId = null;
-                  this.selectedNodeIds = new Set();
-                  this.selectedFlowId = null;
-                }
-                this._pendingInspectorLabelFocus = true;
-              }}
-            >
-              <option value="">${derivedType ? t('editor.toolbar.selectElement') : t('editor.toolbar.selectElementDash')}</option>
-              ${derivedType === 'nodes' ? this.config.nodes.map((n) => html`
-                <option value=${n.id}>${n.label ?? n.id}</option>
-              `) : nothing}
-              ${derivedType === 'flows' ? this.config.flows.map((f) => html`
-                <option value=${f.id}>${flowDisplayName(f)}</option>
-              `) : nothing}
-              ${derivedType === 'overlays' ? (this.config.overlays ?? []).map((o, i) => html`
-                <option value=${o.id ?? String(i)}>${t('editor.canvas.overlayOption', i, o.id ? t('editor.canvas.overlayOptionIdPart', o.id) : '')}</option>
-              `) : nothing}
-            </select>
+              ${this.canvasCollapsed ? t('editor.canvas.showCanvas') : t('editor.canvas.hideCanvas')}
+            </button>
           </div>
 
+        </div>
+
+        <!-- Tab bar -->
+        <div class="editor-tab-bar" role="tablist" aria-label=${t('editor.tabs.barAria')}>
+          ${(
+            [
+              ['card', t('editor.tabs.card')],
+              ['nodes', t('editor.tabs.nodes')],
+              ['flows', t('editor.tabs.flows')],
+              ['overlays', t('editor.tabs.overlays')],
+              ['settings', t('editor.tabs.settings')],
+            ] as const
+          ).map(
+            ([id, label]) => html`
+              <button
+                type="button"
+                role="tab"
+                class=${`editor-tab ${this.activeTab === id ? 'editor-tab--active' : ''}`}
+                aria-selected=${this.activeTab === id ? 'true' : 'false'}
+                @click=${() => {
+                  this.activeTab = id;
+                }}
+              >
+                ${label}
+              </button>
+            `,
+          )}
         </div>
 
         <!-- ZONE 3 — Context panel -->
@@ -1079,158 +1075,181 @@ export class FlowmeCardEditor extends LitElement {
         this.pushPatch(prev, next, description);
       };
 
+      const nodeAdv = this.showAdvanced.nodes === true;
       return html`
         <div class="inspector">
           <h3>${t('editor.inspector.nodeHeading', node.id)}</h3>
-
-          <!-- Row 1: Label | Entity -->
-          <div class="node-row">
-            <label class="node-cell">
-              <span class="node-cell-label">${t('editor.inspector.label')}</span>
-              <input
-                type="text"
-                ${ref(this.nodeLabelInputRef)}
-                .value=${node.label ?? ''}
-                @change=${(e: Event) => this.onNodeLabelChange(node.id, e)}
-              />
-            </label>
-            <label class="node-cell">
-              <span class="node-cell-label">${t('editor.inspector.entity')}</span>
-              ${this.renderEntityPicker(
-                node.entity ?? '',
-                (value) => this.setNodeEntity(node.id, value),
-                { includeDomains: ['sensor', 'binary_sensor', 'input_number', 'number'] },
-              )}
-            </label>
-          </div>
-
-          <!-- Row 2: Colour | Visible | Show value | Show label -->
-          <div class="node-row">
-            <label class="node-cell">
-              <span class="node-cell-label">${t('editor.inspector.colour')}</span>
-              <input
-                type="color"
-                .value=${node.color ?? '#ffffff'}
-                @change=${(e: Event) => {
-                  const v = (e.target as HTMLInputElement).value;
-                  patchNode({ color: v }, `set color of ${node.id}`);
-                }}
-              />
-            </label>
-            <label class="node-cell node-cell-toggle">
-              <input
-                type="checkbox"
-                .checked=${node.visible !== false}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const checked = (e.target as HTMLInputElement).checked;
-                  const prev = this.config;
-                  const next = setNodeVisible(prev, node.id, checked);
-                  this.pushPatch(prev, next, `set visible of ${node.id}`);
-                }}
-              />
-              <span class="node-cell-label">${t('editor.inspector.visible')}</span>
-            </label>
-            <label class="node-cell node-cell-toggle">
-              <input
-                type="checkbox"
-                .checked=${node.show_value !== false}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const checked = (e.target as HTMLInputElement).checked;
-                  dlog('[FlowMe] show_value change:', node.id, 'value:', checked);
-                  const prev = this.config;
-                  const next = setNodeShowValue(prev, node.id, checked);
-                  this.pushPatch(prev, next, `set show_value of ${node.id}`);
-                }}
-              />
-              <span class="node-cell-label">${t('editor.inspector.showValue')}</span>
-            </label>
-            <label class="node-cell node-cell-toggle">
-              <input
-                type="checkbox"
-                .checked=${node.show_label !== false}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const checked = (e.target as HTMLInputElement).checked;
-                  dlog('[FlowMe] show_label change:', node.id, 'value:', checked);
-                  const prev = this.config;
-                  const next = setNodeShowLabel(prev, node.id, checked);
-                  this.pushPatch(prev, next, `set show_label of ${node.id}`);
-                }}
-              />
-              <span class="node-cell-label">${t('editor.inspector.showLabel')}</span>
-            </label>
-          </div>
-
-          <!-- Row 3: X% | Y% | Size | Opacity -->
-          <div class="node-row">
-            <label class="node-cell">
-              <span class="node-cell-label">${t('editor.inspector.positionX')}</span>
-              <input
-                type="number"
-                min="0" max="100" step="1"
-                .value=${String(Math.round(node.position.x))}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  if (!Number.isFinite(v)) return;
-                  const prev = this.config;
-                  const next = moveNode(prev, node.id, { x: v, y: node.position.y });
-                  this.pushPatch(prev, next, `move ${node.id} x`);
-                }}
-              />
-            </label>
-            <label class="node-cell">
-              <span class="node-cell-label">${t('editor.inspector.positionY')}</span>
-              <input
-                type="number"
-                min="0" max="100" step="1"
-                .value=${String(Math.round(node.position.y))}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  if (!Number.isFinite(v)) return;
-                  const prev = this.config;
-                  const next = moveNode(prev, node.id, { x: node.position.x, y: v });
-                  this.pushPatch(prev, next, `move ${node.id} y`);
-                }}
-              />
-            </label>
-            <label class="node-cell">
-              <span class="node-cell-label">${t('editor.inspector.sizePx')}</span>
-              <input
-                type="number"
-                min="4" max="60" step="1"
-                .value=${String(node.size ?? 12)}
-                @change=${(e: Event) => {
-                  const v = parseInt((e.target as HTMLInputElement).value, 10);
-                  if (!Number.isFinite(v)) return;
-                  patchNode({ size: v }, `set size of ${node.id}`);
-                }}
-              />
-            </label>
-            <label class="node-cell">
-              <span class="node-cell-label">${t('editor.inspector.opacity')}</span>
-              <input
-                type="number"
-                min="0" max="1" step="0.05"
-                .value=${String(node.opacity ?? 1)}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  if (!Number.isFinite(v)) return;
-                  const prev = this.config;
-                  const next = setNodeOpacity(prev, node.id, v >= 1 ? undefined : v);
-                  this.pushPatch(prev, next, `set opacity of ${node.id}`);
-                }}
-              />
-            </label>
-          </div>
-
-          ${this.renderNodeEffectInspector(node, patchNode)}
-
-          <!-- Delete -->
+          ${this.renderSectionCard(
+            t('editor.section.nodeBasic'),
+            html`
+              <div class="node-row">
+                <label class="node-cell">
+                  <span class="node-cell-label">${t('editor.inspector.label')}</span>
+                  <input
+                    type="text"
+                    ${ref(this.nodeLabelInputRef)}
+                    .value=${node.label ?? ''}
+                    @change=${(e: Event) => this.onNodeLabelChange(node.id, e)}
+                  />
+                </label>
+                <label class="node-cell">
+                  <span class="node-cell-label">${t('editor.inspector.entity')}</span>
+                  ${this.renderEntityPicker(
+                    node.entity ?? '',
+                    (value) => this.setNodeEntity(node.id, value),
+                    { includeDomains: ['sensor', 'binary_sensor', 'input_number', 'number'] },
+                  )}
+                </label>
+              </div>
+              <div class="node-row">
+                <label class="node-cell node-cell-toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${node.show_label !== false}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const checked = (e.target as HTMLInputElement).checked;
+                      dlog('[FlowMe] show_label change:', node.id, 'value:', checked);
+                      const prev = this.config;
+                      const next = setNodeShowLabel(prev, node.id, checked);
+                      this.pushPatch(prev, next, `set show_label of ${node.id}`);
+                    }}
+                  />
+                  <span class="node-cell-label">${t('editor.inspector.showLabel')}</span>
+                </label>
+                <label class="node-cell node-cell-toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${node.show_value !== false}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const checked = (e.target as HTMLInputElement).checked;
+                      dlog('[FlowMe] show_value change:', node.id, 'value:', checked);
+                      const prev = this.config;
+                      const next = setNodeShowValue(prev, node.id, checked);
+                      this.pushPatch(prev, next, `set show_value of ${node.id}`);
+                    }}
+                  />
+                  <span class="node-cell-label">${t('editor.inspector.showValue')}</span>
+                </label>
+                <label class="node-cell node-cell-toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${node.visible !== false}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const checked = (e.target as HTMLInputElement).checked;
+                      const prev = this.config;
+                      const next = setNodeVisible(prev, node.id, checked);
+                      this.pushPatch(prev, next, `set visible of ${node.id}`);
+                    }}
+                  />
+                  <span class="node-cell-label">${t('editor.inspector.visible')}</span>
+                </label>
+              </div>
+            `,
+          )}
+          ${this.renderSectionCard(t('editor.section.nodeEffect'), this.renderNodeEffectInspector(node, patchNode))}
+          <label class="advanced-toggle">
+            <input
+              type="checkbox"
+              .checked=${nodeAdv}
+              @change=${(e: Event) =>
+                this.toggleAdvanced('nodes', (e.target as HTMLInputElement).checked)}
+            />
+            ${t('editor.inspector.advancedOptions')}
+          </label>
+          ${nodeAdv
+            ? html`
+                <div class="advanced-block advanced-block--nested">
+                  <label class="node-cell">
+                    <span class="node-cell-label">${t('editor.inspector.colour')}</span>
+                    <input
+                      type="color"
+                      .value=${node.color ?? '#ffffff'}
+                      @change=${(e: Event) => {
+                        const v = (e.target as HTMLInputElement).value;
+                        patchNode({ color: v }, `set color of ${node.id}`);
+                      }}
+                    />
+                  </label>
+                  <div class="node-row">
+                    <label class="node-cell">
+                      <span class="node-cell-label">${t('editor.inspector.positionX')}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        .value=${String(Math.round(node.position.x))}
+                        @change=${(e: Event) => {
+                          if (!this.config) return;
+                          const v = parseFloat((e.target as HTMLInputElement).value);
+                          if (!Number.isFinite(v)) return;
+                          const prev = this.config;
+                          const next = moveNode(prev, node.id, { x: v, y: node.position.y });
+                          this.pushPatch(prev, next, `move ${node.id} x`);
+                        }}
+                      />
+                    </label>
+                    <label class="node-cell">
+                      <span class="node-cell-label">${t('editor.inspector.positionY')}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        .value=${String(Math.round(node.position.y))}
+                        @change=${(e: Event) => {
+                          if (!this.config) return;
+                          const v = parseFloat((e.target as HTMLInputElement).value);
+                          if (!Number.isFinite(v)) return;
+                          const prev = this.config;
+                          const next = moveNode(prev, node.id, { x: node.position.x, y: v });
+                          this.pushPatch(prev, next, `move ${node.id} y`);
+                        }}
+                      />
+                    </label>
+                    <label class="node-cell">
+                      <span class="node-cell-label">${t('editor.inspector.sizePx')}</span>
+                      <input
+                        type="number"
+                        min="4"
+                        max="60"
+                        step="1"
+                        .value=${String(node.size ?? 12)}
+                        @change=${(e: Event) => {
+                          const v = parseInt((e.target as HTMLInputElement).value, 10);
+                          if (!Number.isFinite(v)) return;
+                          patchNode({ size: v }, `set size of ${node.id}`);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    ${t('editor.inspector.opacity')}
+                    <div class="inspector-slider-row">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        .value=${String(node.opacity ?? 1)}
+                        @change=${(e: Event) => {
+                          if (!this.config) return;
+                          const v = parseFloat((e.target as HTMLInputElement).value);
+                          if (!Number.isFinite(v)) return;
+                          const prev = this.config;
+                          const next = setNodeOpacity(prev, node.id, v >= 1 ? undefined : v);
+                          this.pushPatch(prev, next, `set opacity of ${node.id}`);
+                        }}
+                      />
+                      <span>${(node.opacity ?? 1).toFixed(2)}</span>
+                    </div>
+                  </label>
+                </div>
+              `
+            : nothing}
           <div class="node-row">
             <button class="danger" @click=${() => this.removeNode(node.id)}>${t('editor.inspector.deleteNode')}</button>
           </div>
@@ -1242,6 +1261,27 @@ export class FlowmeCardEditor extends LitElement {
       if (!flow) return nothing;
       const flowIndex = this.config.flows.findIndex((f) => f.id === flow.id);
       const flowTitle = flowDisplayName(flow);
+      const flowAdv = this.showAdvanced.flows === true;
+      const prof = getProfile(flow.domain ?? this.config.domain);
+      const timing = resolveAnimTiming(flow, prof, this.config);
+      const domPeak = prof.peak;
+      const previewPts = [0, timing.peak * 0.5, timing.peak];
+      const previewDurations = previewPts.map(
+        (v) => `${(calcAnimDuration(v, timing) / 1000).toFixed(1)}s`,
+      );
+      const ztDraftPct = this.flowZeroThresholdDraft[flow.id];
+      let ztFracForHint: number;
+      if (ztDraftPct !== undefined && ztDraftPct.trim() !== '') {
+        const p = parseFloat(ztDraftPct);
+        ztFracForHint =
+          Number.isFinite(p) && p > 0 && p <= 100
+            ? p / 100
+            : (flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD);
+      } else {
+        ztFracForHint = flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD;
+      }
+      const resolvedPeak = flow.peak_value ?? prof.peak;
+      const cutoffHint = `${t('editor.inspector.zeroThresholdCutoff')} ${(ztFracForHint * resolvedPeak).toFixed(1)}${prof.unit_label ? ` ${prof.unit_label}` : ''}`;
       return html`
         <div class="inspector">
           <label class="inspector-id-row">
@@ -1255,350 +1295,317 @@ export class FlowmeCardEditor extends LitElement {
             />
           </label>
           <h3>${t('editor.inspector.flowHeading', flowDisplayName(flow))}</h3>
-          <fieldset class="inspector-fieldset">
-            <legend class="inspector-legend">${t('editor.inspector.routeAndSensor')}</legend>
-            <div class="field-row">
-              <label for="flow-label-${flow.id}">${t('editor.inspector.flowLabel')}</label>
-              <input
-                id="flow-label-${flow.id}"
-                type="text"
-                maxlength="64"
-                placeholder=${flow.id}
-                title=${t('editor.inspector.flowLabelPlaceholder')}
-                .value=${flow.label ?? ''}
-                @change=${(e: Event) => this.onFlowLabelChange(flow.id, (e.target as HTMLInputElement).value)}
-              />
-            </div>
-            <div class="field-row flow-endpoint-row">
-              <label for=${`flow-from-${flow.id}`}>${t('editor.inspector.fromNode')}</label>
-              <select
-                id=${`flow-from-${flow.id}`}
-                class="flow-endpoint-select"
-                ?disabled=${this.flowEndpointPathfindingFlowId === flow.id}
-                .value=${flow.from_node}
-                @change=${(e: Event) => {
-                  const v = (e.target as HTMLSelectElement).value;
-                  this.onFlowFromNodeChange(flow.id, v);
-                }}
-              >
-                ${this.config.nodes.map(
-                  (n) =>
-                    html`<option value=${n.id} ?selected=${n.id === flow.from_node}>${n.label ?? n.id}</option>`,
-                )}
-              </select>
-            </div>
-            <div class="field-row flow-endpoint-row">
-              <label for=${`flow-to-${flow.id}`}>${t('editor.inspector.toNode')}</label>
-              <select
-                id=${`flow-to-${flow.id}`}
-                class="flow-endpoint-select"
-                ?disabled=${this.flowEndpointPathfindingFlowId === flow.id}
-                .value=${flow.to_node}
-                @change=${(e: Event) => {
-                  const v = (e.target as HTMLSelectElement).value;
-                  this.onFlowToNodeChange(flow.id, v);
-                }}
-              >
-                ${this.config.nodes.map(
-                  (n) =>
-                    html`<option value=${n.id} ?selected=${n.id === flow.to_node}>${n.label ?? n.id}</option>`,
-                )}
-              </select>
-            </div>
-            ${this.flowEndpointPathfindingFlowId === flow.id
-              ? html`<p class="hint-sub flow-endpoint-busy">
-                  ${t('editor.toolbar.suggestPathFinding')}
-                  <span class="suggest-path-spinner" aria-hidden="true"></span>
-                </p>`
-              : nothing}
-            ${this.flowEndpointError && this.selectedFlowId === flow.id
-              ? html`<p class="flow-endpoint-error">${this.flowEndpointError}</p>`
-              : nothing}
-            <label>
-              ${t('editor.inspector.entity')}
-              ${this.renderEntityPicker(
-                flow.entity,
-                (value) => this.setFlowEntity(flow.id, value),
-                { includeDomains: ['sensor', 'input_number', 'number'] },
-              )}
-            </label>
-            ${(() => {
-              const prof = getProfile(flow.domain ?? this.config.domain);
-              const timing = resolveAnimTiming(flow, prof, this.config);
-              const domPeak = prof.peak;
-              const previewPts = [0, timing.peak * 0.5, timing.peak];
-              const previewDurations = previewPts.map(
-                (v) => `${(calcAnimDuration(v, timing) / 1000).toFixed(1)}s`,
-              );
-              const hasZt = flow.animation?.zero_threshold !== undefined;
-              const advancedOpen =
-                this.flowInspectorAdvancedOpen[flow.id] !== undefined
-                  ? this.flowInspectorAdvancedOpen[flow.id]!
-                  : hasZt;
-              return html`
-                <label>
-                  ${t('editor.inspector.peakValue')}
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="${domPeak}"
-                    .value=${flow.peak_value !== undefined ? String(flow.peak_value) : ''}
-                    @change=${(e: Event) => {
-                      if (!this.config) return;
-                      const raw = (e.target as HTMLInputElement).value.trim();
-                      const prev = this.config;
-                      if (raw === '') {
-                        const next = setFlowPeakValue(prev, flow.id, undefined);
-                        this.pushPatch(prev, next, `clear peak_value ${flowTitle}`);
-                        return;
-                      }
-                      const v = parseFloat(raw);
-                      if (!Number.isFinite(v) || v <= 0) return;
-                      const next = setFlowPeakValue(prev, flow.id, v);
-                      this.pushPatch(prev, next, `set peak_value ${flowTitle}`);
-                    }}
-                  />
-                  <span class="hint-sub">${t('editor.inspector.peakValueHelper')}</span>
-                </label>
-                <label>
-                  ${t('editor.inspector.minDuration')}
-                  <input
-                    type="number"
-                    min="1"
-                    max="60000"
-                    step="100"
-                    placeholder=${t('editor.inspector.animMinMsPlaceholder')}
-                    .value=${flow.animation?.min_duration !== undefined ? String(flow.animation.min_duration) : ''}
-                    @change=${(e: Event) => {
-                      if (!this.config) return;
-                      const raw = (e.target as HTMLInputElement).value.trim();
-                      const prev = this.config;
-                      if (raw === '') {
-                        const next = setFlowAnimation(prev, flow.id, { min_duration: undefined });
-                        this.pushPatch(prev, next, `clear flow min_duration ${flowTitle}`);
-                        return;
-                      }
-                      const v = parseInt(raw, 10);
-                      if (!Number.isFinite(v) || v <= 0) return;
-                      const next = setFlowAnimation(prev, flow.id, { min_duration: v });
-                      this.pushPatch(prev, next, `set flow min_duration ${flowTitle}`);
-                    }}
-                  />
-                </label>
-                <label>
-                  ${t('editor.inspector.maxDuration')}
-                  <input
-                    type="number"
-                    min="2"
-                    max="60000"
-                    step="500"
-                    placeholder=${t('editor.inspector.animMaxMsPlaceholder')}
-                    .value=${flow.animation?.max_duration !== undefined ? String(flow.animation.max_duration) : ''}
-                    @change=${(e: Event) => {
-                      if (!this.config) return;
-                      const raw = (e.target as HTMLInputElement).value.trim();
-                      const prev = this.config;
-                      if (raw === '') {
-                        const next = setFlowAnimation(prev, flow.id, { max_duration: undefined });
-                        this.pushPatch(prev, next, `clear flow max_duration ${flowTitle}`);
-                        return;
-                      }
-                      const v = parseInt(raw, 10);
-                      if (!Number.isFinite(v) || v <= 0) return;
-                      const next = setFlowAnimation(prev, flow.id, { max_duration: v });
-                      this.pushPatch(prev, next, `set flow max_duration ${flowTitle}`);
-                    }}
-                  />
-                </label>
-                <div class="speed-curve-preview inspector-timing-preview">
-                  <span>${t('editor.inspector.previewLinearSpeed')}</span>
-                  <strong>${previewDurations[0]}</strong>
-                  /
-                  <strong>${previewDurations[1]}</strong>
-                  /
-                  <strong>${previewDurations[2]}</strong>
-                </div>
-                <details
-                  class="advanced-options"
-                  .open=${advancedOpen}
-                  @toggle=${(e: Event) => {
-                    const el = e.currentTarget as HTMLDetailsElement;
-                    const open = el.open;
-                    this.flowInspectorAdvancedOpen = { ...this.flowInspectorAdvancedOpen, [flow.id]: open };
-                    if (!open) {
-                      const { [flow.id]: _z, ...restDraft } = this.flowZeroThresholdDraft;
-                      this.flowZeroThresholdDraft = restDraft;
-                      if (this.config && flow.animation?.zero_threshold !== undefined) {
-                        const prev = this.config;
-                        const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
-                        this.pushPatch(prev, next, `advanced closed: clear zero_threshold ${flowTitle}`);
-                      }
-                    }
+          ${this.renderSectionCard(
+            t('editor.section.flowConnection'),
+            html`
+              <div class="field-row">
+                <label for="flow-label-${flow.id}">${t('editor.inspector.flowLabel')}</label>
+                <input
+                  id="flow-label-${flow.id}"
+                  type="text"
+                  maxlength="64"
+                  placeholder=${flow.id}
+                  title=${t('editor.inspector.flowLabelPlaceholder')}
+                  .value=${flow.label ?? ''}
+                  @change=${(e: Event) => this.onFlowLabelChange(flow.id, (e.target as HTMLInputElement).value)}
+                />
+              </div>
+              <div class="field-row flow-endpoint-row">
+                <label for=${`flow-from-${flow.id}`}>${t('editor.inspector.fromNode')}</label>
+                <select
+                  id=${`flow-from-${flow.id}`}
+                  class="flow-endpoint-select"
+                  ?disabled=${this.flowEndpointPathfindingFlowId === flow.id}
+                  .value=${flow.from_node}
+                  @change=${(e: Event) => {
+                    const v = (e.target as HTMLSelectElement).value;
+                    this.onFlowFromNodeChange(flow.id, v);
                   }}
                 >
-                  <summary>${t('editor.inspector.advancedOptions')}</summary>
-                  <div class="advanced-options-content">
-                    ${(() => {
-                      const draftPct = this.flowZeroThresholdDraft[flow.id];
-                      let ztFracForHint: number;
-                      if (draftPct !== undefined && draftPct.trim() !== '') {
-                        const p = parseFloat(draftPct);
-                        ztFracForHint =
-                          Number.isFinite(p) && p > 0 && p <= 100
-                            ? p / 100
-                            : (flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD);
-                      } else {
-                        ztFracForHint = flow.animation?.zero_threshold ?? DEFAULT_ZERO_THRESHOLD;
-                      }
-                      const resolvedPeak = flow.peak_value ?? prof.peak;
-                      const cutoffHint = `${t('editor.inspector.zeroThresholdCutoff')} ${(ztFracForHint * resolvedPeak).toFixed(1)}${prof.unit_label ? ` ${prof.unit_label}` : ''}`;
-                      return html`
-                        <div class="field-row advanced-zero-row">
-                          <label>
-                            ${t('editor.inspector.zeroThreshold')}
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              placeholder=${t('editor.inspector.zeroThresholdAuto')}
-                              .value=${this.flowZeroThresholdDraft[flow.id] !== undefined
-                                ? this.flowZeroThresholdDraft[flow.id]
-                                : flow.animation?.zero_threshold !== undefined
-                                  ? (flow.animation.zero_threshold * 100).toFixed(1)
-                                  : ''}
-                              @input=${(e: Event) => {
-                                const v = (e.target as HTMLInputElement).value;
-                                this.flowZeroThresholdDraft = { ...this.flowZeroThresholdDraft, [flow.id]: v };
-                              }}
-                              @change=${(e: Event) => {
-                                if (!this.config) return;
-                                const raw = (e.target as HTMLInputElement).value.trim();
-                                const prev = this.config;
-                                const clearDraft = (): void => {
-                                  const { [flow.id]: _drop, ...restDraft } = this.flowZeroThresholdDraft;
-                                  this.flowZeroThresholdDraft = restDraft;
-                                };
-                                if (raw === '') {
-                                  clearDraft();
-                                  const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
-                                  this.pushPatch(prev, next, `clear flow zero_threshold ${flowTitle}`);
-                                  return;
-                                }
-                                const v = parseFloat(raw);
-                                if (!Number.isFinite(v) || v <= 0 || v > 100) return;
-                                clearDraft();
-                                const next = setFlowAnimation(prev, flow.id, { zero_threshold: v / 100 });
-                                this.pushPatch(prev, next, `set flow zero_threshold ${flowTitle}`);
-                              }}
-                            />
-                            <span class="field-hint hint-sub">${cutoffHint}</span>
-                          </label>
-                        </div>
-                      `;
-                    })()}
-                  </div>
-                </details>
-              `;
-            })()}
-          </fieldset>
-          ${this.renderWaypointList(flow)}
-          <label>
-            ${t('editor.inspector.lineStyle')}
-            <select
-              .value=${flow.line_style ?? 'corner'}
-              @change=${(e: Event) => {
-                if (!this.config) return;
-                const val = (e.target as HTMLSelectElement).value;
-                const prev = this.config;
-                const next = setFlowLineStyle(prev, flow.id, val as typeof flow.line_style);
-                this.pushPatch(prev, next, `set line style of ${flowTitle}`);
-              }}
-            >
-              ${LINE_STYLES.map(
-                (s) => html`<option value=${s} ?selected=${(flow.line_style ?? 'corner') === s}>${s}</option>`,
-              )}
-            </select>
-          </label>
-          <label>
-            ${t('editor.inspector.colourOverride')}
-            <div class="color-row">
-              ${(() => {
-                const profile = getProfile(flow.domain ?? this.config.domain);
-                const effective = resolveFlowColor(
-                  flow,
-                  profile,
-                  flow.domain ?? this.config.domain,
-                  1,
-                  this.config.domain_colors,
-                  flowIndex >= 0 ? flowIndex : 0,
-                );
-                return html`
+                  ${this.config.nodes.map(
+                    (n) =>
+                      html`<option value=${n.id} ?selected=${n.id === flow.from_node}>${n.label ?? n.id}</option>`,
+                  )}
+                </select>
+              </div>
+              <div class="field-row flow-endpoint-row">
+                <label for=${`flow-to-${flow.id}`}>${t('editor.inspector.toNode')}</label>
+                <select
+                  id=${`flow-to-${flow.id}`}
+                  class="flow-endpoint-select"
+                  ?disabled=${this.flowEndpointPathfindingFlowId === flow.id}
+                  .value=${flow.to_node}
+                  @change=${(e: Event) => {
+                    const v = (e.target as HTMLSelectElement).value;
+                    this.onFlowToNodeChange(flow.id, v);
+                  }}
+                >
+                  ${this.config.nodes.map(
+                    (n) =>
+                      html`<option value=${n.id} ?selected=${n.id === flow.to_node}>${n.label ?? n.id}</option>`,
+                  )}
+                </select>
+              </div>
+              ${this.flowEndpointPathfindingFlowId === flow.id
+                ? html`<p class="hint-sub flow-endpoint-busy">
+                    ${t('editor.toolbar.suggestPathFinding')}
+                    <span class="suggest-path-spinner" aria-hidden="true"></span>
+                  </p>`
+                : nothing}
+              ${this.flowEndpointError && this.selectedFlowId === flow.id
+                ? html`<p class="flow-endpoint-error">${this.flowEndpointError}</p>`
+                : nothing}
+              <label>
+                ${t('editor.inspector.entity')}
+                ${this.renderEntityPicker(
+                  flow.entity,
+                  (value) => this.setFlowEntity(flow.id, value),
+                  { includeDomains: ['sensor', 'input_number', 'number'] },
+                )}
+              </label>
+              <label>
+                ${t('editor.inspector.flowVisible')}
+                <div class="row">
                   <input
-                    type="color"
-                    .value=${flow.color ?? effective}
+                    type="checkbox"
+                    .checked=${flow.visible !== false}
                     @change=${(e: Event) => {
                       if (!this.config) return;
-                      const val = (e.target as HTMLInputElement).value;
+                      const checked = (e.target as HTMLInputElement).checked;
                       const prev = this.config;
-                      const next = setFlowColor(prev, flow.id, val);
-                      this.pushPatch(prev, next, `set colour of ${flowTitle}`);
+                      const next = setFlowVisible(prev, flow.id, checked);
+                      this.pushPatch(prev, next, `${checked ? 'show' : 'hide'} flow ${flowTitle}`);
                     }}
                   />
-                  <span class="color-effective">${flow.color ? t('editor.inspector.colourOverrideActive') : t('editor.inspector.colourDomainDefault')}</span>
-                  ${flow.color
-                    ? html`<button class="ghost" @click=${() => {
+                  <span>${flow.visible !== false ? t('editor.inspector.shown') : t('editor.inspector.hidden')}</span>
+                </div>
+              </label>
+            `,
+          )}
+          ${this.renderSectionCard(
+            t('editor.section.flowAnimation'),
+            html`
+              <label>
+                ${t('editor.inspector.lineStyle')}
+                <select
+                  .value=${flow.line_style ?? 'corner'}
+                  @change=${(e: Event) => {
+                    if (!this.config) return;
+                    const val = (e.target as HTMLSelectElement).value;
+                    const prev = this.config;
+                    const next = setFlowLineStyle(prev, flow.id, val as typeof flow.line_style);
+                    this.pushPatch(prev, next, `set line style of ${flowTitle}`);
+                  }}
+                >
+                  ${LINE_STYLES.map(
+                    (s) => html`<option value=${s} ?selected=${(flow.line_style ?? 'corner') === s}>${s}</option>`,
+                  )}
+                </select>
+              </label>
+              ${this.renderAnimationSection(flow)}
+            `,
+          )}
+          <label class="advanced-toggle">
+            <input
+              type="checkbox"
+              .checked=${flowAdv}
+              @change=${(e: Event) =>
+                this.toggleAdvanced('flows', (e.target as HTMLInputElement).checked)}
+            />
+            ${t('editor.inspector.advancedOptions')}
+          </label>
+          ${flowAdv
+            ? html`
+                <div class="advanced-block advanced-block--nested">
+                  <label>
+                    ${t('editor.inspector.peakValue')}
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="${domPeak}"
+                      .value=${flow.peak_value !== undefined ? String(flow.peak_value) : ''}
+                      @change=${(e: Event) => {
                         if (!this.config) return;
+                        const raw = (e.target as HTMLInputElement).value.trim();
                         const prev = this.config;
-                        const next = setFlowColor(prev, flow.id, undefined);
-                        this.pushPatch(prev, next, `clear colour of ${flowTitle}`);
-                      }}>${t('editor.inspector.clearColour')}</button>`
-                    : nothing}
-                `;
-              })()}
-            </div>
-          </label>
-          <label>
-            ${t('editor.inspector.flowOpacity')}
-            <div class="inspector-slider-row">
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                .value=${String(flow.opacity ?? 1)}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  if (!Number.isFinite(v)) return;
-                  const prev = this.config;
-                  const next = setFlowOpacity(prev, flow.id, v);
-                  this.pushPatch(prev, next, `set opacity of ${flowTitle}`);
-                }}
-              />
-              <span>${(flow.opacity ?? 1).toFixed(2)}</span>
-            </div>
-          </label>
-          <label>
-            ${t('editor.inspector.flowVisible')}
-            <div class="row">
-              <input
-                type="checkbox"
-                .checked=${flow.visible !== false}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const checked = (e.target as HTMLInputElement).checked;
-                  const prev = this.config;
-                  const next = setFlowVisible(prev, flow.id, checked);
-                  this.pushPatch(prev, next, `${checked ? 'show' : 'hide'} flow ${flowTitle}`);
-                }}
-              />
-              <span>${flow.visible !== false ? t('editor.inspector.shown') : t('editor.inspector.hidden')}</span>
-            </div>
-          </label>
-          ${this.renderAnimationSection(flow)}
-          ${this.renderValueGradientSection(flow)}
+                        if (raw === '') {
+                          const next = setFlowPeakValue(prev, flow.id, undefined);
+                          this.pushPatch(prev, next, `clear peak_value ${flowTitle}`);
+                          return;
+                        }
+                        const v = parseFloat(raw);
+                        if (!Number.isFinite(v) || v <= 0) return;
+                        const next = setFlowPeakValue(prev, flow.id, v);
+                        this.pushPatch(prev, next, `set peak_value ${flowTitle}`);
+                      }}
+                    />
+                    <span class="hint-sub">${t('editor.inspector.peakValueHelper')}</span>
+                  </label>
+                  <label>
+                    ${t('editor.inspector.minDuration')}
+                    <input
+                      type="number"
+                      min="1"
+                      max="60000"
+                      step="100"
+                      placeholder=${t('editor.inspector.animMinMsPlaceholder')}
+                      .value=${flow.animation?.min_duration !== undefined ? String(flow.animation.min_duration) : ''}
+                      @change=${(e: Event) => {
+                        if (!this.config) return;
+                        const raw = (e.target as HTMLInputElement).value.trim();
+                        const prev = this.config;
+                        if (raw === '') {
+                          const next = setFlowAnimation(prev, flow.id, { min_duration: undefined });
+                          this.pushPatch(prev, next, `clear flow min_duration ${flowTitle}`);
+                          return;
+                        }
+                        const v = parseInt(raw, 10);
+                        if (!Number.isFinite(v) || v <= 0) return;
+                        const next = setFlowAnimation(prev, flow.id, { min_duration: v });
+                        this.pushPatch(prev, next, `set flow min_duration ${flowTitle}`);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    ${t('editor.inspector.maxDuration')}
+                    <input
+                      type="number"
+                      min="2"
+                      max="60000"
+                      step="500"
+                      placeholder=${t('editor.inspector.animMaxMsPlaceholder')}
+                      .value=${flow.animation?.max_duration !== undefined ? String(flow.animation.max_duration) : ''}
+                      @change=${(e: Event) => {
+                        if (!this.config) return;
+                        const raw = (e.target as HTMLInputElement).value.trim();
+                        const prev = this.config;
+                        if (raw === '') {
+                          const next = setFlowAnimation(prev, flow.id, { max_duration: undefined });
+                          this.pushPatch(prev, next, `clear flow max_duration ${flowTitle}`);
+                          return;
+                        }
+                        const v = parseInt(raw, 10);
+                        if (!Number.isFinite(v) || v <= 0) return;
+                        const next = setFlowAnimation(prev, flow.id, { max_duration: v });
+                        this.pushPatch(prev, next, `set flow max_duration ${flowTitle}`);
+                      }}
+                    />
+                  </label>
+                  <div class="speed-curve-preview inspector-timing-preview">
+                    <span>${t('editor.inspector.previewLinearSpeed')}</span>
+                    <strong>${previewDurations[0]}</strong>
+                    /
+                    <strong>${previewDurations[1]}</strong>
+                    /
+                    <strong>${previewDurations[2]}</strong>
+                  </div>
+                  <label>
+                    ${t('editor.inspector.colourOverride')}
+                    <div class="color-row">
+                      ${(() => {
+                        const profile = getProfile(flow.domain ?? this.config.domain);
+                        const effective = resolveFlowColor(
+                          flow,
+                          profile,
+                          flow.domain ?? this.config.domain,
+                          1,
+                          this.config.domain_colors,
+                          flowIndex >= 0 ? flowIndex : 0,
+                        );
+                        return html`
+                          <input
+                            type="color"
+                            .value=${flow.color ?? effective}
+                            @change=${(e: Event) => {
+                              if (!this.config) return;
+                              const val = (e.target as HTMLInputElement).value;
+                              const prev = this.config;
+                              const next = setFlowColor(prev, flow.id, val);
+                              this.pushPatch(prev, next, `set colour of ${flowTitle}`);
+                            }}
+                          />
+                          <span class="color-effective">${flow.color ? t('editor.inspector.colourOverrideActive') : t('editor.inspector.colourDomainDefault')}</span>
+                          ${flow.color
+                            ? html`<button class="ghost" @click=${() => {
+                                if (!this.config) return;
+                                const prev = this.config;
+                                const next = setFlowColor(prev, flow.id, undefined);
+                                this.pushPatch(prev, next, `clear colour of ${flowTitle}`);
+                              }}>${t('editor.inspector.clearColour')}</button>`
+                            : nothing}
+                        `;
+                      })()}
+                    </div>
+                  </label>
+                  <div class="field-row advanced-zero-row">
+                    <label>
+                      ${t('editor.inspector.zeroThreshold')}
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        placeholder=${t('editor.inspector.zeroThresholdAuto')}
+                        .value=${this.flowZeroThresholdDraft[flow.id] !== undefined
+                          ? this.flowZeroThresholdDraft[flow.id]
+                          : flow.animation?.zero_threshold !== undefined
+                            ? (flow.animation.zero_threshold * 100).toFixed(1)
+                            : ''}
+                        @input=${(e: Event) => {
+                          const v = (e.target as HTMLInputElement).value;
+                          this.flowZeroThresholdDraft = { ...this.flowZeroThresholdDraft, [flow.id]: v };
+                        }}
+                        @change=${(e: Event) => {
+                          if (!this.config) return;
+                          const raw = (e.target as HTMLInputElement).value.trim();
+                          const prev = this.config;
+                          const clearDraft = (): void => {
+                            const { [flow.id]: _drop, ...restDraft } = this.flowZeroThresholdDraft;
+                            this.flowZeroThresholdDraft = restDraft;
+                          };
+                          if (raw === '') {
+                            clearDraft();
+                            const next = setFlowAnimation(prev, flow.id, { zero_threshold: undefined });
+                            this.pushPatch(prev, next, `clear flow zero_threshold ${flowTitle}`);
+                            return;
+                          }
+                          const v = parseFloat(raw);
+                          if (!Number.isFinite(v) || v <= 0 || v > 100) return;
+                          clearDraft();
+                          const next = setFlowAnimation(prev, flow.id, { zero_threshold: v / 100 });
+                          this.pushPatch(prev, next, `set flow zero_threshold ${flowTitle}`);
+                        }}
+                      />
+                      <span class="field-hint hint-sub">${cutoffHint}</span>
+                    </label>
+                  </div>
+                  <label>
+                    ${t('editor.inspector.flowOpacity')}
+                    <div class="inspector-slider-row">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        .value=${String(flow.opacity ?? 1)}
+                        @change=${(e: Event) => {
+                          if (!this.config) return;
+                          const v = parseFloat((e.target as HTMLInputElement).value);
+                          if (!Number.isFinite(v)) return;
+                          const prev = this.config;
+                          const next = setFlowOpacity(prev, flow.id, v);
+                          this.pushPatch(prev, next, `set opacity of ${flowTitle}`);
+                        }}
+                      />
+                      <span>${(flow.opacity ?? 1).toFixed(2)}</span>
+                    </div>
+                  </label>
+                  ${this.renderWaypointList(flow)}
+                  ${this.renderValueGradientSection(flow)}
+                </div>
+              `
+            : nothing}
           <button class="danger" @click=${() => this.removeFlow(flow.id)}>${t('editor.inspector.deleteFlow')}</button>
         </div>
       `;
@@ -1711,9 +1718,7 @@ export class FlowmeCardEditor extends LitElement {
     const typeVal = fx?.type ?? '';
 
     return html`
-      <details class="inspector-details node-effect-details">
-        <summary>${t('editor.nodeEffect.section')}</summary>
-        <div class="node-effect-body">
+      <div class="node-effect-body">
           ${!node.entity && fx
             ? html`<p class="hint-sub">${t('editor.nodeEffect.needsEntity')}</p>`
             : nothing}
@@ -1959,8 +1964,7 @@ export class FlowmeCardEditor extends LitElement {
                 </label>
               `
             : nothing}
-        </div>
-      </details>
+      </div>
     `;
   }
 
@@ -2547,62 +2551,79 @@ export class FlowmeCardEditor extends LitElement {
     `;
   }
 
-  private renderGlobalAnimationPanel(): TemplateResult | typeof nothing {
+  private renderGlobalAnimationPanelInner(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const animCfg: AnimationConfig = this.config.animation ?? {};
 
     return html`
-      <details class="panel anim-global-panel" open>
-        <summary>${t('editor.inspector.animationGlobalSummary')}</summary>
-        <div class="panel-body">
-          <label>
-            ${t('editor.inspector.fpsCap')}
-            <div class="inspector-slider-row">
-              <input type="range" min="10" max="60" step="5"
-                .value=${String(animCfg.fps ?? 60)}
-                @change=${(e: Event) => {
-                  if (!this.config) return;
-                  const v = parseInt((e.target as HTMLInputElement).value, 10);
-                  const prev = this.config;
-                  const next = setAnimationConfig(prev, { fps: v });
-                  this.pushPatch(prev, next, 'set animation fps');
-                }}
-              />
-              <span>${animCfg.fps ?? 60} ${t('editor.inspector.fpsSuffix')}</span>
-            </div>
-          </label>
-          <label class="visibility-row">
-            <input type="checkbox"
-              .checked=${animCfg.smooth_speed !== false}
-              @change=${(e: Event) => {
-                if (!this.config) return;
-                const checked = (e.target as HTMLInputElement).checked;
-                const prev = this.config;
-                const next = setAnimationConfig(prev, { smooth_speed: checked });
-                this.pushPatch(prev, next, 'set smooth_speed');
-              }}
-            />
-            <span class="visibility-label">${t('editor.stateA.smoothSpeed')}</span>
-            <span class="visibility-val">${animCfg.smooth_speed !== false ? t('editor.inspector.on') : t('editor.inspector.off')}</span>
-          </label>
-          <p class="hint-sub">${t('editor.inspector.smoothSpeedHint')}</p>
-          <label class="visibility-row">
-            <input
-              type="checkbox"
-              .checked=${this.config.pause_when_hidden !== false}
-              @change=${(e: Event) => {
-                if (!this.config) return;
-                const checked = (e.target as HTMLInputElement).checked;
-                const prev = this.config;
-                const next = setPauseWhenHidden(prev, checked);
-                this.pushPatch(prev, next, 'set pause_when_hidden');
-              }}
-            />
-            <span class="visibility-label">${t('editor.stateA.pauseWhenHidden')}</span>
-            <span class="visibility-val">${this.config.pause_when_hidden !== false ? t('editor.inspector.on') : t('editor.inspector.off')}</span>
-          </label>
+      <label>
+        ${t('editor.inspector.fpsCap')}
+        <div class="inspector-slider-row">
+          <input type="range" min="10" max="60" step="5"
+            .value=${String(animCfg.fps ?? 60)}
+            @change=${(e: Event) => {
+              if (!this.config) return;
+              const v = parseInt((e.target as HTMLInputElement).value, 10);
+              const prev = this.config;
+              const next = setAnimationConfig(prev, { fps: v });
+              this.pushPatch(prev, next, 'set animation fps');
+            }}
+          />
+          <span>${animCfg.fps ?? 60} ${t('editor.inspector.fpsSuffix')}</span>
         </div>
-      </details>
+      </label>
+      <label class="visibility-row">
+        <input type="checkbox"
+          .checked=${animCfg.smooth_speed !== false}
+          @change=${(e: Event) => {
+            if (!this.config) return;
+            const checked = (e.target as HTMLInputElement).checked;
+            const prev = this.config;
+            const next = setAnimationConfig(prev, { smooth_speed: checked });
+            this.pushPatch(prev, next, 'set smooth_speed');
+          }}
+        />
+        <span class="visibility-label">${t('editor.stateA.smoothSpeed')}</span>
+        <span class="visibility-val">${animCfg.smooth_speed !== false ? t('editor.inspector.on') : t('editor.inspector.off')}</span>
+      </label>
+      <p class="hint-sub">${t('editor.inspector.smoothSpeedHint')}</p>
+      <label class="visibility-row">
+        <input
+          type="checkbox"
+          .checked=${this.config.pause_when_hidden !== false}
+          @change=${(e: Event) => {
+            if (!this.config) return;
+            const checked = (e.target as HTMLInputElement).checked;
+            const prev = this.config;
+            const next = setPauseWhenHidden(prev, checked);
+            this.pushPatch(prev, next, 'set pause_when_hidden');
+          }}
+        />
+        <span class="visibility-label">${t('editor.stateA.pauseWhenHidden')}</span>
+        <span class="visibility-val">${this.config.pause_when_hidden !== false ? t('editor.inspector.on') : t('editor.inspector.off')}</span>
+      </label>
+    `;
+  }
+
+  private renderDebugToggle(): TemplateResult | typeof nothing {
+    if (!this.config) return nothing;
+    return html`
+      <label class="visibility-row">
+        <input
+          type="checkbox"
+          .checked=${this.config.debug === true}
+          @change=${(e: Event) => {
+            if (!this.config) return;
+            const checked = (e.target as HTMLInputElement).checked;
+            const prev = this.config;
+            const next = this.deepCloneConfig(prev);
+            if (checked) next.debug = true;
+            else delete next.debug;
+            this.pushPatch(prev, next, 'set debug mode');
+          }}
+        />
+        <span class="visibility-label">${t('editor.section.debugMode')}</span>
+      </label>
     `;
   }
 
@@ -2610,6 +2631,8 @@ export class FlowmeCardEditor extends LitElement {
     const size = overlay.size ?? { width: 20, height: 15 };
     const visible = overlay.visible !== false;
     const opacity = overlay.opacity ?? 1;
+    const ovAdv = this.showAdvanced.overlays === true;
+    const pos = overlay.position;
     return html`
       <div class="inspector overlay-inspector">
         <label class="inspector-id-row">
@@ -2623,64 +2646,122 @@ export class FlowmeCardEditor extends LitElement {
           />
         </label>
         <h3>${t('editor.inspector.overlayHeading', overlay.id)}</h3>
-        <div class="row size-row">
-          <label>
-            ${t('editor.inspector.width')}
-            <input
-              type="number"
-              min="2"
-              max="100"
-              step="0.5"
-              .value=${String(size.width)}
-              @change=${(e: Event) => this.onOverlaySizeChange(overlay.id, 'width', e)}
-            />
-          </label>
-          <label>
-            ${t('editor.inspector.height')}
-            <input
-              type="number"
-              min="2"
-              max="100"
-              step="0.5"
-              .value=${String(size.height)}
-              @change=${(e: Event) => this.onOverlaySizeChange(overlay.id, 'height', e)}
-            />
-          </label>
-        </div>
-        <label class="toggle-label">
-          ${t('editor.inspector.visible')}
+        ${this.renderSectionCard(
+          t('editor.section.overlayPosition'),
+          html`
+            <div class="row size-row">
+              <label>
+                ${t('editor.inspector.positionX')}
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  .value=${String(Math.round(pos.x))}
+                  @change=${(e: Event) => {
+                    if (!this.config) return;
+                    const v = parseFloat((e.target as HTMLInputElement).value);
+                    if (!Number.isFinite(v)) return;
+                    const prev = this.config;
+                    const next = moveOverlay(prev, overlay.id, { x: v, y: pos.y });
+                    this.pushPatch(prev, next, `move overlay ${overlay.id} x`);
+                  }}
+                />
+              </label>
+              <label>
+                ${t('editor.inspector.positionY')}
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  .value=${String(Math.round(pos.y))}
+                  @change=${(e: Event) => {
+                    if (!this.config) return;
+                    const v = parseFloat((e.target as HTMLInputElement).value);
+                    if (!Number.isFinite(v)) return;
+                    const prev = this.config;
+                    const next = moveOverlay(prev, overlay.id, { x: pos.x, y: v });
+                    this.pushPatch(prev, next, `move overlay ${overlay.id} y`);
+                  }}
+                />
+              </label>
+            </div>
+            <div class="row size-row">
+              <label>
+                ${t('editor.inspector.width')}
+                <input
+                  type="number"
+                  min="2"
+                  max="100"
+                  step="0.5"
+                  .value=${String(size.width)}
+                  @change=${(e: Event) => this.onOverlaySizeChange(overlay.id, 'width', e)}
+                />
+              </label>
+              <label>
+                ${t('editor.inspector.height')}
+                <input
+                  type="number"
+                  min="2"
+                  max="100"
+                  step="0.5"
+                  .value=${String(size.height)}
+                  @change=${(e: Event) => this.onOverlaySizeChange(overlay.id, 'height', e)}
+                />
+              </label>
+            </div>
+            <label class="toggle-label">
+              ${t('editor.inspector.visible')}
+              <input
+                type="checkbox"
+                .checked=${visible}
+                @change=${(e: Event) => {
+                  if (!this.config) return;
+                  const checked = (e.target as HTMLInputElement).checked;
+                  const prev = this.config;
+                  const next = setOverlayVisible(prev, overlay.id, checked);
+                  this.pushPatch(prev, next, `toggle overlay ${overlay.id} visible`);
+                }}
+              />
+            </label>
+          `,
+        )}
+        ${this.renderSectionCard(t('editor.section.overlayCard'), this.renderCardConfigEditor(overlay))}
+        <label class="advanced-toggle">
           <input
             type="checkbox"
-            .checked=${visible}
-            @change=${(e: Event) => {
-              if (!this.config) return;
-              const checked = (e.target as HTMLInputElement).checked;
-              const prev = this.config;
-              const next = setOverlayVisible(prev, overlay.id, checked);
-              this.pushPatch(prev, next, `toggle overlay ${overlay.id} visible`);
-            }}
+            .checked=${ovAdv}
+            @change=${(e: Event) =>
+              this.toggleAdvanced('overlays', (e.target as HTMLInputElement).checked)}
           />
+          ${t('editor.inspector.advancedOptions')}
         </label>
-        <label>
-          ${t('editor.inspector.opacity')}
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            .value=${String(opacity)}
-            @change=${(e: Event) => {
-              if (!this.config) return;
-              const val = parseFloat((e.target as HTMLInputElement).value);
-              if (!Number.isFinite(val)) return;
-              const prev = this.config;
-              const next = setOverlayOpacity(prev, overlay.id, val);
-              this.pushPatch(prev, next, `edit overlay ${overlay.id} opacity`);
-            }}
-          />
-          <span>${Math.round(opacity * 100)}%</span>
-        </label>
-        ${this.renderCardConfigEditor(overlay)}
+        ${ovAdv
+          ? html`
+              <div class="advanced-block advanced-block--nested">
+                <label>
+                  ${t('editor.inspector.opacity')}
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    .value=${String(opacity)}
+                    @change=${(e: Event) => {
+                      if (!this.config) return;
+                      const val = parseFloat((e.target as HTMLInputElement).value);
+                      if (!Number.isFinite(val)) return;
+                      const prev = this.config;
+                      const next = setOverlayOpacity(prev, overlay.id, val);
+                      this.pushPatch(prev, next, `edit overlay ${overlay.id} opacity`);
+                    }}
+                  />
+                  <span>${Math.round(opacity * 100)}%</span>
+                </label>
+              </div>
+            `
+          : nothing}
         <button class="danger" @click=${() => this.removeOverlay(overlay.id)}>${t('editor.inspector.deleteOverlay')}</button>
       </div>
     `;
@@ -2739,7 +2820,7 @@ export class FlowmeCardEditor extends LitElement {
     'windy-variant',
   ] as const;
 
-  private renderOpacityPanel(): TemplateResult | typeof nothing {
+  private renderOpacityPanelInner(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const op: OpacityConfig = this.config.opacity ?? {};
 
@@ -2783,27 +2864,22 @@ export class FlowmeCardEditor extends LitElement {
     };
 
     return html`
-      <details class="panel opacity-panel" open>
-        <summary>${t('editor.inspector.opacitySummary')}</summary>
-        <div class="panel-body">
-          <p class="hint-sub">
-            ${t('editor.inspector.opacityHint')}
-          </p>
-          ${opacitySlider('background', t('editor.inspector.opacityBackground'))}
-          ${opacitySlider('darken', t('editor.inspector.opacityDarken'), 0)}
-          ${opacitySlider('nodes', t('editor.inspector.opacityNodes'))}
-          ${opacitySlider('flows', t('editor.inspector.opacityFlows'))}
-          ${opacitySlider('dots', t('editor.inspector.opacityDots'))}
-          ${opacitySlider('glow', t('editor.inspector.opacityGlow'))}
-          ${opacitySlider('labels', t('editor.inspector.opacityLabels'))}
-          ${opacitySlider('values', t('editor.inspector.opacityValues'))}
-          ${opacitySlider('overlays', t('editor.inspector.opacityOverlays'))}
-        </div>
-      </details>
+      <p class="hint-sub">
+        ${t('editor.inspector.opacityHint')}
+      </p>
+      ${opacitySlider('background', t('editor.inspector.opacityBackground'))}
+      ${opacitySlider('darken', t('editor.inspector.opacityDarken'), 0)}
+      ${opacitySlider('nodes', t('editor.inspector.opacityNodes'))}
+      ${opacitySlider('flows', t('editor.inspector.opacityFlows'))}
+      ${opacitySlider('dots', t('editor.inspector.opacityDots'))}
+      ${opacitySlider('glow', t('editor.inspector.opacityGlow'))}
+      ${opacitySlider('labels', t('editor.inspector.opacityLabels'))}
+      ${opacitySlider('values', t('editor.inspector.opacityValues'))}
+      ${opacitySlider('overlays', t('editor.inspector.opacityOverlays'))}
     `;
   }
 
-  private renderDomainColorsPanel(): TemplateResult | typeof nothing {
+  private renderDomainColorsPanelInner(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const dc: DomainColors = this.config.domain_colors ?? {};
     const domain = this.config.domain ?? 'energy';
@@ -2817,48 +2893,43 @@ export class FlowmeCardEditor extends LitElement {
     };
 
     return html`
-      <details class="panel domain-colors-panel">
-        <summary>${t('editor.inspector.domainColoursSummary')}</summary>
-        <div class="panel-body">
-          <p class="hint-sub">
-            ${t('editor.inspector.domainColoursHint')}
-          </p>
-          ${profile.roles.map((role) => {
-            const override = dc[role.key];
-            const defaultVal = role.default;
-            const label = labelForRole(role.key, role.label);
-            return html`
-              <div class="color-picker-row">
-                <span class="color-picker-label">${label}</span>
-                <input
-                  type="color"
-                  .value=${override ?? defaultVal}
-                  @change=${(e: Event) => {
-                    if (!this.config) return;
-                    const val = (e.target as HTMLInputElement).value;
-                    const prev = this.config;
-                    const next = setDomainColor(prev, role.key, val);
-                    this.pushPatch(prev, next, `set domain_colors.${role.key}`);
-                  }}
-                />
-                <span class="color-picker-value">${override ? override : t('editor.inspector.colourDefaultSuffix', defaultVal)}</span>
-                ${override
-                  ? html`<button class="ghost small" @click=${() => {
-                      if (!this.config) return;
-                      const prev = this.config;
-                      const next = setDomainColor(prev, role.key, undefined);
-                      this.pushPatch(prev, next, `reset domain_colors.${role.key}`);
-                    }}>${t('editor.inspector.reset')}</button>`
-                  : nothing}
-              </div>
-            `;
-          })}
-        </div>
-      </details>
+      <p class="hint-sub">
+        ${t('editor.inspector.domainColoursHint')}
+      </p>
+      ${profile.roles.map((role) => {
+        const override = dc[role.key];
+        const defaultVal = role.default;
+        const label = labelForRole(role.key, role.label);
+        return html`
+          <div class="color-picker-row">
+            <span class="color-picker-label">${label}</span>
+            <input
+              type="color"
+              .value=${override ?? defaultVal}
+              @change=${(e: Event) => {
+                if (!this.config) return;
+                const val = (e.target as HTMLInputElement).value;
+                const prev = this.config;
+                const next = setDomainColor(prev, role.key, val);
+                this.pushPatch(prev, next, `set domain_colors.${role.key}`);
+              }}
+            />
+            <span class="color-picker-value">${override ? override : t('editor.inspector.colourDefaultSuffix', defaultVal)}</span>
+            ${override
+              ? html`<button class="ghost small" @click=${() => {
+                  if (!this.config) return;
+                  const prev = this.config;
+                  const next = setDomainColor(prev, role.key, undefined);
+                  this.pushPatch(prev, next, `reset domain_colors.${role.key}`);
+                }}>${t('editor.inspector.reset')}</button>`
+              : nothing}
+          </div>
+        `;
+      })}
     `;
   }
 
-  private renderDefaultsPanel(): TemplateResult | typeof nothing {
+  private renderDefaultsPanel(variant: 'full' | 'radii' | 'burst' = 'full'): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const d: FlowmeDefaults = this.config.defaults ?? {};
     const domain = normalizeFlowDomain(this.config.domain);
@@ -2896,6 +2967,74 @@ export class FlowmeCardEditor extends LitElement {
       `;
     };
 
+    const radiiOnly = html`
+      ${numInput('node_radius', t('editor.stateA.nodeRadius'), { min: 4, max: 40, step: 1, defaultVal: 12 })}
+      ${numInput('dot_radius', t('editor.stateA.dotRadius'), { min: 2, max: 20, step: 1, defaultVal: 5 })}
+      ${numInput('line_width', t('editor.stateA.lineWidth'), { min: 1, max: 10, step: 1, defaultVal: 2 })}
+    `;
+
+    const burstPeakBlock = html`
+      ${numInput('burst_trigger_ratio', t('editor.inspector.burstTriggerRatio'), { min: 0.1, max: 1, step: 0.05, defaultVal: 0.9 })}
+      ${numInput('burst_sustain_ms', t('editor.inspector.burstSustainMs'), { min: 1000, max: 30000, step: 500, defaultVal: 5000 })}
+      ${numInput('burst_max_particles', t('editor.inspector.burstMaxParticles'), { min: 3, max: 50, step: 1, defaultVal: 20 })}
+      ${domain === 'hvac'
+        ? html`
+            <div class="dual-unit-row">
+              <span class="defaults-label">${t('editor.stateA.peakAirflow')}</span>
+              <div class="field-col">
+                <label>${t('editor.stateA.peakM3h')}</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  .value=${String(effPeak)}
+                  @input=${(e: Event) => {
+                    if (!this.config) return;
+                    const raw = parseFloat((e.target as HTMLInputElement).value);
+                    if (!Number.isFinite(raw) || raw <= 0) return;
+                    const prev = this.config;
+                    const next = setDefault(prev, 'peak_value', raw);
+                    this.pushPatch(prev, next, 'set defaults.peak_value m³/h');
+                  }}
+                />
+              </div>
+              <div class="unit-divider">${t('editor.stateA.peakOr')}</div>
+              <div class="field-col">
+                <label>${t('editor.stateA.peakCfm')}</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  .value=${String(cfmDisplay)}
+                  @input=${(e: Event) => {
+                    if (!this.config) return;
+                    const raw = parseFloat((e.target as HTMLInputElement).value);
+                    if (!Number.isFinite(raw) || raw <= 0) return;
+                    const m3h = Math.round(raw * 1.699 * 10) / 10;
+                    const prev = this.config;
+                    const next = setDefault(prev, 'peak_value', m3h);
+                    this.pushPatch(prev, next, 'set defaults.peak_value via CFM');
+                  }}
+                />
+              </div>
+            </div>
+          `
+        : numInput('peak_value', t('editor.stateA.domainPeakDefault'), {
+            min: 0.0001,
+            max: 1e9,
+            step: 1,
+            defaultVal: profile.peak,
+          })}
+    `;
+
+    if (variant === 'radii') return radiiOnly;
+    if (variant === 'burst') {
+      return html`
+        <p class="hint-sub">${t('editor.inspector.defaultsHint')}</p>
+        ${burstPeakBlock}
+      `;
+    }
+
     return html`
       <details class="panel defaults-panel" open>
         <summary>${t('editor.inspector.defaultsSummary')}</summary>
@@ -2903,60 +3042,8 @@ export class FlowmeCardEditor extends LitElement {
           <p class="hint-sub">
             ${t('editor.inspector.defaultsHint')}
           </p>
-          ${numInput('node_radius', t('editor.stateA.nodeRadius'), { min: 4, max: 40, step: 1, defaultVal: 12 })}
-          ${numInput('dot_radius', t('editor.stateA.dotRadius'), { min: 2, max: 20, step: 1, defaultVal: 5 })}
-          ${numInput('line_width', t('editor.stateA.lineWidth'), { min: 1, max: 10, step: 1, defaultVal: 2 })}
-          ${numInput('burst_trigger_ratio', t('editor.inspector.burstTriggerRatio'), { min: 0.1, max: 1, step: 0.05, defaultVal: 0.9 })}
-          ${numInput('burst_sustain_ms', t('editor.inspector.burstSustainMs'), { min: 1000, max: 30000, step: 500, defaultVal: 5000 })}
-          ${numInput('burst_max_particles', t('editor.inspector.burstMaxParticles'), { min: 3, max: 50, step: 1, defaultVal: 20 })}
-          ${domain === 'hvac'
-            ? html`
-                <div class="dual-unit-row">
-                  <span class="defaults-label">${t('editor.stateA.peakAirflow')}</span>
-                  <div class="field-col">
-                    <label>${t('editor.stateA.peakM3h')}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      .value=${String(effPeak)}
-                      @input=${(e: Event) => {
-                        if (!this.config) return;
-                        const raw = parseFloat((e.target as HTMLInputElement).value);
-                        if (!Number.isFinite(raw) || raw <= 0) return;
-                        const prev = this.config;
-                        const next = setDefault(prev, 'peak_value', raw);
-                        this.pushPatch(prev, next, 'set defaults.peak_value m³/h');
-                      }}
-                    />
-                  </div>
-                  <div class="unit-divider">${t('editor.stateA.peakOr')}</div>
-                  <div class="field-col">
-                    <label>${t('editor.stateA.peakCfm')}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      .value=${String(cfmDisplay)}
-                      @input=${(e: Event) => {
-                        if (!this.config) return;
-                        const raw = parseFloat((e.target as HTMLInputElement).value);
-                        if (!Number.isFinite(raw) || raw <= 0) return;
-                        const m3h = Math.round(raw * 1.699 * 10) / 10;
-                        const prev = this.config;
-                        const next = setDefault(prev, 'peak_value', m3h);
-                        this.pushPatch(prev, next, 'set defaults.peak_value via CFM');
-                      }}
-                    />
-                  </div>
-                </div>
-              `
-            : numInput('peak_value', t('editor.stateA.domainPeakDefault'), {
-                min: 0.0001,
-                max: 1e9,
-                step: 1,
-                defaultVal: profile.peak,
-              })}
+          ${radiiOnly}
+          ${burstPeakBlock}
         </div>
       </details>
     `;
@@ -2964,55 +3051,239 @@ export class FlowmeCardEditor extends LitElement {
 
   // ── Zone 3: context panel ──────────────────────────────────────────────────
 
-  /** Dispatches to the correct inspector based on current selection. */
-  private renderContextPanel(): TemplateResult {
-    if (!this.config) return html``;
-    if (this.selectedNodeId || this.selectedFlowId || this.selectedOverlayId) {
-      return html`<div class="z-context-body">${this.renderInspector()}</div>`;
-    }
-    return this.renderStateA();
-  }
-
-  /** State A — nothing selected: background, appearance, defaults panels. */
-  private renderStateA(): TemplateResult {
+  private renderSectionCard(title: string, body: TemplateResult | typeof nothing): TemplateResult {
     return html`
-      <div class="z-context-body state-a">
-        ${this.renderDomainSelectorPanel()}
-        ${this.renderWeatherPanel()}
-        ${this.renderGlobalAnimationPanel()}
-        ${this.renderOpacityPanel()}
-        ${this.renderDomainColorsPanel()}
-        ${this.renderDefaultsPanel()}
+      <div class="section-card">
+        <div class="section-title">${title}</div>
+        ${body}
       </div>
     `;
   }
 
-  private renderDomainSelectorPanel(): TemplateResult | typeof nothing {
+  private renderDomainLayoutCard(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
     const domainSelected = this.config.domain ?? 'energy';
+    const bg = this.config.background;
     return html`
-      <details class="panel domain-settings-panel" open>
-        <summary>${t('editor.stateA.domainSummary')}</summary>
-        <div class="panel-body">
-          <label class="field-row domain-field">
-            <span class="field-label">${t('editor.stateA.domain')}</span>
-            <select
-              id="flowme-domain-select"
-              @change=${(e: Event) => {
-                const v = (e.target as HTMLSelectElement).value;
-                this.onDomainChange(v);
+      <label class="field-row domain-field">
+        <span class="field-label">${t('editor.stateA.domain')}</span>
+        <select
+          id="flowme-domain-select"
+          @change=${(e: Event) => {
+            const v = (e.target as HTMLSelectElement).value;
+            this.onDomainChange(v);
+          }}
+        >
+          ${FLOW_DOMAINS.map(
+            (d) => html`
+              <option value=${d} ?selected=${domainSelected === d}>${this.domainOptionLabel(d)}</option>
+            `,
+          )}
+        </select>
+      </label>
+      <label>
+        ${t('editor.stateA.aspectRatio')}
+        <input
+          type="text"
+          spellcheck="false"
+          placeholder="16:10"
+          .value=${this.config.aspect_ratio ?? ''}
+          @change=${(e: Event) => {
+            if (!this.config) return;
+            const raw = (e.target as HTMLInputElement).value.trim();
+            const prev = this.deepCloneConfig(this.config);
+            const next = this.deepCloneConfig(this.config);
+            if (raw === '') delete next.aspect_ratio;
+            else next.aspect_ratio = raw;
+            this.pushPatch(prev, next, 'set aspect_ratio');
+            void this.updateComplete.then(() => this.recalcFit());
+          }}
+        />
+      </label>
+      <div class="field-row">
+        <label class="field-label">${t('editor.stateA.transparentMode')}</label>
+        <div>
+          <input
+            type="checkbox"
+            .checked=${bg.transparent ?? false}
+            @change=${(e: Event) =>
+              this.onTransparentModeChange((e.target as HTMLInputElement).checked)}
+          />
+          <p class="field-hint">${t('editor.stateA.transparentModeHelper')}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderCardTab(): TemplateResult {
+    if (!this.config) return html``;
+    return html`
+      ${this.renderSectionCard(t('editor.section.domainLayout'), this.renderDomainLayoutCard())}
+      ${this.renderSectionCard(t('editor.section.background'), this.renderWeatherPanel())}
+      ${this.renderSectionCard(
+        t('editor.section.appearance'),
+        html`${this.renderDomainColorsPanelInner()} ${this.renderDefaultsPanel('radii')}`,
+      )}
+      ${this.renderSectionCard(t('editor.section.layerOpacity'), this.renderOpacityPanelInner())}
+      ${this.renderSectionCard(t('editor.section.flowDefaults'), this.renderDefaultsPanel('burst'))}
+    `;
+  }
+
+  private renderNodeChipPicker(): TemplateResult {
+    if (!this.config) return html``;
+    return html`
+      <div class="chip-picker">
+        ${this.config.nodes.map(
+          (n) => html`
+            <button
+              type="button"
+              class=${`chip ${this.selectedNodeId === n.id ? 'chip--active' : ''}`}
+              @click=${() => {
+                this.selectedNodeId = n.id;
+                this.selectedNodeIds = new Set([n.id]);
+                this.selectedFlowId = null;
+                this.selectedOverlayId = null;
               }}
             >
-              ${FLOW_DOMAINS.map(
-                (d) => html`
-                  <option value=${d} ?selected=${domainSelected === d}>${this.domainOptionLabel(d)}</option>
-                `,
-              )}
-            </select>
-          </label>
-        </div>
-      </details>
+              <span class="chip-dot" style=${`background:${n.color ?? '#94a3b8'}`}></span>
+              ${n.label ?? n.id}
+            </button>
+          `,
+        )}
+        <button
+          type="button"
+          class="chip chip--add"
+          @click=${() => {
+            this.pending = { kind: 'add-node' };
+          }}
+        >
+          + ${t('editor.toolbar.addNode')}
+        </button>
+      </div>
     `;
+  }
+
+  private renderFlowChipPicker(): TemplateResult {
+    if (!this.config) return html``;
+    return html`
+      <div class="chip-picker">
+        ${this.config.flows.map(
+          (f) => html`
+            <button
+              type="button"
+              class=${`chip ${this.selectedFlowId === f.id ? 'chip--active' : ''}`}
+              @click=${() => {
+                this.selectedFlowId = f.id;
+                this.selectedNodeId = null;
+                this.selectedNodeIds = new Set();
+                this.selectedOverlayId = null;
+              }}
+            >
+              ${flowDisplayName(f)}
+            </button>
+          `,
+        )}
+        <button
+          type="button"
+          class="chip chip--add"
+          @click=${() => {
+            this.pending = { kind: 'add-flow', step: 'pick-from' };
+          }}
+        >
+          + ${t('editor.toolbar.addFlow')}
+        </button>
+      </div>
+    `;
+  }
+
+  private renderOverlayChipPicker(): TemplateResult {
+    if (!this.config) return html``;
+    const overlays = this.config.overlays ?? [];
+    return html`
+      <div class="chip-picker">
+        ${overlays.map(
+          (o, i) => html`
+            <button
+              type="button"
+              class=${`chip ${this.selectedOverlayId === o.id ? 'chip--active' : ''}`}
+              @click=${() => {
+                this.selectedOverlayId = o.id;
+                this.selectedNodeId = null;
+                this.selectedNodeIds = new Set();
+                this.selectedFlowId = null;
+              }}
+            >
+              ${t('editor.tabs.overlayChip', o.type, i)}
+            </button>
+          `,
+        )}
+        <button
+          type="button"
+          class="chip chip--add"
+          @click=${() => {
+            this.pending = { kind: 'add-overlay', overlayType: 'custom' };
+          }}
+        >
+          + ${t('editor.toolbar.addOverlay')}
+        </button>
+      </div>
+    `;
+  }
+
+  private renderNodesTab(): TemplateResult {
+    if (!this.config) return html``;
+    return html`
+      ${this.renderNodeChipPicker()}
+      ${this.selectedNodeId
+        ? this.renderInspector()
+        : html`<p class="tab-empty-hint">${t('editor.tabs.emptySelection')}</p>`}
+    `;
+  }
+
+  private renderFlowsTab(): TemplateResult {
+    if (!this.config) return html``;
+    return html`
+      ${this.renderFlowChipPicker()}
+      ${this.selectedFlowId
+        ? this.renderInspector()
+        : html`<p class="tab-empty-hint">${t('editor.tabs.emptySelection')}</p>`}
+    `;
+  }
+
+  private renderOverlaysTab(): TemplateResult {
+    if (!this.config) return html``;
+    return html`
+      ${this.renderOverlayChipPicker()}
+      ${this.selectedOverlayId
+        ? this.renderInspector()
+        : html`<p class="tab-empty-hint">${t('editor.tabs.emptySelection')}</p>`}
+    `;
+  }
+
+  private renderSettingsTab(): TemplateResult {
+    return html`
+      ${this.renderSectionCard(t('editor.section.animationDefaults'), this.renderGlobalAnimationPanelInner())}
+      ${this.renderSectionCard(t('editor.section.developer'), this.renderDebugToggle())}
+    `;
+  }
+
+  /** Tab-driven context panel (inspector vs card/settings). */
+  private renderContextPanel(): TemplateResult {
+    if (!this.config) return html``;
+    switch (this.activeTab) {
+      case 'card':
+        return html`<div class="z-context-body card-tab">${this.renderCardTab()}</div>`;
+      case 'nodes':
+        return html`<div class="z-context-body">${this.renderNodesTab()}</div>`;
+      case 'flows':
+        return html`<div class="z-context-body">${this.renderFlowsTab()}</div>`;
+      case 'overlays':
+        return html`<div class="z-context-body">${this.renderOverlaysTab()}</div>`;
+      case 'settings':
+        return html`<div class="z-context-body">${this.renderSettingsTab()}</div>`;
+      default:
+        return html``;
+    }
   }
 
   /** Deep copy so undo / validation never shares references with `this.config`. */
@@ -3185,22 +3456,9 @@ export class FlowmeCardEditor extends LitElement {
     const stateEntries = Object.entries(bg.weather_states ?? {});
     const liveWeatherState =
       bg.weather_entity && this.hass ? this.hass.states[bg.weather_entity]?.state : undefined;
+    const mapsOpen = this.showAdvanced.weatherMaps === true;
     return html`
-      <details class="weather-panel" ?open=${stateEntries.length > 0 || !!bg.weather_entity}>
-        <summary>${t('editor.inspector.weatherPanelSummary')}</summary>
-        <div class="weather-body">
-          <div class="field-row">
-            <label class="field-label">${t('editor.stateA.transparentMode')}</label>
-            <div>
-              <input
-                type="checkbox"
-                .checked=${bg.transparent ?? false}
-                @change=${(e: Event) =>
-                  this.onTransparentModeChange((e.target as HTMLInputElement).checked)}
-              />
-              <p class="field-hint">${t('editor.stateA.transparentModeHelper')}</p>
-            </div>
-          </div>
+      <div class="weather-body">
           <label>
             ${t('editor.inspector.defaultImageUrl')}
             <div class="bg-url-row">
@@ -3283,80 +3541,85 @@ export class FlowmeCardEditor extends LitElement {
               }}
             />
           </label>
-          <div class="weather-states">
-            <div class="weather-states-header">
-              <span>${t('editor.inspector.weatherStateColumn')}</span>
-              <span>${t('editor.inspector.weatherImageUrlColumn')}</span>
-              <span></span>
-            </div>
-            ${stateEntries.map(
-              ([key, url]) => html`
-                <div class="weather-state-block" data-key=${key}>
-                  <div class="weather-row">
-                    <input
-                      type="text"
-                      list="flowme-weather-states"
-                      .value=${key}
-                      @change=${(e: Event) => this.onWeatherStateKeyChange(key, e)}
-                    />
-                    <div class="bg-url-row weather-url-row">
-                      <input
-                        type="text"
-                        class="bg-url-input"
-                        .value=${url}
-                        @change=${(e: Event) => this.onWeatherStateUrlChange(key, e)}
-                        placeholder=${t('editor.inspector.weatherRowPlaceholder')}
-                      />
-                      <button
-                        type="button"
-                        class="tb-icon-btn"
-                        title=${t('editor.stateA.browseImages')}
-                        aria-label=${t('editor.stateA.browseImages')}
-                        @click=${(e: Event) => {
-                          e.stopPropagation();
-                          void this.openImageBrowser('weather', key);
-                        }}
-                      >
-                        📁
-                      </button>
-                    </div>
-                    <div class="weather-row-end">
-                      ${url
-                        ? html`<img class="weather-thumb" src=${url} alt=${key} />`
-                        : nothing}
-                      <button type="button" class="ghost" @click=${() => this.onWeatherStateRemove(key)}>
-                        ${t('editor.inspector.remove')}
-                      </button>
-                    </div>
-                  </div>
-                  ${this.imageBrowserOpen &&
-                  this.imageBrowserField === 'weather' &&
-                  this.imageBrowserWeatherState === key
-                    ? this.renderBrowserPanel(bg)
-                    : nothing}
+          <label class="advanced-toggle weather-mappings-toggle">
+            <input
+              type="checkbox"
+              .checked=${mapsOpen}
+              @change=${(e: Event) =>
+                this.toggleAdvanced('weatherMaps', (e.target as HTMLInputElement).checked)}
+            />
+            ${t('editor.background.showWeatherMappings')}
+          </label>
+          ${mapsOpen
+            ? html`
+                <div class="weather-states">
+                  ${stateEntries.map(
+                    ([key, url]) => html`
+                      <div class="weather-state-block" data-key=${key}>
+                        <div class="weather-state-row">
+                          <input
+                            type="text"
+                            list="flowme-weather-states"
+                            class="weather-state-label-input"
+                            .value=${key}
+                            @change=${(e: Event) => this.onWeatherStateKeyChange(key, e)}
+                          />
+                          <input
+                            type="text"
+                            class="bg-url-input weather-state-url"
+                            .value=${url}
+                            @change=${(e: Event) => this.onWeatherStateUrlChange(key, e)}
+                            placeholder=${t('editor.inspector.weatherRowPlaceholder')}
+                          />
+                          <button
+                            type="button"
+                            class="tb-icon-btn weather-state-icon-btn"
+                            title=${t('editor.stateA.browseImages')}
+                            aria-label=${t('editor.stateA.browseImages')}
+                            @click=${(e: Event) => {
+                              e.stopPropagation();
+                              void this.openImageBrowser('weather', key);
+                            }}
+                          >
+                            📁
+                          </button>
+                          <button
+                            type="button"
+                            class="ghost weather-state-delete"
+                            @click=${() => this.onWeatherStateRemove(key)}
+                          >
+                            ${t('editor.inspector.remove')}
+                          </button>
+                        </div>
+                        ${this.imageBrowserOpen &&
+                        this.imageBrowserField === 'weather' &&
+                        this.imageBrowserWeatherState === key
+                          ? this.renderBrowserPanel(bg)
+                          : nothing}
+                      </div>
+                    `,
+                  )}
+                  <datalist id="flowme-weather-states">
+                    ${FlowmeCardEditor.KNOWN_WEATHER_STATES.map(
+                      (s) => html`<option value=${s}></option>`,
+                    )}
+                  </datalist>
+                  <button class="add-state" @click=${this.onWeatherStateAdd}>${t('editor.inspector.addWeatherState')}</button>
                 </div>
-              `,
-            )}
-            <datalist id="flowme-weather-states">
-              ${FlowmeCardEditor.KNOWN_WEATHER_STATES.map(
-                (s) => html`<option value=${s}></option>`,
-              )}
-            </datalist>
-            <button class="add-state" @click=${this.onWeatherStateAdd}>${t('editor.inspector.addWeatherState')}</button>
-          </div>
-          <details class="hint-details">
-            <summary>${t('editor.inspector.metNoReferenceSummary')}</summary>
-            <div class="hint-states">
-              ${FlowmeCardEditor.KNOWN_WEATHER_STATES.map(
-                (s) => html`<code>${s}</code>`,
-              )}
-              <p class="hint-sub">
-                ${t('editor.inspector.metNoHint')}
-              </p>
-            </div>
-          </details>
+                <details class="hint-details">
+                  <summary>${t('editor.inspector.metNoReferenceSummary')}</summary>
+                  <div class="hint-states">
+                    ${FlowmeCardEditor.KNOWN_WEATHER_STATES.map(
+                      (s) => html`<code>${s}</code>`,
+                    )}
+                    <p class="hint-sub">
+                      ${t('editor.inspector.metNoHint')}
+                    </p>
+                  </div>
+                </details>
+              `
+            : nothing}
         </div>
-      </details>
     `;
   }
 
@@ -3878,6 +4141,7 @@ export class FlowmeCardEditor extends LitElement {
     this.selectedOverlayId = null;
     this.customConfigDraft = '';
     this.customConfigError = '';
+    this.activeTab = 'card';
   };
 
   private onStageContextMenu = (event: MouseEvent): void => {
@@ -3921,7 +4185,7 @@ export class FlowmeCardEditor extends LitElement {
     const target = event.currentTarget as SVGElement;
     const flowId = target.dataset['flowId'];
     if (!flowId) return;
-    this.selectorType = 'flows';
+    this.activeTab = 'flows';
     this.selectedFlowId = flowId;
     this.selectedNodeId = null;
     this.selectedNodeIds = new Set();
@@ -3932,7 +4196,7 @@ export class FlowmeCardEditor extends LitElement {
   private onNodeDotDblClick(e: MouseEvent, node: NodeConfig): void {
     e.preventDefault();
     e.stopPropagation();
-    this.selectorType = 'nodes';
+    this.activeTab = 'nodes';
     this.selectedNodeId = node.id;
     this.selectedNodeIds = new Set([node.id]);
     this.selectedFlowId = null;
@@ -4691,6 +4955,8 @@ export class FlowmeCardEditor extends LitElement {
     :host {
       display: block;
       font-family: var(--paper-font-body1_-_font-family, inherit);
+      background: var(--secondary-background-color);
+      color: var(--primary-text-color);
     }
     /* ── Three-zone layout ─────────────────────────────────────────────────
        HA editor dialog is ~510px tall. Target split:
@@ -4716,14 +4982,17 @@ export class FlowmeCardEditor extends LitElement {
       position: relative;
       overflow: hidden;
     }
+    .z-canvas--collapsed {
+      display: none;
+    }
     /* ZONE 2 — Toolbar (fixed 72px — two rows of 36px each) */
     .z-toolbar {
       flex: 0 0 72px;
       display: grid;
       grid-template-columns: 15% 50% 35%;
-      background: var(--card-background-color, #1a1a1a);
-      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
-      border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+      background: var(--secondary-background-color);
+      border-top: 1px solid var(--divider-color);
+      border-bottom: 1px solid var(--divider-color);
       overflow: hidden;
     }
     /* ── Toolbar: left column — Undo/Redo (row 1) + Zoom (row 2) ── */
@@ -4813,8 +5082,8 @@ export class FlowmeCardEditor extends LitElement {
       cursor: not-allowed;
     }
     .tb-btn-save {
-      background: var(--primary-color, #03a9f4);
-      color: var(--text-primary-color, #fff);
+      background: #ff6b00;
+      color: #fff;
       font-weight: 600;
     }
     .tb-btn-save:hover:not(:disabled) {
@@ -4846,13 +5115,28 @@ export class FlowmeCardEditor extends LitElement {
       align-items: center;
       padding: 0 4px;
     }
-    /* ── Toolbar: right column — Element selector ── */
-    .tb-col-selector {
+    /* ── Toolbar: right column — Canvas collapse ── */
+    .tb-col-canvas-toggle {
       display: flex;
       flex-direction: column;
-      padding: 1px 2px;
-      gap: 1px;
+      justify-content: stretch;
+      padding: 2px 4px;
+      gap: 2px;
       overflow: hidden;
+    }
+    .tb-btn-canvas-toggle {
+      flex: 1 1 0;
+      min-height: 0;
+      font-size: 10px;
+      padding: 2px 4px;
+      border: 1px solid var(--outline-color, var(--divider-color));
+      border-radius: 4px;
+      background: var(--card-background-color);
+      color: var(--primary-text-color);
+      cursor: pointer;
+    }
+    .tb-btn-canvas-toggle:hover {
+      background: var(--secondary-background-color);
     }
     .tb-select {
       flex: 1 1 0;
@@ -4871,14 +5155,144 @@ export class FlowmeCardEditor extends LitElement {
     .tb-select:disabled {
       opacity: 0.4;
     }
+    /* Tab bar */
+    .editor-tab-bar {
+      display: flex;
+      flex-shrink: 0;
+      flex-wrap: nowrap;
+      border-bottom: 1px solid var(--divider-color);
+      background: var(--secondary-background-color);
+    }
+    .editor-tab {
+      flex: 1;
+      margin: 0;
+      padding: 8px 4px;
+      font: inherit;
+      font-size: 11px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--primary-text-color);
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .editor-tab:hover {
+      background: var(--secondary-background-color);
+    }
+    .editor-tab--active {
+      border-bottom-color: #ff6b00;
+    }
     /* ZONE 3 — Context / Options panel (flex-grows to fill remaining height) */
     .z-context {
       flex: 1 1 0;
       min-height: 0;
       overflow-y: auto;
+      background: var(--secondary-background-color);
     }
     .z-context-body {
+      padding: 8px 12px;
+    }
+    .card-tab .z-context-body {
+      padding-bottom: 12px;
+    }
+    .section-card {
+      background: var(--card-background-color, var(--ha-card-background, var(--color-background-primary)));
+      border: 1px solid var(--divider-color, var(--color-border-tertiary));
+      border-radius: var(--ha-card-border-radius, var(--border-radius-md, 8px));
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--secondary-text-color, var(--color-text-secondary));
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .advanced-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0 6px;
+      font-size: 12px;
+      color: var(--primary-text-color);
+      cursor: pointer;
+    }
+    .advanced-toggle input {
+      cursor: pointer;
+    }
+    .advanced-block--nested {
+      border-left: 2px solid var(--divider-color);
+      padding-left: 10px;
+      margin-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .chip-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
       padding: 8px 0;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      border: 1px solid var(--divider-color);
+      background: var(--card-background-color);
+      color: var(--primary-text-color);
+      cursor: pointer;
+      transition: border-color 0.15s;
+      font: inherit;
+    }
+    .chip:hover {
+      border-color: var(--primary-color);
+    }
+    .chip--active {
+      border-color: #ff6b00;
+      background: rgba(255, 107, 0, 0.08);
+    }
+    .chip--add {
+      border-style: dashed;
+      color: var(--secondary-text-color);
+    }
+    .chip-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .tab-empty-hint {
+      font-size: 12px;
+      color: var(--secondary-text-color);
+      margin: 8px 0 0;
+    }
+    .weather-state-row {
+      display: grid;
+      grid-template-columns: 120px 1fr auto auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .weather-state-label-input {
+      max-width: 120px;
+    }
+    .weather-state-url {
+      min-width: 0;
+    }
+    .weather-state-icon-btn {
+      flex-shrink: 0;
+      width: 36px;
+    }
+    .weather-state-delete {
+      flex-shrink: 0;
+    }
+    .weather-mappings-toggle {
+      margin-top: 10px;
     }
     .z-context-body.state-a {
       display: flex;

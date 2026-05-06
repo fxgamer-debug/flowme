@@ -22,6 +22,8 @@ export const STRINGS = {
     hintNoConfig: 'No configuration loaded yet. Use "Show code editor" to paste YAML.',
     canvas: {
       ariaLabel: 'FlowMe visual editor canvas',
+      hideCanvas: '▲ Hide canvas',
+      showCanvas: '▼ Show canvas',
       addNodeAria: 'Add node — then click canvas to place',
       addFlowAria: 'Add flow between two nodes',
       addOverlayAria: 'Add overlay card',
@@ -37,6 +39,35 @@ export const STRINGS = {
       redoTitlePlain: 'Redo (Ctrl+Shift+Z)',
       overlayOption: (index: number, idPart: string) => `Overlay ${index + 1}${idPart}`,
       overlayOptionIdPart: (id: string) => ` (${id})`,
+    },
+    tabs: {
+      barAria: 'FlowMe editor sections',
+      card: 'Card',
+      nodes: 'Nodes',
+      flows: 'Flows',
+      overlays: 'Overlays',
+      settings: 'Settings',
+      emptySelection: 'Select an element on the canvas or choose a chip.',
+      overlayChip: (type: string, index: number) => `${type} · ${index + 1}`,
+    },
+    section: {
+      domainLayout: 'Domain & layout',
+      background: 'Background',
+      appearance: 'Appearance',
+      layerOpacity: 'Layer opacity',
+      flowDefaults: 'Flow defaults',
+      animationDefaults: 'Animation defaults',
+      developer: 'Developer',
+      debugMode: 'Debug mode',
+      nodeBasic: 'Basic',
+      nodeEffect: 'Effect',
+      flowConnection: 'Connection',
+      flowAnimation: 'Animation',
+      overlayPosition: 'Position & size',
+      overlayCard: 'Card config',
+    },
+    background: {
+      showWeatherMappings: 'Show weather state mappings',
     },
     toolbar: {
       undo: 'Undo',
@@ -322,6 +353,7 @@ export const STRINGS = {
     stateA: {
       domainSummary: 'Diagram domain',
       domain: 'Domain',
+      aspectRatio: 'Aspect ratio',
       domainOption: {
         energy: 'Energy',
         water: 'Water',

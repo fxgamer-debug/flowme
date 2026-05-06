@@ -175,6 +175,8 @@ Top-level on each `flows[]` item (see `FlowConfig` in `src/types.ts`):
 
 ## Node effects
 
+Note: Node effects (glow, badge, ripple, alert) have had limited real-world testing. They work correctly in testing scenarios but behaviour with specific Home Assistant entity types may vary. Please report any issues on GitHub.
+
 Requires `entity` on the node. Types: `glow`, `badge`, `ripple`, `alert`.
 
 ### `glow`
@@ -224,6 +226,8 @@ Requires `entity` on the node. Types: `glow`, `badge`, `ripple`, `alert`.
 ---
 
 ## Value gradient
+
+Note: Value gradient has had limited real-world testing. Core functionality is verified but edge cases with specific sensor types or domain combinations may not be fully covered.
 
 Interpolates HSL between `low_color` and `high_color` using a second entity. Example use cases: duct temperature vs setpoint, battery SoC, grid frequency deviation. `mode` controls whether particles, the base line, or both take the gradient.
 
