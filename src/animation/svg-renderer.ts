@@ -115,8 +115,10 @@ interface FlowDomNodes {
   lineStroke?: SVGUseElement;
   /** dash + direction both: second stroke on reversed path */
   lineStrokeRev?: SVGUseElement;
-  /** fluid: linear gradient element */
+  /** fluid: linear gradient element (forward path, or only path when not `direction: both`) */
   fluidGradient?: SVGLinearGradientElement;
+  /** fluid + direction both: gradient on reversed path */
+  fluidGradientRev?: SVGLinearGradientElement;
   /** fluid: first paint fade-in done for this flow (not reset on hass ticks) */
   fluidInitialised?: boolean;
   /** "both" direction uses a second set of particles going the other way */
@@ -656,14 +658,21 @@ export class SvgRenderer implements FlowRenderer {
         this.applyDots(dom, flow, profile, numValue, durMs, color, direction, burstMultiplier, belowCutoff);
     }
 
-    if (directionMode === 'both' && (style === 'dots' || style === 'dash' || style === 'arrow' || style === 'trail')) {
+    if (
+      directionMode === 'both' &&
+      (style === 'dots' || style === 'dash' || style === 'arrow' || style === 'trail' || style === 'fluid')
+    ) {
       dlog(
         'direction both:',
         flowId,
+        'style:',
+        style,
         'forward particles:',
         dom.particles.length,
         'reverse particles:',
         dom.particlesBack?.length ?? 0,
+        'fluid rev grad:',
+        dom.fluidGradientRev?.id ?? '(none)',
         'forward path:',
         dom.path.id,
         'reverse path:',
@@ -733,7 +742,9 @@ export class SvgRenderer implements FlowRenderer {
     dom.lineStroke?.remove();
     dom.lineStroke = undefined;
     dom.fluidInitialised = undefined;
-    dom.fluidGradient?.parentElement?.remove();
+    dom.fluidGradientRev?.remove();
+    dom.fluidGradientRev = undefined;
+    dom.fluidGradient?.remove();
     dom.fluidGradient = undefined;
   }
 
@@ -1505,43 +1516,36 @@ export class SvgRenderer implements FlowRenderer {
   }
 
   /**
-   * fluid — animated linear gradient along full path (v1.23.1).
+   * Build or update a fluid linear gradient and bind it to `strokeEl` along `pathEl`.
    */
-  private applyFluid(dom: FlowDomNodes, flow: FlowConfig, durMs: number, color: string, motionStopped = false): void {
-    for (const p of dom.particles) p.shape.remove();
-    dom.particles = [];
+  private paintFluidStrokeWithGradient(
+    flow: FlowConfig,
+    defs: SVGDefsElement,
+    strokeEl: SVGUseElement,
+    pathEl: SVGPathElement,
+    hrefPathId: string,
+    gradId: string,
+    color: string,
+    durMs: number,
+    motionStopped: boolean,
+    strokeWidth: number,
+    glowFilter: string,
+  ): SVGLinearGradientElement {
+    strokeEl.setAttributeNS(XLINK_NS, 'href', `#${hrefPathId}`);
+    strokeEl.setAttribute('href', `#${hrefPathId}`);
 
-    if (!this.svg) return;
-    const defs = this.svg.querySelector('defs');
-    if (!defs) return;
-
-    const nodesById = new Map(this.config!.nodes.map((n) => [n.id, n]));
-    const from = nodesById.get(flow.from_node);
-    const to = nodesById.get(flow.to_node);
-    if (!from || !to) return;
-
-    if (!dom.lineStroke) {
-      const stroke = document.createElementNS(SVG_NS, 'use');
-      stroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
-      stroke.setAttribute('href', `#${dom.pathId}`);
-      stroke.setAttribute('fill', 'none');
-      stroke.setAttribute('stroke-linecap', 'round');
-      stroke.setAttribute('stroke-linejoin', 'round');
-      dom.group.appendChild(stroke);
-      dom.lineStroke = stroke;
-    }
-
-    const safeFlow = flow.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const gradId = `fluid-grad-${safeFlow}`;
-    let grad = this.svg.getElementById(gradId) as SVGLinearGradientElement | null;
+    let grad = this.svg!.getElementById(gradId) as SVGLinearGradientElement | null;
     if (!grad) {
       grad = document.createElementNS(SVG_NS, 'linearGradient');
       grad.setAttribute('id', gradId);
       defs.appendChild(grad);
     }
-    dom.fluidGradient = grad;
 
-    const pathEl = dom.path;
+    const nodesById = new Map(this.config!.nodes.map((n) => [n.id, n]));
+    const from = nodesById.get(flow.from_node);
+    const to = nodesById.get(flow.to_node);
+    if (!from || !to) return grad;
+
     let L: number;
     try {
       L = Math.max(1, pathEl.getTotalLength());
@@ -1603,21 +1607,137 @@ export class SvgRenderer implements FlowRenderer {
       anim.setAttribute('repeatCount', 'indefinite');
       const tx = ux * L;
       const ty = uy * L;
-      /** Slide pattern along path tangent (path `d` already matches travel direction after sync). */
       anim.setAttribute('from', `${-tx} ${-ty}`);
       anim.setAttribute('to', `0 0`);
       grad.appendChild(anim);
     }
 
+    strokeEl.setAttribute('stroke', `url(#${gradId})`);
+    strokeEl.setAttribute('stroke-width', String(strokeWidth));
+    strokeEl.removeAttribute('stroke-dasharray');
+    if (glowFilter) strokeEl.setAttribute('filter', glowFilter);
+    else strokeEl.removeAttribute('filter');
+
+    return grad;
+  }
+
+  /**
+   * fluid — animated linear gradient along full path (v1.23.1).
+   * `direction: both` → two gradients + two strokes on forward and reversed paths (same idea as dash).
+   */
+  private applyFluid(dom: FlowDomNodes, flow: FlowConfig, durMs: number, color: string, motionStopped = false): void {
+    for (const p of dom.particles) p.shape.remove();
+    dom.particles = [];
+
+    if (!this.svg) return;
+    const defs = this.svg.querySelector('defs');
+    if (!defs) return;
+
+    const nodesById = new Map(this.config!.nodes.map((n) => [n.id, n]));
+    const from = nodesById.get(flow.from_node);
+    const to = nodesById.get(flow.to_node);
+    if (!from || !to) return;
+
+    const dirMode = flow.animation?.direction ?? 'auto';
+    const safeFlow = flow.id.replace(/[^a-zA-Z0-9_-]/g, '_');
     const strokeWidth = (this.config?.defaults?.line_width ?? STROKE_WIDTH) * 3;
     const glowFilter = this.glowFilter(flow, this.profileFor(flow), color);
 
-    dom.lineStroke.setAttribute('stroke', `url(#${gradId})`);
-    dom.lineStroke.setAttribute('stroke-width', String(strokeWidth));
-    dom.lineStroke.removeAttribute('stroke-dasharray');
-    if (glowFilter) dom.lineStroke.setAttribute('filter', glowFilter);
+    if (dirMode === 'both') {
+      this.ensurePathRev(dom);
+      const revPath = dom.pathRev;
+      const revId = dom.pathRevId;
+      if (!revPath || !revId) return;
 
-    // Fluid-only one-shot stroke fade-in (dots/dash/arrow/trail/none skip this block)
+      if (!dom.lineStroke) {
+        const stroke = document.createElementNS(SVG_NS, 'use');
+        stroke.setAttribute('fill', 'none');
+        stroke.setAttribute('stroke-linecap', 'round');
+        stroke.setAttribute('stroke-linejoin', 'round');
+        dom.group.appendChild(stroke);
+        dom.lineStroke = stroke;
+      }
+      if (!dom.lineStrokeRev) {
+        const strokeR = document.createElementNS(SVG_NS, 'use');
+        strokeR.setAttribute('fill', 'none');
+        strokeR.setAttribute('stroke-linecap', 'round');
+        strokeR.setAttribute('stroke-linejoin', 'round');
+        dom.group.appendChild(strokeR);
+        dom.lineStrokeRev = strokeR;
+      }
+
+      dom.fluidGradient = this.paintFluidStrokeWithGradient(
+        flow,
+        defs,
+        dom.lineStroke,
+        dom.path,
+        dom.pathId,
+        `fluid-grad-${safeFlow}`,
+        color,
+        durMs,
+        motionStopped,
+        strokeWidth,
+        glowFilter,
+      );
+      dom.fluidGradientRev = this.paintFluidStrokeWithGradient(
+        flow,
+        defs,
+        dom.lineStrokeRev,
+        revPath,
+        revId,
+        `fluid-grad-${safeFlow}-rev`,
+        color,
+        durMs,
+        motionStopped,
+        strokeWidth,
+        glowFilter,
+      );
+
+      if (!dom.fluidInitialised) {
+        dom.fluidInitialised = true;
+        for (const el of [dom.lineStroke, dom.lineStrokeRev]) {
+          el.setAttribute('opacity', '0');
+          const opIn = document.createElementNS(SVG_NS, 'animate');
+          opIn.setAttribute('attributeName', 'opacity');
+          opIn.setAttribute('values', '0;1');
+          opIn.setAttribute('dur', '600ms');
+          opIn.setAttribute('fill', 'freeze');
+          el.appendChild(opIn);
+        }
+      }
+      return;
+    }
+
+    dom.lineStrokeRev?.remove();
+    dom.lineStrokeRev = undefined;
+    dom.fluidGradientRev?.remove();
+    dom.fluidGradientRev = undefined;
+
+    if (!dom.lineStroke) {
+      const stroke = document.createElementNS(SVG_NS, 'use');
+      stroke.setAttributeNS(XLINK_NS, 'href', `#${dom.pathId}`);
+      stroke.setAttribute('href', `#${dom.pathId}`);
+      stroke.setAttribute('fill', 'none');
+      stroke.setAttribute('stroke-linecap', 'round');
+      stroke.setAttribute('stroke-linejoin', 'round');
+      dom.group.appendChild(stroke);
+      dom.lineStroke = stroke;
+    }
+
+    dom.fluidGradient = this.paintFluidStrokeWithGradient(
+      flow,
+      defs,
+      dom.lineStroke,
+      dom.path,
+      dom.pathId,
+      `fluid-grad-${safeFlow}`,
+      color,
+      durMs,
+      motionStopped,
+      strokeWidth,
+      glowFilter,
+    );
+
     if (!dom.fluidInitialised) {
       dom.fluidInitialised = true;
       dom.lineStroke.setAttribute('opacity', '0');

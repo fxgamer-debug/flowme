@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.10]
+
+### Fixed
+
+- **Fluid `direction: both`:** Two animated gradients — forward stroke on `path`, second stroke on `pathRev` with id `fluid-grad-<flow>-rev`, matching the dual-stream pattern used for dash. Teardown removes gradient nodes with `.remove()` (not the parent `defs`).
+
 ## [2.5.9]
 
 ### Fixed
