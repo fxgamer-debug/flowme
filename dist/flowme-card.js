@@ -2839,7 +2839,7 @@ var To = [
           for (let y = 0; y < o; y++) a.push(((f + y * g * v) % 1 + 1) % 1);
         }
         const d = n.path;
-        let c = 0;
+        let c;
         try {
           c = d ? d.getTotalLength() : 0;
         } catch {
@@ -3006,19 +3006,13 @@ var To = [
     let p = this.svg.getElementById(c);
     p || (p = document.createElementNS(N, "linearGradient"), p.setAttribute("id", c), s.appendChild(p)), i.fluidGradient = p;
     const u = i.path;
-    let h = 100;
+    let h;
     try {
       h = Math.max(1, u.getTotalLength());
     } catch {
       h = 100;
     }
-    let f = {
-      x: 0,
-      y: 0
-    }, g = {
-      x: 0,
-      y: 0
-    };
+    let f, g;
     try {
       const x = u.getPointAtLength(0), M = u.getPointAtLength(h);
       f = {
@@ -4494,7 +4488,8 @@ function hn(i, e, t) {
       rgba: r.data
     };
   } catch (r) {
-    throw new Error(`Canvas was tainted by cross-origin image (${r.message}). Serve the background from the same origin or enable CORS.`);
+    const a = r instanceof Error ? r.message : String(r), d = /* @__PURE__ */ new Error(`Canvas was tainted by cross-origin image (${a}). Serve the background from the same origin or enable CORS.`);
+    throw d.cause = r, d;
   }
 }
 function Us(i, e, t) {
@@ -4642,7 +4637,7 @@ function Ei(i, e, t) {
 var De = /* @__PURE__ */ new Map();
 async function Ri(i, e = {}) {
   const t = performance.now(), n = e.cellSize ?? 8, o = `${i.imageUrl}|${n}`, s = De.has(o);
-  let r = null;
+  let r;
   try {
     r = await Zs(o, i.imageUrl, n);
   } catch {

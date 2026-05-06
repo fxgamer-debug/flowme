@@ -1076,8 +1076,12 @@ export class SvgRenderer implements FlowRenderer {
 
       // Apply positions: hide animateMotion, use JS-driven SVG translate instead
       const svgPath = dom.path as SVGPathElement | null;
-      let totalLen = 0;
-      try { totalLen = svgPath ? svgPath.getTotalLength() : 0; } catch { totalLen = 0; }
+      let totalLen: number;
+      try {
+        totalLen = svgPath ? svgPath.getTotalLength() : 0;
+      } catch {
+        totalLen = 0;
+      }
 
       for (let i = 0; i < count; i++) {
         const p = dom.particles[i];
@@ -1483,14 +1487,14 @@ export class SvgRenderer implements FlowRenderer {
     dom.fluidGradient = grad;
 
     const pathEl = dom.path;
-    let L = 100;
+    let L: number;
     try {
       L = Math.max(1, pathEl.getTotalLength());
     } catch {
       L = 100;
     }
-    let pStart = { x: 0, y: 0 };
-    let pEnd = { x: 0, y: 0 };
+    let pStart: { x: number; y: number };
+    let pEnd: { x: number; y: number };
     try {
       const a = pathEl.getPointAtLength(0);
       const b = pathEl.getPointAtLength(L);

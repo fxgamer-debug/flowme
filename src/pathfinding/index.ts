@@ -29,7 +29,7 @@ export async function suggestPath(
   const cacheKey = `${request.imageUrl}|${cellSize}`;
   const wasCached = gridCache.has(cacheKey);
 
-  let grid: CostGrid | null = null;
+  let grid: CostGrid | null;
   try {
     grid = await getGrid(cacheKey, request.imageUrl, cellSize);
   } catch {

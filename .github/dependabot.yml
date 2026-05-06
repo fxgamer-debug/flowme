@@ -21,3 +21,8 @@ updates:
         patterns:
           - 'typescript-eslint'
           - '@typescript-eslint/*'
+      # ESLint 10+ does not bundle @eslint/js — flat config imports it explicitly.
+      eslint:
+        patterns:
+          - 'eslint'
+          - '@eslint/js'

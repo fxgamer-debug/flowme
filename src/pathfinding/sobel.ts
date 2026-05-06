@@ -147,10 +147,13 @@ export function readDownscaledPixels(
     const imageData = ctx.getImageData(0, 0, dims.width, dims.height);
     return { width: dims.width, height: dims.height, rgba: imageData.data };
   } catch (err) {
-    throw new Error(
-      `Canvas was tainted by cross-origin image (${(err as Error).message}). ` +
+    const msg = err instanceof Error ? err.message : String(err);
+    const next = new Error(
+      `Canvas was tainted by cross-origin image (${msg}). ` +
         'Serve the background from the same origin or enable CORS.',
     );
+    (next as Error & { cause?: unknown }).cause = err;
+    throw next;
   }
 }
 
