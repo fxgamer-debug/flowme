@@ -562,7 +562,38 @@ export function setVisibility<K extends keyof VisibilityConfig>(
   value: boolean,
 ): FlowmeConfig {
   const next = cloneConfig(config);
-  next.visibility = { ...next.visibility, [key]: value };
+  const merged: VisibilityConfig = { ...(next.layer_visibility ?? {}) };
+  if (value) delete merged[key];
+  else merged[key] = false;
+  if (Object.keys(merged).length === 0) delete next.layer_visibility;
+  else next.layer_visibility = merged;
+  return next;
+}
+
+/**
+ * Shape stored in HA YAML / Lovelace: never use reserved key `visibility`.
+ * Omit `layer_visibility` when empty; only keys explicitly false are kept.
+ * Also strips any legacy `visibility` key so it cannot be re-saved.
+ */
+export function finalizeConfigForHa(config: FlowmeConfig): FlowmeConfig {
+  const next = cloneConfig(config);
+  delete (next as unknown as Record<string, unknown>)['visibility'];
+  if (next.layer_visibility) {
+    const lv = next.layer_visibility;
+    const compact: VisibilityConfig = {};
+    for (const key of [
+      'nodes',
+      'lines',
+      'dots',
+      'labels',
+      'values',
+      'overlays',
+    ] as const) {
+      if (lv[key] === false) compact[key] = false;
+    }
+    if (Object.keys(compact).length === 0) delete next.layer_visibility;
+    else next.layer_visibility = compact;
+  }
   return next;
 }
 

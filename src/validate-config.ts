@@ -589,15 +589,33 @@ function validateAnimationConfig(raw: unknown): AnimationConfig {
   return out;
 }
 
-function validateVisibility(raw: unknown): VisibilityConfig {
+const LAYER_VISIBILITY_KEYS = ['nodes', 'lines', 'dots', 'labels', 'values', 'overlays'] as const;
+
+/** Legacy YAML used top-level `visibility` for FlowMe layers — clashes with HA Lovelace `visibility`. */
+function isLegacyFlowMeVisibilityBlock(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const keys = Object.keys(raw as Record<string, unknown>);
+  if (keys.length === 0) return false;
+  return keys.every((k) => (LAYER_VISIBILITY_KEYS as readonly string[]).includes(k));
+}
+
+function compactLayerVisibilityKeys(vis: VisibilityConfig): VisibilityConfig | undefined {
+  const out: VisibilityConfig = {};
+  for (const key of LAYER_VISIBILITY_KEYS) {
+    if (vis[key] === false) out[key] = false;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function validateLayerVisibility(raw: unknown, pathPrefix: string): VisibilityConfig {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    fail('visibility', t('validation.visibilityRootMustBeObject'));
+    fail(pathPrefix, t('validation.layerVisibilityRootMustBeObject'));
   }
   const v = raw as Record<string, unknown>;
   const out: VisibilityConfig = {};
-  for (const key of ['nodes', 'lines', 'dots', 'labels', 'values', 'overlays'] as const) {
+  for (const key of LAYER_VISIBILITY_KEYS) {
     if (v[key] !== undefined) {
-      if (typeof v[key] !== 'boolean') fail(`visibility.${key}`, t('validation.mustBeBoolean'));
+      if (typeof v[key] !== 'boolean') fail(`${pathPrefix}.${key}`, t('validation.mustBeBoolean'));
       out[key] = v[key] as boolean;
     }
   }
@@ -757,8 +775,18 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     config.opacity = validateOpacity(c['opacity']);
   }
 
-  if (c['visibility'] !== undefined) {
-    config.visibility = validateVisibility(c['visibility']);
+  {
+    const fromLegacy =
+      c['visibility'] !== undefined && isLegacyFlowMeVisibilityBlock(c['visibility'])
+        ? validateLayerVisibility(c['visibility'], 'visibility')
+        : {};
+    const fromLayer =
+      c['layer_visibility'] !== undefined
+        ? validateLayerVisibility(c['layer_visibility'], 'layer_visibility')
+        : {};
+    const merged: VisibilityConfig = { ...fromLegacy, ...fromLayer };
+    const compact = compactLayerVisibilityKeys(merged);
+    if (compact) config.layer_visibility = compact;
   }
 
   if (c['animation'] !== undefined) {

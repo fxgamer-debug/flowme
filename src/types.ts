@@ -478,8 +478,10 @@ export interface FlowmeConfig {
   opacity?: OpacityConfig;
   /**
    * Global layer visibility toggles (v1.0.11+). All fields default to true.
+   * Named `layer_visibility` so we never collide with Home Assistant's own
+   * top-level Lovelace `visibility` key (conditions UI / internal merge).
    */
-  visibility?: VisibilityConfig;
+  layer_visibility?: VisibilityConfig;
   /**
    * Global animation settings (v1.0.12+).
    */

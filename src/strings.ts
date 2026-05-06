@@ -481,6 +481,7 @@ export const STRINGS = {
     animationRootMustBeObject: 'must be an object',
     fpsRange: 'must be a number between 1 and 120',
     visibilityRootMustBeObject: 'must be an object',
+    layerVisibilityRootMustBeObject: 'must be an object',
     domainColorsRootMustBeObject: 'must be an object',
     stringColourValue: 'must be a string colour value',
     typeMustBeFlowme: (got: string) =>

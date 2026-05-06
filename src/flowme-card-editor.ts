@@ -51,6 +51,7 @@ import {
   deleteOverlay,
   deleteWaypoint,
   deleteWeatherState,
+  finalizeConfigForHa,
   insertWaypoint,
   moveNode,
   moveOverlay,
@@ -2852,7 +2853,7 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderVisibilityPanel(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
-    const vis: VisibilityConfig = this.config.visibility ?? {};
+    const vis: VisibilityConfig = this.config.layer_visibility ?? {};
 
     const toggle = <K extends keyof VisibilityConfig>(key: K, label: string) => {
       const value = vis[key] !== false;
@@ -2867,7 +2868,7 @@ export class FlowmeCardEditor extends LitElement {
               const checked = (e.target as HTMLInputElement).checked;
               const prev = this.config;
               const next = setVisibility(prev, key, checked);
-              this.pushPatch(prev, next, `set visibility.${key}`);
+              this.pushPatch(prev, next, `set layer_visibility.${key}`);
             }}
           />
           <span class="visibility-val">${value ? t('editor.inspector.visibilityVisible') : t('editor.inspector.visibilityHidden')}</span>
@@ -4707,8 +4708,9 @@ export class FlowmeCardEditor extends LitElement {
     // asynchronously (microtask / setTimeout) the flag remains true until
     // setConfig consumes and clears it — never reset it here.
     this._ownCommit = true;
+    const outgoing = finalizeConfigForHa(config);
     const event = new CustomEvent('config-changed', {
-      detail: { config },
+      detail: { config: outgoing },
       bubbles: true,
       composed: true,
     });

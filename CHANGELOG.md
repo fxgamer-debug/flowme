@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.7]
+
+### Fixed
+
+- **Home Assistant `visibility` collision:** Layer toggles no longer use the reserved top-level key `visibility` (they are stored as `layer_visibility`). YAML saved from the editor never includes a FlowMe `visibility:` block, which previously broke Lovelace (`t.reduce` errors, missing edit button, config stuck). Legacy YAML that used `visibility:` for FlowMe layers is still read and migrated.
+- **YAML noise:** Layer defaults remain implicit (`true`); only keys explicitly hidden (`false`) are written under `layer_visibility`.
+
+### Migration
+
+- Rename top-level `visibility:` (FlowMe layer keys only) to `layer_visibility:` in hand-edited YAML, or open the visual editor once and save — the card will rewrite config without the invalid block.
+
 ## [2.5.6]
 
 ### Changed

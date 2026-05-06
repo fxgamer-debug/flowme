@@ -316,7 +316,7 @@ Flow nodes and flows expose appropriate **ARIA** labels where implemented; edito
 | `domain_colors`       | map | Role hex overrides. |
 | `debug`               | bool | |
 | `opacity`             | `OpacityConfig` | Per-layer 0–1. |
-| `visibility`          | `VisibilityConfig` | Layer toggles. |
+| `layer_visibility`    | `VisibilityConfig` | Layer toggles (not `visibility` — reserved by HA). |
 | `animation`           | `AnimationConfig` | Global fps / smooth_speed. |
 
 Defaults (`defaults`): `node_radius`, `burst_trigger_ratio`, `burst_sustain_ms`, `burst_max_particles`, `dot_radius`, `line_width`.
