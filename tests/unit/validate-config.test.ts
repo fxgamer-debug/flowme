@@ -252,18 +252,18 @@ describe('validateConfig — happy path', () => {
     expect(cfg.flows[0]?.waypoints).toEqual([]);
   });
 
-  it('accepts omitted background (renders neutral placeholder)', () => {
+  it('accepts omitted background (no default image key)', () => {
     const { background: _omit, ...rest } = minimalConfig();
     const cfg = validateConfig(rest);
-    expect(cfg.background.default).toBe('');
+    expect(cfg.background.default).toBeUndefined();
   });
 
-  it('accepts an empty string for background.default', () => {
+  it('treats empty background.default as transparent (omits key)', () => {
     const cfg = validateConfig({
       ...minimalConfig(),
       background: { default: '' },
     });
-    expect(cfg.background.default).toBe('');
+    expect(cfg.background.default).toBeUndefined();
   });
 
   it('accepts a custom overlay (only supported type in v1.0.9)', () => {

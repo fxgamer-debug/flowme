@@ -213,6 +213,11 @@ describe('background + weather commands', () => {
     expect(cfg.background.default).toBe('/local/new.jpg');
   });
 
+  it('setBackgroundDefault removes default when URL empty', () => {
+    const cfg = setBackgroundDefault(baseConfig(), '   ');
+    expect(cfg.background.default).toBeUndefined();
+  });
+
   it('setTransitionDuration floors + clamps to ≥0, undefined clears', () => {
     const cfg1 = setTransitionDuration(baseConfig(), 1234.7);
     expect(cfg1.background.transition_duration).toBe(1234);

@@ -246,7 +246,9 @@ export function deleteFlow(config: FlowmeConfig, flowId: string): FlowmeConfig {
 
 export function setBackgroundDefault(config: FlowmeConfig, url: string): FlowmeConfig {
   const next = cloneConfig(config);
-  next.background.default = url;
+  const t = url.trim();
+  if (t) next.background.default = t;
+  else delete next.background.default;
   return next;
 }
 

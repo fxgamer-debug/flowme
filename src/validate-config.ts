@@ -630,20 +630,21 @@ export function validateConfig(raw: unknown): FlowmeConfig {
   const cardDomain: FlowmeConfig['domain'] =
     typeof rawDomain === 'string' ? normalizeFlowDomain(rawDomain) : 'energy';
 
-  // background and background.default are both optional. An omitted default
-  // renders a neutral placeholder so the card works out of the box without
-  // requiring the user to copy any image into /config/www first.
+  // background.default is optional — omitted or empty means transparent / no default image.
   const bgRaw = c['background'];
   if (bgRaw !== undefined && (bgRaw === null || typeof bgRaw !== 'object')) {
     fail('background', t('validation.backgroundWhenProvided'));
   }
   const bg = (bgRaw ?? {}) as Record<string, unknown>;
-  const defaultImg =
-    bg['default'] === undefined || bg['default'] === ''
-      ? ''
-      : validateUrlScheme(bg['default'], 'background.default');
 
-  const background: FlowmeConfig['background'] = { default: defaultImg };
+  const background: FlowmeConfig['background'] = {};
+  const rawDefault = bg['default'];
+  if (rawDefault !== undefined && rawDefault !== null && rawDefault !== '') {
+    if (typeof rawDefault !== 'string') {
+      fail('background.default', t('validation.mustBeString'));
+    }
+    background.default = validateUrlScheme(rawDefault, 'background.default');
+  }
   if (bg['weather_entity'] !== undefined) {
     if (typeof bg['weather_entity'] !== 'string') {
       fail('background.weather_entity', t('validation.mustBeStringEntityId'));

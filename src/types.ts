@@ -423,8 +423,8 @@ export interface VisibilityConfig {
 }
 
 export interface BackgroundConfig {
-  /** Default background image path. */
-  default: string;
+  /** Default background image path. Omitted for transparent mode. */
+  default?: string;
   /** Map of weather-entity state -> image path. Used when weather_entity is set. */
   weather_states?: Record<string, string>;
   /** Optional weather entity id driving background swaps. */

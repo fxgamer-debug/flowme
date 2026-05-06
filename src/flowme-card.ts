@@ -27,7 +27,7 @@ import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.5.1';
+const CARD_VERSION = '2.5.2';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -232,12 +232,18 @@ export class FlowmeCard extends LitElement {
    * so the HA editor preview stays responsive.
    */
   private needsRendererReinit(prev: FlowmeConfig, next: FlowmeConfig): boolean {
-    if (prev.domain !== next.domain) {
+    // Strip background — URL, weather, sun, transitions are synced separately and
+    // must never tear down the renderer.
+    const { background: _pb, ...prevRest } = prev;
+    const { background: _nb, ...nextRest } = next;
+    void _pb;
+    void _nb;
+    if (prevRest.domain !== nextRest.domain) {
       dlog('[FlowMe] needsRendererReinit: true (domain changed)', prev.domain, '→', next.domain);
       return true;
     }
-    const prevIds = new Set(prev.flows.map((f) => f.id));
-    const nextIds = new Set(next.flows.map((f) => f.id));
+    const prevIds = new Set(prevRest.flows.map((f) => f.id));
+    const nextIds = new Set(nextRest.flows.map((f) => f.id));
     if (prevIds.size !== nextIds.size) {
       dlog('[FlowMe] needsRendererReinit: true (flow count changed)', prevIds.size, '→', nextIds.size);
       return true;
@@ -391,6 +397,21 @@ export class FlowmeCard extends LitElement {
     if (!this.config) return;
     const mount = this.rendererMount.value;
     if (!mount || this.rendererReadyFor === this.config) return;
+
+    if (
+      this.renderer &&
+      this.rendererReadyFor &&
+      typeof this.renderer.applyConfig === 'function' &&
+      !this.needsRendererReinit(this.rendererReadyFor, this.config)
+    ) {
+      dlog('[FlowMe] renderer applyConfig (skip reinit):', performance.now());
+      this.renderer.applyConfig(this.config);
+      this.rendererReadyFor = this.config;
+      if (this.hass) this.pushAllValuesToRenderer();
+      else this.syncRendererAriaLabels();
+      this.syncAnimationsToDocumentVisibility();
+      return;
+    }
 
     dlog('renderer init start:', performance.now());
     this.teardownRenderer();
@@ -810,7 +831,7 @@ export class FlowmeCard extends LitElement {
       <ha-card
         role="region"
         aria-label=${t('aria.card')}
-        style=${hasDefaultBg ? '' : 'background: transparent;'}
+        style=${hasDefaultBg ? '' : 'background: transparent; box-shadow: none;'}
       >
         <div
           class="stage"
@@ -899,7 +920,12 @@ export class FlowmeCard extends LitElement {
       if (weather) {
         const weatherState = weather.state;
         const sunState = bg.sun_entity ? this.hass.states[bg.sun_entity]?.state : undefined;
-        const resolved = resolveNightBackground(weatherState, sunState, bg.weather_states, bg.default);
+        const resolved = resolveNightBackground(
+          weatherState,
+          sunState,
+          bg.weather_states,
+          bg.default ?? '',
+        );
 
         // Compute lookup key for debug logging only
         let lookupKey = weatherState;
@@ -912,7 +938,7 @@ export class FlowmeCard extends LitElement {
       }
     }
 
-    return bg.default;
+    return bg.default ?? '';
   }
 
   /**

@@ -604,6 +604,20 @@ export function parseAspectRatio(value: string | undefined): number | undefined 
   return w / h;
 }
 
+/**
+ * Integer width:height from `aspect_ratio` (e.g. '16:10' → 16, 10).
+ * Used for transparent-mode virtual canvas pixel size (v2.5.2+).
+ */
+export function parseAspectRatioDimensions(value: string | undefined): { w: number; h: number } {
+  const v = value ?? '16:10';
+  const match = /^(\d+):(\d+)$/.exec(v);
+  if (!match) return { w: 16, h: 10 };
+  const w = Number.parseInt(match[1] as string, 10);
+  const h = Number.parseInt(match[2] as string, 10);
+  if (!w || !h) return { w: 16, h: 10 };
+  return { w, h };
+}
+
 // ── Gradient colour interpolation (v1.0.14) ───────────────────────────────
 
 /** Parse a 3- or 6-digit hex colour string to [r, g, b] in 0–255. */

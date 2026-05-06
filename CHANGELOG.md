@@ -2,6 +2,24 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.2]
+
+### Fixed
+
+- **Editor coordinates:** Reverted the v2.5 stage-based coordinate refactor (`sceneW` / `sceneH` / cover projection). The editor again uses **image natural dimensions** (or a virtual canvas in transparent mode) for layout, zoom, pan, SVG viewBox, pathfinding, and node effects — matching **v2.4.1** behaviour for cards with a background image.
+- **Transparent mode:** When no default background URL is set, the editor uses a **virtual canvas** sized from `aspect_ratio` (scale 120× per ratio unit, e.g. `16:10` → 1920×1200) so the grid, zoom, and pan work without a bitmap.
+- **Transparent mode persistence:** Enabling transparent mode now **removes** `background.default` from the config (instead of setting it to `''`), so turning the toggle off does not immediately re-enable transparent on the next editor open. Previous URL is restored from editor state when disabling.
+- **Renderer flash:** Background / weather / sun config updates no longer force a full renderer teardown when flow topology is unchanged (`applyConfig` path).
+- **Card chrome:** With no default background, `ha-card` uses transparent background and **no box-shadow** so the Lovelace surface shows through cleanly.
+
+### Added
+
+- **Dependabot:** `.github/dependabot.yml` for weekly npm updates.
+
+### Removed
+
+- **Cover projection module:** `cover-projection.ts` and its unit test (no longer used).
+
 ## [2.5.1]
 
 ### Fixed

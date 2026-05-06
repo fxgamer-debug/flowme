@@ -95,14 +95,11 @@ import {
   clearValueGradient,
 } from './editor/commands.js';
 import { loadDownscaledRgbaForPathfinding, suggestPath } from './pathfinding/index.js';
-import {
-  projectPathfindingWaypointsToStage,
-  projectPointToPathfindingSpace,
-} from './pathfinding/cover-projection.js';
 import { DEFAULT_CELL_SIZE } from './pathfinding/grid-builder.js';
 import type { Point } from './pathfinding/types.js';
 import { DOMAIN_COLOUR_PROFILES } from './flow-profiles/domain-colour-profiles.js';
 import { dlog, isDebugEnabled, peekDebugFromRaw, setDebugEnabled } from './debug-log.js';
+import { parseAspectRatioDimensions } from './utils.js';
 import { flowmeBrowseMediaContentId, resolveMediaBrowseItemUrl } from './media-browser.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
@@ -200,8 +197,8 @@ export class FlowmeCardEditor extends LitElement {
   private _pathWorker?: Worker;
   private _pathWorkerPending = false;
   private _pathPendingSelection: { fromId: string; toId: string } | null = null;
-  /** Natural image dimensions for the pending worker run (waypoint projection). */
-  private _pathPendingImageDims: { w: number; h: number } | null = null;
+  /** Stashed default background URL when enabling transparent mode (restore on disable). */
+  private _previousBgUrl = '';
   /** Right-column toolbar selector: which type is shown in the element dropdown. */
   @state() private selectorType: 'nodes' | 'flows' | 'overlays' | '' = '';
   /** Config snapshot captured when the editor first opens (external setConfig).
@@ -212,15 +209,18 @@ export class FlowmeCardEditor extends LitElement {
   @state() private scale = 1;
   @state() private panX = 0;
   @state() private panY = 0;
-  /** Fit-level scale is always 1 (scene matches stage box). */
+  /** Minimum scale: fit entire card in canvas zone. Updated by ResizeObserver. */
   private fitScale = 1;
+  /** Pan offset at fit level (centres card horizontally when canvas is wider). */
   private fitPanX = 0;
   private fitPanY = 0;
-  /** Stage (.stage) pixel size — logical coordinate scene for nodes/flows (matches dashboard card). */
-  @state() private sceneW = 0;
-  @state() private sceneH = 0;
-  /** True once the stage has non-zero layout size. */
-  @state() private sceneReady = false;
+  /** Natural pixel dimensions of the background image or virtual transparent canvas. */
+  private imageNaturalW = 0;
+  private imageNaturalH = 0;
+  /** True only after a successful recalcFit applied scale/pan (avoids first paint at scale=1). */
+  @state() private imageLayoutReady = false;
+  /** URL for which naturalW/H have been loaded (empty string = virtual canvas). */
+  private _loadedImageUrl = '';
   /** True while spacebar is held (enables drag-to-pan). */
   private spaceHeld = false;
   /** Pointer id captured for middle-mouse or space+drag pan. */
@@ -278,7 +278,7 @@ export class FlowmeCardEditor extends LitElement {
       this._editorFxRaf = null;
     }
     this.editorNodeFx.reset();
-    this.sceneReady = false;
+    this.imageLayoutReady = false;
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -346,94 +346,98 @@ export class FlowmeCardEditor extends LitElement {
   }
 
   override firstUpdated(): void {
-    void this.updateComplete.then(() => {
-      const stageEl = this.stageRef.value ?? this.canvasRef.value;
-      if (!stageEl) return;
-      this._canvasResizeObserver = new ResizeObserver(() => {
-        this.recalcFit();
-      });
-      this._canvasResizeObserver.observe(stageEl);
+    const canvasEl = this.canvasRef.value;
+    if (!canvasEl) return;
+    this._canvasResizeObserver = new ResizeObserver((entries) => {
+      if (!entries[0]) return;
       this.recalcFit();
     });
+    this._canvasResizeObserver.observe(canvasEl);
   }
 
   /**
-   * Measure the stage box and set {@link sceneW} / {@link sceneH}. Fit scale is
-   * always 1 (the logical scene matches the stage); background images are a
-   * separate CSS layer and do not affect coordinates.
+   * Load the background image to read its natural dimensions, then recalculate
+   * the fit scale/pan so the image fills the stage width correctly.
+   * With no URL, uses a virtual canvas sized from {@link FlowmeConfig.aspect_ratio}.
+   */
+  private loadBackgroundImage(url: string | undefined): void {
+    const trimmed = (url ?? '').trim();
+    if (!trimmed) {
+      this._loadedImageUrl = '';
+      const { w, h } = parseAspectRatioDimensions(this.config?.aspect_ratio);
+      const VIRTUAL_SCALE = 120;
+      this.imageNaturalW = w * VIRTUAL_SCALE;
+      this.imageNaturalH = h * VIRTUAL_SCALE;
+      this.recalcFit();
+      return;
+    }
+
+    if (trimmed === this._loadedImageUrl) {
+      void this.updateComplete.then(() => this.recalcFit());
+      return;
+    }
+
+    this._loadedImageUrl = trimmed;
+    this.imageNaturalW = 0;
+    this.imageNaturalH = 0;
+    this.imageLayoutReady = false;
+    const img = new Image();
+    img.onload = () => {
+      this.imageNaturalW = img.naturalWidth || 1600;
+      this.imageNaturalH = img.naturalHeight || 1000;
+      this.recalcFit();
+    };
+    img.onerror = () => {
+      this.imageNaturalW = 0;
+      this.imageNaturalH = 0;
+      this.imageLayoutReady = false;
+      this.recalcFit();
+    };
+    img.src = trimmed;
+  }
+
+  /**
+   * Recalculate fitScale / fitPanX / fitPanY based on current stage size and
+   * image natural dimensions. Resets live pan/zoom to fit if the user has not
+   * interacted (still at the previous fit level).
    */
   private recalcFit(): void {
-    const stageEl = this.stageRef.value;
-    if (!stageEl) return;
-    const w = stageEl.offsetWidth;
-    const h = stageEl.offsetHeight;
-    if (w <= 0 || h <= 0) return;
-    this.sceneW = w;
-    this.sceneH = h;
-    this.fitScale = 1;
-    this.fitPanX = 0;
-    this.fitPanY = 0;
-    const prevSceneReady = this.sceneReady;
-    this.sceneReady = true;
-    if (!prevSceneReady) {
-      this.scale = 1;
-      this.panX = 0;
-      this.panY = 0;
-    } else if (this.scale === this.fitScale) {
-      this.panX = this.fitPanX;
-      this.panY = this.fitPanY;
+    const canvasEl = this.canvasRef.value;
+    if (!canvasEl) return;
+    const stageW = canvasEl.offsetWidth - 16;
+    const stageH = canvasEl.offsetHeight - 8;
+    if (stageW <= 0 || stageH <= 0) return;
+    if (this.imageNaturalW <= 0 || this.imageNaturalH <= 0) return;
+    const newFitScale = stageW / this.imageNaturalW;
+    const scaledH = this.imageNaturalH * newFitScale;
+    const newFitPanX = 0;
+    const newFitPanY = -(scaledH - stageH) / 2;
+    const prevScale = this.fitScale;
+    this.fitScale = newFitScale;
+    this.fitPanX = newFitPanX;
+    this.fitPanY = newFitPanY;
+    if (!this.imageLayoutReady) {
+      this.scale = newFitScale;
+      this.panX = newFitPanX;
+      this.panY = newFitPanY;
+      this.imageLayoutReady = true;
+    } else if (this.scale === 1 || this.scale === prevScale) {
+      this.scale = newFitScale;
+      this.panX = newFitPanX;
+      this.panY = newFitPanY;
     }
     this.clampPan();
   }
 
-  /** Natural pixel size of the background bitmap — pathfinding only (not layout). */
-  private loadImageDimsForPathfinding(url: string): Promise<{ w: number; h: number }> {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
-      };
-      img.onerror = () => {
-        resolve({ w: Math.max(1, this.sceneW), h: Math.max(1, this.sceneH) });
-      };
-      img.src = url;
-    });
-  }
-
-  /** Stage % → image % for Sobel grid when the bitmap is shown as CSS cover. */
-  private projectEndpointsForPathfinding(
-    from: NodePosition,
-    to: NodePosition,
-    dims: { w: number; h: number },
-  ): { from: Point; to: Point } {
-    const sw = this.sceneW;
-    const sh = this.sceneH;
-    if (sw <= 0 || sh <= 0 || dims.w <= 0 || dims.h <= 0) {
-      return { from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y } };
-    }
-    return {
-      from: projectPointToPathfindingSpace({ x: from.x, y: from.y }, sw, sh, dims.w, dims.h),
-      to: projectPointToPathfindingSpace({ x: to.x, y: to.y }, sw, sh, dims.w, dims.h),
-    };
-  }
-
-  /** Pathfinding returns image-normalized waypoints — convert back to stage %. */
-  private projectWaypointsToStageSpace(waypoints: Point[], dims: { w: number; h: number }): Point[] {
-    const sw = this.sceneW;
-    const sh = this.sceneH;
-    if (sw <= 0 || sh <= 0 || dims.w <= 0 || dims.h <= 0) return waypoints;
-    if (!this.config?.background?.default) return waypoints;
-    return projectPathfindingWaypointsToStage(waypoints, sw, sh, dims.w, dims.h);
-  }
-
   /**
-   * Percent (0–100) → pixel offsets in the canvas-content scene (same size as
-   * `.stage`). Parent `.canvas-content` applies pan/scale; do not multiply scale here.
+   * Percent (0–100) → pixel offsets in the canvas-content scene (the box sized
+   * imageNaturalW × imageNaturalH). Parent `.canvas-content` applies pan/scale;
+   * do not multiply scale here.
    */
   private pct2px(pct: Pick<NodePosition, 'x' | 'y'>): { x: number; y: number } {
     return {
-      x: (pct.x / 100) * this.sceneW,
-      y: (pct.y / 100) * this.sceneH,
+      x: (pct.x / 100) * this.imageNaturalW,
+      y: (pct.y / 100) * this.imageNaturalH,
     };
   }
 
@@ -444,8 +448,8 @@ export class FlowmeCardEditor extends LitElement {
         return {
           widthPx: Math.max(1, r.width),
           heightPx: Math.max(1, r.height),
-          viewBoxUserWidth: this.sceneW,
-          viewBoxUserHeight: this.sceneH,
+          viewBoxUserWidth: this.imageNaturalW,
+          viewBoxUserHeight: this.imageNaturalH,
         };
       },
     };
@@ -456,18 +460,14 @@ export class FlowmeCardEditor extends LitElement {
       setDebugEnabled(peekDebugFromRaw(config));
       this.config = validateConfig(config);
       setDebugEnabled(this.config.debug ?? false);
-      // Only clear undo when HA pushes a genuinely external config change.
-      // When we dispatch config-changed ourselves, _ownCommit is true.
-      // Reset the flag here (not in commitToHa) so it stays true whether
-      // HA calls setConfig synchronously or asynchronously (microtask / rAF).
       if (this._ownCommit) {
         this._ownCommit = false;
       } else {
-        // External load — capture the config as the "clean" state for Cancel.
         this.savedConfig = this.config;
         this.undoStack.clear();
       }
       this.errorMessage = '';
+      this.loadBackgroundImage(this.config?.background?.default);
       void this.updateComplete.then(() => this.recalcFit());
     } catch (err) {
       setDebugEnabled(false);
@@ -485,7 +485,7 @@ export class FlowmeCardEditor extends LitElement {
       `;
     }
 
-    const bgUrl = this.config.background.default;
+    const bgUrl = this.config.background?.default ?? '';
     const multiSelect = this.selectedNodeIds.size >= 2;
 
     // Derive selector dropdown values from canvas selection so they stay in sync.
@@ -499,8 +499,9 @@ export class FlowmeCardEditor extends LitElement {
     const derivedElement =
       this.selectedNodeId ?? this.selectedFlowId ?? this.selectedOverlayId ?? '';
 
-    const sceneOk = this.sceneReady && this.sceneW > 0 && this.sceneH > 0;
-    const transparentCanvas = !bgUrl && sceneOk;
+    const imageReady =
+      this.imageLayoutReady && this.imageNaturalW > 0 && this.imageNaturalH > 0;
+    const transparentCanvas = !bgUrl && imageReady;
 
     return html`
       <div class="wrap">
@@ -532,11 +533,11 @@ export class FlowmeCardEditor extends LitElement {
             ${ref(this.stageRef)}
           >
             <div
-              class=${`canvas-content${sceneOk ? '' : ' canvas-content--pending'}${
+              class=${`canvas-content${imageReady ? '' : ' canvas-content--pending'}${
                 transparentCanvas ? ' canvas-content--transparent' : ''
               }`}
-              style=${sceneOk
-                ? `width: ${this.sceneW}px; height: ${this.sceneH}px; transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`
+              style=${imageReady
+                ? `width: ${this.imageNaturalW}px; height: ${this.imageNaturalH}px; transform: translate(${this.panX}px,${this.panY}px) scale(${this.scale}); transform-origin: 0 0;`
                 : 'left:0;top:0;width:100%;height:100%;'}
             >
               ${bgUrl
@@ -545,18 +546,18 @@ export class FlowmeCardEditor extends LitElement {
                     style="background-image: url('${bgUrl}');"
                   ></div>`
                 : nothing}
-              ${sceneOk
+              ${imageReady
                 ? html`
                     <svg
                       class="connectors"
-                      viewBox=${`0 0 ${this.sceneW} ${this.sceneH}`}
+                      viewBox=${`0 0 ${this.imageNaturalW} ${this.imageNaturalH}`}
                       preserveAspectRatio="none"
                     >
                       ${this.config.flows.map((f) => this.renderFlowConnector(f))}
                     </svg>
                     <svg
                       class="node-effects-editor"
-                      viewBox=${`0 0 ${this.sceneW} ${this.sceneH}`}
+                      viewBox=${`0 0 ${this.imageNaturalW} ${this.imageNaturalH}`}
                       preserveAspectRatio="none"
                       ${ref(this.editorFxSvgRef)}
                     ></svg>
@@ -760,7 +761,7 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderFlowConnector(flow: FlowConfig): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
-    if (!this.sceneReady || this.sceneW <= 0 || this.sceneH <= 0) return nothing;
+    if (!this.imageLayoutReady || this.imageNaturalW <= 0 || this.imageNaturalH <= 0) return nothing;
     const nodes = new Map(this.config.nodes.map((n) => [n.id, n]));
     const from = nodes.get(flow.from_node);
     const to = nodes.get(flow.to_node);
@@ -769,7 +770,7 @@ export class FlowmeCardEditor extends LitElement {
     const isSelected = flow.id === this.selectedFlowId;
 
     // Same path logic as the card renderer; map percentages into the connectors
-    const CONNECTOR_SIZE = { width: this.sceneW, height: this.sceneH };
+    const CONNECTOR_SIZE = { width: this.imageNaturalW, height: this.imageNaturalH };
     const d = polylineToSvgPathStyled(points, CONNECTOR_SIZE, flow.line_style ?? 'corner');
     if (!d) return nothing;
 
@@ -843,8 +844,8 @@ export class FlowmeCardEditor extends LitElement {
     const w = overlay.size?.width ?? 14;
     const h = overlay.size?.height ?? 8;
     const posPx = this.pct2px(overlay.position);
-    const wpx = (w / 100) * this.sceneW;
-    const hpx = (h / 100) * this.sceneH;
+    const wpx = (w / 100) * this.imageNaturalW;
+    const hpx = (h / 100) * this.imageNaturalH;
     const editing = this.inlineRename?.kind === 'overlay' && this.inlineRename.id === overlay.id;
     return html`
       <div
@@ -3228,7 +3229,7 @@ export class FlowmeCardEditor extends LitElement {
                   <input
                     type="text"
                     class="bg-url-input"
-                    .value=${bg.default}
+                    .value=${bg.default ?? ''}
                     @change=${this.onDefaultBgChange}
                     placeholder=${t('editor.inspector.defaultBgPlaceholder')}
                   />
@@ -3495,14 +3496,21 @@ export class FlowmeCardEditor extends LitElement {
 
   private onTransparentModeChange(enabled: boolean): void {
     if (!this.config) return;
-    const prev = this.config;
-    const next: FlowmeConfig = {
-      ...prev,
-      background: {
-        ...prev.background,
-        default: enabled ? '' : prev.background.default,
-      },
-    };
+    const prev = this.deepCloneConfig(this.config);
+    const next = this.deepCloneConfig(this.config);
+
+    if (enabled) {
+      this._previousBgUrl = this.config.background?.default ?? '';
+      next.background = { ...next.background };
+      delete next.background.default;
+    } else {
+      next.background = { ...next.background };
+      if (this._previousBgUrl) {
+        next.background.default = this._previousBgUrl;
+      } else {
+        delete next.background.default;
+      }
+    }
     this.pushPatch(prev, next, enabled ? 'Enable transparent mode' : 'Disable transparent mode');
   }
 
@@ -3558,8 +3566,6 @@ export class FlowmeCardEditor extends LitElement {
       this.suggestBusy = false;
       const sel = this._pathPendingSelection;
       this._pathPendingSelection = null;
-      const dims = this._pathPendingImageDims;
-      this._pathPendingImageDims = null;
       if (!sel || !this.config) return;
       const data = e.data as {
         waypoints?: Point[];
@@ -3572,8 +3578,7 @@ export class FlowmeCardEditor extends LitElement {
         void this.runPathfindingMainThread(sel.fromId, sel.toId, { logFallback: true });
         return;
       }
-      let wpts = data.waypoints ?? [];
-      if (dims) wpts = this.projectWaypointsToStageSpace(wpts, dims);
+      const wpts = data.waypoints ?? [];
       this.applySuggestPathWorkerResult(
         {
           waypoints: wpts,
@@ -3587,7 +3592,6 @@ export class FlowmeCardEditor extends LitElement {
     this._pathWorker.onerror = (err: ErrorEvent) => {
       this._pathWorkerPending = false;
       this.suggestBusy = false;
-      this._pathPendingImageDims = null;
       const sel = this._pathPendingSelection;
       this._pathPendingSelection = null;
       console.error('[FlowMe] pathfinding worker error:', err);
@@ -3629,26 +3633,23 @@ export class FlowmeCardEditor extends LitElement {
 
     this.suggestBusy = true;
     try {
-      const url = this.config.background.default;
+      const url = this.config.background?.default ?? '';
       if (!url) {
         this.errorMessage = t('editor.inspector.suggestCorsError');
         this.suggestPreview = null;
         return;
       }
-      const dims = await this.loadImageDimsForPathfinding(url);
-      const { from, to } = this.projectEndpointsForPathfinding(fromNode.position, toNode.position, dims);
       const pathResult = await suggestPath({
         imageUrl: url,
-        from,
-        to,
+        from: fromNode.position,
+        to: toNode.position,
       });
       if (!pathResult.edgesUsable) {
         this.errorMessage = t('editor.inspector.suggestCorsError');
         this.suggestPreview = null;
         return;
       }
-      const waypoints = this.projectWaypointsToStageSpace(pathResult.waypoints ?? [], dims);
-      this.applySuggestPathWorkerResult({ ...pathResult, waypoints }, fromId, toId);
+      this.applySuggestPathWorkerResult(pathResult, fromId, toId);
     } catch (err) {
       this.errorMessage = t(
         'editor.inspector.suggestAutoRouteFailed',
@@ -3694,20 +3695,16 @@ export class FlowmeCardEditor extends LitElement {
       return;
     }
 
-    const dims = await this.loadImageDimsForPathfinding(imageUrl);
-    const { from, to } = this.projectEndpointsForPathfinding(fromNode.position, toNode.position, dims);
-
     this._pathWorkerPending = true;
     this._pathPendingSelection = { fromId, toId };
-    this._pathPendingImageDims = dims;
     const copy = new Uint8ClampedArray(pack.rgba);
     this._pathWorker.postMessage(
       {
         rgba: copy.buffer,
         width: pack.width,
         height: pack.height,
-        fromPos: from,
-        toPos: to,
+        fromPos: fromNode.position,
+        toPos: toNode.position,
         cellSize: DEFAULT_CELL_SIZE,
       },
       [copy.buffer],
@@ -3790,16 +3787,13 @@ export class FlowmeCardEditor extends LitElement {
     const imageUrl = this.config.background?.default ?? '';
     if (!imageUrl) return [];
     try {
-      const dims = await this.loadImageDimsForPathfinding(imageUrl);
-      const { from, to } = this.projectEndpointsForPathfinding(fromNode.position, toNode.position, dims);
       const pathResult = await suggestPath({
         imageUrl,
-        from,
-        to,
+        from: fromNode.position,
+        to: toNode.position,
       });
       if (!pathResult.edgesUsable) return [];
-      const stageWpts = this.projectWaypointsToStageSpace(pathResult.waypoints ?? [], dims);
-      return stageWpts.map((w) => ({ x: w.x, y: w.y }));
+      return (pathResult.waypoints ?? []).map((w) => ({ x: w.x, y: w.y }));
     } catch {
       return [];
     }
@@ -3837,12 +3831,12 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderSuggestPreview(): TemplateResult | typeof nothing {
     if (!this.suggestPreview || !this.config) return nothing;
-    if (!this.sceneReady || this.sceneW <= 0 || this.sceneH <= 0) return nothing;
+    if (!this.imageLayoutReady || this.imageNaturalW <= 0 || this.imageNaturalH <= 0) return nothing;
     const fromNode = this.config.nodes.find((n) => n.id === this.suggestPreview!.fromNodeId);
     const toNode = this.config.nodes.find((n) => n.id === this.suggestPreview!.toNodeId);
     if (!fromNode || !toNode) return nothing;
-    const w = this.sceneW;
-    const h = this.sceneH;
+    const w = this.imageNaturalW;
+    const h = this.imageNaturalH;
     const points: Point[] = [
       fromNode.position,
       ...this.suggestPreview.waypoints,
@@ -4249,10 +4243,10 @@ export class FlowmeCardEditor extends LitElement {
 
     // Overlay resize: must run before the 4px drag threshold — resize pointerdown
     // does not set dragStartPx (that path is only for node/waypoint/overlay move).
-    // Deltas: screen Δ / scale → card px, then ÷ sceneW/H → percentage.
+    // Deltas: screen Δ / scale → card px, then ÷ imageNaturalW/H → percentage.
     if (target.kind === 'overlay-resize') {
-      const iw = this.sceneW > 0 ? this.sceneW : 1;
-      const ih = this.sceneH > 0 ? this.sceneH : 1;
+      const iw = this.imageNaturalW > 0 ? this.imageNaturalW : 1;
+      const ih = this.imageNaturalH > 0 ? this.imageNaturalH : 1;
       const dxCard = (event.clientX - target.startPx.x) / this.scale;
       const dyCard = (event.clientY - target.startPx.y) / this.scale;
       const dxPct = (dxCard / iw) * 100;
@@ -4287,8 +4281,8 @@ export class FlowmeCardEditor extends LitElement {
       this.config = moveNode(this.config, target.id, snapped);
     } else if (target.kind === 'node-bulk') {
       // Bulk move: screen Δ / scale → card-space px; % uses scene size (same as pointerToPercent).
-      const iw = this.sceneW > 0 ? this.sceneW : 1;
-      const ih = this.sceneH > 0 ? this.sceneH : 1;
+      const iw = this.imageNaturalW > 0 ? this.imageNaturalW : 1;
+      const ih = this.imageNaturalH > 0 ? this.imageNaturalH : 1;
       const dxCard = (event.clientX - target.startPx.x) / this.scale;
       const dyCard = (event.clientY - target.startPx.y) / this.scale;
       const dxPct = (dxCard / iw) * 100;
@@ -4543,8 +4537,8 @@ export class FlowmeCardEditor extends LitElement {
     if (!canvas) return;
     const stageW = canvas.offsetWidth - 16;
     const stageH = canvas.offsetHeight - 8;
-    const scaledW = this.sceneW * this.scale;
-    const scaledH = this.sceneH * this.scale;
+    const scaledW = this.imageNaturalW * this.scale;
+    const scaledH = this.imageNaturalH * this.scale;
     this.panX = Math.min(0, Math.max(stageW - scaledW, this.panX));
     this.panY = Math.min(0, Math.max(stageH - scaledH, this.panY));
   }
@@ -4680,8 +4674,8 @@ export class FlowmeCardEditor extends LitElement {
     const fromStageTop  = event.clientY - (canvasRect.top  + 4);
     const cardX = (fromStageLeft - this.panX) / this.scale;
     const cardY = (fromStageTop  - this.panY) / this.scale;
-    const sw = this.sceneW > 0 ? this.sceneW : 1;
-    const sh = this.sceneH > 0 ? this.sceneH : 1;
+    const sw = this.imageNaturalW > 0 ? this.imageNaturalW : 1;
+    const sh = this.imageNaturalH > 0 ? this.imageNaturalH : 1;
     const x = clampPercent((cardX / sw) * 100);
     const y = clampPercent((cardY / sh) * 100);
     return { x, y };
