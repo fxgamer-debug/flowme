@@ -132,6 +132,16 @@ interface SuggestPreview {
   elapsedMs: number;
 }
 
+function parseAspectRatioDimensions(value: string | undefined): { w: number; h: number } {
+  const v = value ?? '16:10';
+  const m = /^(\d+):(\d+)$/.exec(v);
+  if (!m) return { w: 16, h: 10 };
+  const w = Number.parseInt(m[1] as string, 10);
+  const h = Number.parseInt(m[2] as string, 10);
+  if (!w || !h) return { w: 16, h: 10 };
+  return { w, h };
+}
+
 /**
  * v0.2 editor — full drag + undo/redo with waypoints, snap, and keyboard
  * shortcuts. Flows between nodes are rendered as dashed connectors so the
@@ -360,7 +370,15 @@ export class FlowmeCardEditor extends LitElement {
    * Called whenever the background URL changes.
    */
   private loadBackgroundImage(url: string): void {
-    if (!url || url === this._loadedImageUrl) return;
+    if (!url) {
+      const dims = parseAspectRatioDimensions(this.config?.aspect_ratio ?? '16:10');
+      this.imageNaturalW = dims.w * 120;
+      this.imageNaturalH = dims.h * 120;
+      this._loadedImageUrl = '';
+      this.recalcFit();
+      return;
+    }
+    if (url === this._loadedImageUrl) return;
     this._loadedImageUrl = url;
     this.imageNaturalW = 0;
     this.imageNaturalH = 0;
@@ -459,9 +477,9 @@ export class FlowmeCardEditor extends LitElement {
       }
       this.errorMessage = '';
       // Load image dimensions whenever the background URL changes so recalcFit
-      // can use the correct aspect ratio.
-      const bgUrl = this.config?.background?.default;
-      if (bgUrl) this.loadBackgroundImage(bgUrl);
+      // can use the correct aspect ratio (empty URL → virtual canvas from aspect_ratio).
+      const bgUrl = this.config?.background?.default ?? '';
+      this.loadBackgroundImage(bgUrl);
       // After paint, re-run fit so the first frame after open uses a laid-out stage
       // (recalcFit can no-op if image or stage is not ready yet). When loadBackgroundImage
       // returns early for the same URL, this is the main path that corrects scale/pan.

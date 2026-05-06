@@ -33,7 +33,7 @@ import {
 } from './weather-effects.js';
 
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.4.1';
+const CARD_VERSION = '2.5.3';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -440,6 +440,13 @@ export class FlowmeCard extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
+    if (this.config && !this.config.background?.default) {
+      this.style.setProperty('background', 'transparent');
+      this.style.setProperty('box-shadow', 'none');
+    } else if (this.config) {
+      this.style.removeProperty('background');
+      this.style.removeProperty('box-shadow');
+    }
     // First paint: `ref(rendererMount)` is set only after commit — run init here
     // if `willUpdate` saw a null mount (no prior render).
     this.beginRendererInitIfNeeded();

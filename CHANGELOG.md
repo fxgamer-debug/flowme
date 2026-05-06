@@ -2,6 +2,13 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.3]
+
+### Added
+
+- **Transparent mode (minimal):** When `background.default` is empty or unset, the dashboard card uses a transparent host background (no box shadow) so the Lovelace theme shows through.
+- **Editor without background image:** The visual editor uses a virtual canvas sized from `aspect_ratio` (×120 per ratio unit, e.g. `16:10` → 1920×1200) so zoom, pan, and the grid work without loading a bitmap.
+
 ## [2.4.1]
 
 ### Changed

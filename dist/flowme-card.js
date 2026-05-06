@@ -4959,6 +4959,12 @@ var Ir = Object.defineProperty, Fr = Object.getOwnPropertyDescriptor, N = (t, e,
   return o && n && Ir(e, i, n), n;
 };
 const ft = "not_configured", Pr = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
+function Mr(t) {
+  const e = t ?? "16:10", i = /^(\d+):(\d+)$/.exec(e);
+  if (!i) return { w: 16, h: 10 };
+  const o = Number.parseInt(i[1], 10), n = Number.parseInt(i[2], 10);
+  return !o || !n ? { w: 16, h: 10 } : { w: o, h: n };
+}
 let M = class extends re {
   constructor() {
     super(...arguments), this.pending = null, this.previewMode = !1, this.selectedNodeId = null, this.selectedNodeIds = /* @__PURE__ */ new Set(), this.selectedFlowId = null, this.selectedOverlayId = null, this.customConfigDraft = "", this.customConfigError = "", this.errorMessage = "", this.inlineRename = null, this.canUndo = !1, this.nodeLabelInputRef = V(), this.flowIdInputRef = V(), this.overlayIdInputRef = V(), this._pendingInspectorLabelFocus = !1, this.canRedo = !1, this.undoLabel = "", this.redoLabel = "", this.suggestPreview = null, this.suggestBusy = !1, this.flowEndpointPathfindingFlowId = null, this.flowEndpointError = null, this.flowZeroThresholdDraft = {}, this.flowInspectorAdvancedOpen = {}, this.imageBrowserOpen = !1, this.imageBrowserLoading = !1, this.imageBrowserError = "", this.imageBrowserField = "default", this.imageBrowserFiles = [], this._pathWorkerPending = !1, this._pathPendingSelection = null, this.selectorType = "", this.scale = 1, this.panX = 0, this.panY = 0, this.fitScale = 1, this.fitPanX = 0, this.fitPanY = 0, this.imageNaturalW = 0, this.imageNaturalH = 0, this.imageLayoutReady = !1, this._loadedImageUrl = "", this.spaceHeld = !1, this.panPointerId = null, this.stageRef = V(), this.canvasRef = V(), this.editorFxSvgRef = V(), this.editorNodeFx = new co(), this._editorFxRaf = null, this.undoStack = new $s((t) => this.applyConfig(
@@ -5264,7 +5270,12 @@ let M = class extends re {
    * Called whenever the background URL changes.
    */
   loadBackgroundImage(t) {
-    if (!t || t === this._loadedImageUrl) return;
+    if (!t) {
+      const i = Mr(this.config?.aspect_ratio ?? "16:10");
+      this.imageNaturalW = i.w * 120, this.imageNaturalH = i.h * 120, this._loadedImageUrl = "", this.recalcFit();
+      return;
+    }
+    if (t === this._loadedImageUrl) return;
     this._loadedImageUrl = t, this.imageNaturalW = 0, this.imageNaturalH = 0, this.imageLayoutReady = !1;
     const e = new Image();
     e.onload = () => {
@@ -5313,8 +5324,8 @@ let M = class extends re {
   setConfig(t) {
     try {
       se(Qi(t)), this.config = $e(t), se(this.config.debug ?? !1), this._ownCommit ? this._ownCommit = !1 : (this.savedConfig = this.config, this.undoStack.clear()), this.errorMessage = "";
-      const e = this.config?.background?.default;
-      e && this.loadBackgroundImage(e), this.updateComplete.then(() => this.recalcFit());
+      const e = this.config?.background?.default ?? "";
+      this.loadBackgroundImage(e), this.updateComplete.then(() => this.recalcFit());
     } catch (e) {
       se(!1), this.errorMessage = e instanceof Error ? e.message : String(e);
     }
@@ -10074,15 +10085,15 @@ N([
 M = N([
   Ft("flowme-card-editor")
 ], M);
-var Mr = Object.defineProperty, Br = Object.getOwnPropertyDescriptor, Z = (t, e, i, o) => {
-  for (var n = o > 1 ? void 0 : o ? Br(e, i) : e, s = t.length - 1, r; s >= 0; s--)
+var Br = Object.defineProperty, Nr = Object.getOwnPropertyDescriptor, Z = (t, e, i, o) => {
+  for (var n = o > 1 ? void 0 : o ? Nr(e, i) : e, s = t.length - 1, r; s >= 0; s--)
     (r = t[s]) && (n = (o ? r(e, i, n) : r(n)) || n);
-  return o && n && Mr(e, i, n), n;
+  return o && n && Br(e, i, n), n;
 };
-const go = "2.4.1";
+const go = "2.5.3";
 console.info("%cFlowMe v" + go + " loaded", "color: #FF6B00; font-weight: bold");
 const Hi = 5e3;
-function Nr(t) {
+function Er(t) {
   if (!t) return "";
   const e = [], i = (o, n) => {
     const s = t[o];
@@ -10090,7 +10101,7 @@ function Nr(t) {
   };
   return i("background", "--flowme-opacity-bg"), i("darken", "--flowme-opacity-darken"), i("nodes", "--flowme-opacity-nodes"), i("flows", "--flowme-opacity-flows"), i("dots", "--flowme-opacity-dots"), i("glow", "--flowme-opacity-glow"), i("labels", "--flowme-opacity-labels"), i("values", "--flowme-opacity-values"), i("overlays", "--flowme-opacity-overlays"), e.join("");
 }
-function Er(t) {
+function Rr(t) {
   if (!t) return "";
   const e = [], i = (o, n) => {
     t[o] === !1 && e.push(`${n}:none;`);
@@ -10251,7 +10262,7 @@ let K = class extends re {
     this.config && (this.beginRendererInitIfNeeded(), t.has("hass") && this.renderer && (this.hass ? this.pushAllValuesToRenderer() : this.syncRendererAriaLabels()), (t.has("config") || t.has("hass")) && this.syncWeatherBackground());
   }
   updated(t) {
-    super.updated(t), this.beginRendererInitIfNeeded(), this.syncPauseWhenHiddenListener(), this.syncAnimationsToDocumentVisibility();
+    super.updated(t), this.config && !this.config.background?.default ? (this.style.setProperty("background", "transparent"), this.style.setProperty("box-shadow", "none")) : this.config && (this.style.removeProperty("background"), this.style.removeProperty("box-shadow")), this.beginRendererInitIfNeeded(), this.syncPauseWhenHiddenListener(), this.syncAnimationsToDocumentVisibility();
     const e = this.nodeFxSvgRef.value;
     e && this.config && this.nodeFx.sync(e, this.config, this.hass, performance.now(), this.nodeEffectHooks()), this.ensureNodeEffectsRaf(), this.syncWeatherEffects();
   }
@@ -10521,7 +10532,7 @@ let K = class extends re {
     const t = this.config;
     if (!t)
       return y`<ha-card role="region" aria-label=${l("aria.card")}><div class="placeholder">${l("card.loading")}</div></ha-card>`;
-    const i = `${1 / (st(t.aspect_ratio) ?? 16 / 10) * 100}%`, o = t.background.transition_duration ?? Hi, n = Nr(t.opacity), s = Er(t.visibility);
+    const i = `${1 / (st(t.aspect_ratio) ?? 16 / 10) * 100}%`, o = t.background.transition_duration ?? Hi, n = Er(t.opacity), s = Rr(t.visibility);
     return y`
       <ha-card role="region" aria-label=${l("aria.card")}>
         <div
