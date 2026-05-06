@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.5]
+
+### Changed
+
+- **Dev dependencies:** Vitest and `@vitest/coverage-v8` upgraded to v4 (aligned majors).
+
+### Fixed
+
+- **Dependabot:** Group `vitest` + `@vitest/*` in one PR so major upgrades apply together and `npm ci` stays consistent.
+
 ## [2.5.4]
 
 ### Added

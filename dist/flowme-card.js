@@ -9648,7 +9648,7 @@ var cr = Object.defineProperty, dr = Object.getOwnPropertyDescriptor, V = (t, e,
     (r = t[s]) && (n = (o ? r(e, i, n) : r(n)) || n);
   return o && n && cr(e, i, n), n;
 };
-const co = "2.5.4";
+const co = "2.5.5";
 console.info("%cFlowMe v" + co + " loaded", "color: #FF6B00; font-weight: bold");
 const Di = 5e3;
 function pr(t) {
