@@ -2,6 +2,8 @@
 
 > Animated flow visualisation with freely positioned nodes for Home Assistant
 
+![FlowMe preview](docs/flowme-preview.png)
+
 A custom Lovelace card that renders animated flow visualisations between freely positioned nodes over a configurable background. Supports multiple flow domains, rich animation styles, weather-reactive backgrounds, and a fully visual drag-and-drop editor.
 
 ---

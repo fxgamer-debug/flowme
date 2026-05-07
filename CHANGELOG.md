@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.8.1]
+
+### Fixed
+
+- **HACS validation:** README includes a preview image (`docs/flowme-preview.png`) so the [HACS “images in readme” check](https://hacs.xyz/docs/publish/include#check-images) passes.
+
 ## [2.8]
 
 ### Added
