@@ -25,7 +25,7 @@ import { flowDisplayName } from './utils.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.7.3';
+const CARD_VERSION = '2.7.4';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -202,6 +202,8 @@ export class FlowmeCard extends LitElement {
    * Keeps console noise under control when a sensor is permanently stale.
    */
   private warnedMissing = new Set<string>();
+  /** Last scaled main-entity value pushed per flow — skip `updateFlow` when unchanged (v2.7.4). */
+  private _lastScaledValue = new Map<string, number>();
 
   /**
    * Full SVG/Houdini rebuild when flow membership **or diagram domain** changes.
@@ -605,6 +607,10 @@ export class FlowmeCard extends LitElement {
       return;
     }
     dlog('pushAllValuesToRenderer → flows:', this.config.flows.length, 'renderer:', this.renderer.constructor.name);
+    const activeFlowIds = new Set(this.config.flows.map((f) => f.id));
+    for (const id of this._lastScaledValue.keys()) {
+      if (!activeFlowIds.has(id)) this._lastScaledValue.delete(id);
+    }
     for (let fi = 0; fi < this.config.flows.length; fi++) {
       const flow = this.config.flows[fi]!;
       const state = this.hass.states[flow.entity];
@@ -635,7 +641,11 @@ export class FlowmeCard extends LitElement {
           dlog(`flow "${flow.id}" entity "${flow.entity}" is currently ${state.state} — no flow will render until it reports a number`);
         }
       }
-      this.renderer.updateFlow(flow.id, scaled.value);
+      const lastValue = this._lastScaledValue.get(flow.id);
+      if (lastValue === undefined || lastValue !== scaled.value) {
+        this._lastScaledValue.set(flow.id, scaled.value);
+        this.renderer.updateFlow(flow.id, scaled.value);
+      }
 
       // GRADIENT-1: compute and push gradient colour when configured
       if (flow.value_gradient && this.renderer.setGradientColor) {
@@ -1077,6 +1087,7 @@ export class FlowmeCard extends LitElement {
       this.renderer.destroy();
       this.renderer = null;
     }
+    this._lastScaledValue.clear();
     this.rendererReadyFor = undefined;
     // New renderer must re-apply tab-hidden pause (destroy clears paused SMIL state).
     this._documentVisibilityPauseActive = false;

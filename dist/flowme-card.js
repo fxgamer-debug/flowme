@@ -10379,7 +10379,7 @@ F([P()], R.prototype, "panX", void 0);
 F([P()], R.prototype, "panY", void 0);
 F([P()], R.prototype, "imageLayoutReady", void 0);
 R = Oe = F([Ct("flowme-card-editor")], R);
-var lt, yn = "2.7.3";
+var lt, yn = "2.7.4";
 console.info("%cFlowMe v" + yn + " loaded", "color: #FF6B00; font-weight: bold");
 var zi = 5e3;
 function is(i) {
@@ -10398,7 +10398,7 @@ var W = (lt = class extends ie {
       this._connectionAwaitingReconnect = !0;
     }, this._visibilityListenerAttached = !1, this._documentVisibilityPauseActive = !1, this._visibilityHandler = () => {
       this.syncAnimationsToDocumentVisibility();
-    }, this.toastVisible = !1, this.toastMessage = "", this.toastHideTimer = null, this.renderer = null, this.rendererMount = Y(), this.nodeFxSvgRef = Y(), this.nodeFx = new fn(), this._nodeFxRaf = null, this.bgLayerA = "", this.bgLayerB = "", this.activeLayer = "A", this.transitionTimer = null, this.preloadCache = /* @__PURE__ */ new Map(), this.lastAppliedBgUrl = "", this.warnedMissing = /* @__PURE__ */ new Set(), this.onOverlayKeydown = (t, n) => {
+    }, this.toastVisible = !1, this.toastMessage = "", this.toastHideTimer = null, this.renderer = null, this.rendererMount = Y(), this.nodeFxSvgRef = Y(), this.nodeFx = new fn(), this._nodeFxRaf = null, this.bgLayerA = "", this.bgLayerB = "", this.activeLayer = "A", this.transitionTimer = null, this.preloadCache = /* @__PURE__ */ new Map(), this.lastAppliedBgUrl = "", this.warnedMissing = /* @__PURE__ */ new Set(), this._lastScaledValue = /* @__PURE__ */ new Map(), this.onOverlayKeydown = (t, n) => {
       (t.key === "Enter" || t.key === " ") && (t.preventDefault(), this.handleOverlayTap(n));
     };
   }
@@ -10601,38 +10601,40 @@ var W = (lt = class extends ie {
     this._nodeFxRaf = requestAnimationFrame(e);
   }
   pushAllValuesToRenderer() {
-    if (!(!this.config || !this.renderer)) {
-      if (!this.hass) {
-        this.syncRendererAriaLabels();
-        return;
-      }
-      A("pushAllValuesToRenderer → flows:", this.config.flows.length, "renderer:", this.renderer.constructor.name);
-      for (let e = 0; e < this.config.flows.length; e++) {
-        const t = this.config.flows[e], n = this.hass.states[t.entity], o = be(n?.state), r = H(t.domain ?? this.config.domain), s = n?.attributes?.unit_of_measurement, a = Kt(o, s, r.unit_scale);
-        if (A("updateFlow →", t.id, "entity=", t.entity, "raw=", n?.state, "parsed=", o, "sensorUnit=", s ?? "(none)", "matchedUnit=", a.matchedUnit ?? "(none → passthrough)", "factor=", a.factor, "scaledToBase(" + r.unit_label + ")=", a.value), n) {
-          if (n.state === "unavailable" || n.state === "unknown") {
-            const d = `${t.id}:${t.entity}:unavailable`;
-            this.warnedMissing.has(d) || (this.warnedMissing.add(d), A(`flow "${t.id}" entity "${t.entity}" is currently ${n.state} — no flow will render until it reports a number`));
-          }
-        } else {
-          const d = `${t.id}:${t.entity}`;
-          this.warnedMissing.has(d) || (this.warnedMissing.add(d), A(`flow "${t.id}" references entity "${t.entity}" but it is not present in hass.states — check spelling / domain permissions`));
-        }
-        if (this.renderer.updateFlow(t.id, a.value), t.value_gradient && this.renderer.setGradientColor) {
-          const d = t.value_gradient.entity, c = this.hass.states[d];
-          if (c && c.state !== "unavailable" && c.state !== "unknown") {
-            const p = parseFloat(c.state);
-            if (Number.isFinite(p)) {
-              const u = t.value_gradient, f = Math.max(u.low_value, Math.min(u.high_value, p)), h = dn(p, u);
-              A("[gradient]", t.id, "entity value:", p, "clamped:", f, "range:", `${u.low_value}–${u.high_value}`, "colour:", h), this.renderer.setGradientColor(t.id, h);
-            } else
-              A(`flow "${t.id}" gradient entity "${d}" state "${c.state}" is not a number`), this.renderer.setGradientColor(t.id, null);
-          } else
-            A(`flow "${t.id}" gradient entity "${d}" unavailable/unknown — falling back to flow color`), this.renderer.setGradientColor(t.id, null);
-        }
-      }
+    if (!this.config || !this.renderer) return;
+    if (!this.hass) {
       this.syncRendererAriaLabels();
+      return;
     }
+    A("pushAllValuesToRenderer → flows:", this.config.flows.length, "renderer:", this.renderer.constructor.name);
+    const e = new Set(this.config.flows.map((t) => t.id));
+    for (const t of this._lastScaledValue.keys()) e.has(t) || this._lastScaledValue.delete(t);
+    for (let t = 0; t < this.config.flows.length; t++) {
+      const n = this.config.flows[t], o = this.hass.states[n.entity], r = be(o?.state), s = H(n.domain ?? this.config.domain), a = o?.attributes?.unit_of_measurement, d = Kt(r, a, s.unit_scale);
+      if (A("updateFlow →", n.id, "entity=", n.entity, "raw=", o?.state, "parsed=", r, "sensorUnit=", a ?? "(none)", "matchedUnit=", d.matchedUnit ?? "(none → passthrough)", "factor=", d.factor, "scaledToBase(" + s.unit_label + ")=", d.value), o) {
+        if (o.state === "unavailable" || o.state === "unknown") {
+          const p = `${n.id}:${n.entity}:unavailable`;
+          this.warnedMissing.has(p) || (this.warnedMissing.add(p), A(`flow "${n.id}" entity "${n.entity}" is currently ${o.state} — no flow will render until it reports a number`));
+        }
+      } else {
+        const p = `${n.id}:${n.entity}`;
+        this.warnedMissing.has(p) || (this.warnedMissing.add(p), A(`flow "${n.id}" references entity "${n.entity}" but it is not present in hass.states — check spelling / domain permissions`));
+      }
+      const c = this._lastScaledValue.get(n.id);
+      if ((c === void 0 || c !== d.value) && (this._lastScaledValue.set(n.id, d.value), this.renderer.updateFlow(n.id, d.value)), n.value_gradient && this.renderer.setGradientColor) {
+        const p = n.value_gradient.entity, u = this.hass.states[p];
+        if (u && u.state !== "unavailable" && u.state !== "unknown") {
+          const f = parseFloat(u.state);
+          if (Number.isFinite(f)) {
+            const h = n.value_gradient, g = Math.max(h.low_value, Math.min(h.high_value, f)), v = dn(f, h);
+            A("[gradient]", n.id, "entity value:", f, "clamped:", g, "range:", `${h.low_value}–${h.high_value}`, "colour:", v), this.renderer.setGradientColor(n.id, v);
+          } else
+            A(`flow "${n.id}" gradient entity "${p}" state "${u.state}" is not a number`), this.renderer.setGradientColor(n.id, null);
+        } else
+          A(`flow "${n.id}" gradient entity "${p}" unavailable/unknown — falling back to flow color`), this.renderer.setGradientColor(n.id, null);
+      }
+    }
+    this.syncRendererAriaLabels();
   }
   syncRendererAriaLabels() {
     if (!(!this.config || !this.renderer?.setFlowAriaLabel))
@@ -10875,7 +10877,7 @@ var W = (lt = class extends ie {
     return t >= 1e3 || t >= 100 ? e.toFixed(0) : t >= 10 ? e.toFixed(1) : e.toFixed(2);
   }
   teardownRenderer() {
-    this.renderer && (this.renderer.destroy(), this.renderer = null), this.rendererReadyFor = void 0, this._documentVisibilityPauseActive = !1;
+    this.renderer && (this.renderer.destroy(), this.renderer = null), this._lastScaledValue.clear(), this.rendererReadyFor = void 0, this._documentVisibilityPauseActive = !1;
   }
 }, lt.styles = xt`
     :host {

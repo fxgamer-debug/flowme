@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.4]
+
+### Fixed
+
+- **Hass updates:** `pushAllValuesToRenderer` skips `renderer.updateFlow` when a flow’s scaled main-entity value is unchanged, so one sensor update no longer restarts every flow’s animation. Removed flow IDs are pruned from the cache; full renderer teardown clears it so all flows re-sync after reinit.
+
 ## [2.7.3]
 
 ### Removed
