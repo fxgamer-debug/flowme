@@ -488,17 +488,46 @@ describe('validateConfig — overlay schema', () => {
     };
   }
 
-  it('gracefully handles removed native overlay types (warn, not crash) since v1.0.10', () => {
+  it('rejects removed native overlay types (camera, switch, sensor, button)', () => {
     for (const type of ['sensor', 'switch', 'camera', 'button']) {
       const raw = {
         ...minimalConfig(),
         overlays: [{ id: 'o', type, position: { x: 0, y: 0 } }],
       };
-      // Should NOT throw — produces a migration-warning overlay instead
-      const result = validateConfig(raw);
-      expect(result.overlays).toHaveLength(1);
-      expect(result.overlays![0]!._migration_warning).toMatch(/removed in v1\.0\.9/);
+      expect(() => validateConfig(raw)).toThrow(/custom/);
     }
+  });
+
+  it('rejects removed animation_style pulse and spark', () => {
+    for (const animation_style of ['pulse', 'spark']) {
+      expect(() =>
+        validateConfig({
+          ...minimalConfig(),
+          flows: [
+            {
+              id: 'f',
+              from_node: 'a',
+              to_node: 'b',
+              entity: 'sensor.x',
+              waypoints: [],
+              animation: { animation_style },
+            },
+          ],
+        }),
+      ).toThrow(/animation_style/);
+    }
+  });
+
+  it('rejects removed node_effect type pulse', () => {
+    expect(() =>
+      validateConfig({
+        ...minimalConfig(),
+        nodes: [
+          { id: 'a', position: { x: 0, y: 0 }, entity: 'sensor.a', node_effect: { type: 'pulse' } },
+          { id: 'b', position: { x: 10, y: 10 } },
+        ],
+      }),
+    ).toThrow(/node_effect/);
   });
 
   it('rejects unknown overlay types', () => {

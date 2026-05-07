@@ -2,6 +2,20 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7]
+
+### Removed
+
+- **Legacy config shims:** Validation no longer migrates removed values silently.
+  - `animation_style: pulse` or `spark` → **error** (use a supported style from `ANIMATION_STYLES`).
+  - `node_effect.type: pulse` → **error** (removed in v1.23.7).
+  - Overlay `type: camera`, `switch`, `sensor`, or `button` → **error** (use `type: custom` with a `card:` block; v1.0.9).
+- **Migration overlay UI:** Dropped `_migration_warning` on `OverlayConfig`, the migration-warning render branch in `overlays/render.ts`, related CSS on the card host, and strings `validation.migrationOverlayWarning` / `overlays.migrationPrefix`.
+
+### Changed
+
+- **Strings:** Removed unused `card.error`.
+
 ## [2.6]
 
 ### Changed

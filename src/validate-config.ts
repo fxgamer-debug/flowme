@@ -93,12 +93,7 @@ function validateNode(raw: unknown, idx: number, seenIds: Set<string>): NodeConf
     node.visible = n['visible'] as boolean;
   }
   if (n['node_effect'] !== undefined) {
-    const rawFx = n['node_effect'];
-    if (rawFx && typeof rawFx === 'object' && (rawFx as Record<string, unknown>)['type'] === 'pulse') {
-      dlog(`${path}.node_effect: type "pulse" is no longer supported; removing node_effect`);
-    } else {
-      node.node_effect = validateNodeEffect(rawFx, `${path}.node_effect`);
-    }
+    node.node_effect = validateNodeEffect(n['node_effect'], `${path}.node_effect`);
   }
   return node;
 }
@@ -386,11 +381,7 @@ function validateFlowAnimation(raw: unknown, path: string): FlowAnimationConfig 
   const out: FlowAnimationConfig = {};
 
   if (o['animation_style'] !== undefined) {
-    let st = o['animation_style'];
-    if (st === 'pulse' || st === 'spark') {
-      dlog(`${path}.animation_style '${String(st)}' was removed in v1.23.6 — using 'dots'`);
-      st = 'dots';
-    }
+    const st = o['animation_style'];
     if (!ANIMATION_STYLES.includes(st as never)) {
       fail(`${path}.animation_style`, t('validation.mustBeOneOf', ANIMATION_STYLES.join(', ')));
     }
@@ -754,10 +745,7 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
   const o = raw as Record<string, unknown>;
 
   const type = o['type'];
-  const REMOVED_TYPES = ['camera', 'switch', 'sensor', 'button'];
-  const isRemovedType = typeof type === 'string' && REMOVED_TYPES.includes(type);
-
-  if (!isRemovedType && type !== 'custom') {
+  if (type !== 'custom') {
     fail(`${path}.type`, t('validation.overlayTypeMustBeCustom'));
   }
 
@@ -767,31 +755,6 @@ function validateOverlay(raw: unknown, idx: number, seenIds: Set<string>): Overl
   seenIds.add(id as string);
 
   const position = validatePosition(o['position'], `${path}.position`);
-
-  // For removed native types: produce a warning overlay instead of crashing
-  if (isRemovedType) {
-    const warningMsg = t('validation.migrationOverlayWarning', type as string);
-    dlog(`${path}: ${warningMsg}`);
-    const overlay: OverlayConfig = {
-      id: id as string,
-      type: 'custom',
-      position,
-      card: { type: 'markdown', content: '' },
-      _migration_warning: warningMsg,
-    };
-    if (o['size'] !== undefined) {
-      const s = o['size'];
-      if (s && typeof s === 'object') {
-        const sr = s as Record<string, unknown>;
-        const w = sr['width'];
-        const h = sr['height'];
-        if (typeof w === 'number' && typeof h === 'number') {
-          overlay.size = { width: w, height: h };
-        }
-      }
-    }
-    return overlay;
-  }
 
   // card: block is required — any valid HA card config object
   const cardRaw = o['card'];

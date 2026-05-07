@@ -333,12 +333,6 @@ export interface OverlayConfig {
    * v1.0.9+.
    */
   opacity?: number;
-  /**
-   * Set by the validator when a removed native overlay type (camera, switch,
-   * sensor, button) is detected. The renderer shows a visible warning at the
-   * overlay position instead of crashing. Internal field — do not set manually.
-   */
-  _migration_warning?: string;
 }
 
 /**

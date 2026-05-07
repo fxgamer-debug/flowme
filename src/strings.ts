@@ -7,7 +7,6 @@ export const STRINGS = {
     invalidConfigurationTitle: 'flowme: invalid configuration',
     noConnection: 'no connection',
     entityNotFound: 'entity not found',
-    error: 'Error',
     hacsDescription: 'Animated flow visualisation over a custom background image',
   },
   security: {
@@ -16,7 +15,6 @@ export const STRINGS = {
   },
   overlays: {
     haHelpersUnavailable: 'HA card helpers unavailable',
-    migrationPrefix: '⚠',
   },
   editor: {
     hintNoConfig: 'No configuration loaded yet. Use "Show code editor" to paste YAML.',
@@ -531,7 +529,5 @@ export const STRINGS = {
     overlayWidthPercent: 'must be a positive number ≤ 100 (percent of card)',
     overlayHeightPercent: 'must be a positive number ≤ 100 (percent of card)',
     overlayOpacity01: 'must be a number between 0 and 1',
-    migrationOverlayWarning: (type: string) =>
-      `type: ${type} was removed in v1.0.9. Replace with type: custom and a card: block. See documentation.`,
   },
 } as const;

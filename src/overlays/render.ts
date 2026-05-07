@@ -30,7 +30,6 @@ import { html, nothing, type TemplateResult } from 'lit';
 
 import type { HomeAssistant, OverlayConfig } from '../types.js';
 import { dlog } from '../debug-log.js';
-import { t } from '../i18n.js';
 
 /** Optional handlers for interactive overlay hosts (keyboard, future hooks). */
 export interface OverlayHostOptions {
@@ -75,22 +74,6 @@ export function renderOverlayHost(
     !visible ? 'display:none;' : '',
     opacity !== 1 ? `opacity:${opacity};` : '',
   ].join('');
-
-  if (overlay._migration_warning) {
-    return html`
-      <div
-        class="overlay overlay-migration-warning"
-        data-overlay-id=${overlay.id}
-        style=${overlayBoxStyle(overlay) + extraStyle}
-        tabindex="-1"
-        title=${overlay._migration_warning}
-      >
-        <div class="migration-warning-inner">
-          ${t('overlays.migrationPrefix')} ${overlay._migration_warning}
-        </div>
-      </div>
-    `;
-  }
 
   return html`
     <div

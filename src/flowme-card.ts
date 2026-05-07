@@ -25,7 +25,7 @@ import { flowDisplayName } from './utils.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.6';
+const CARD_VERSION = '2.7';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -182,7 +182,7 @@ export class FlowmeCard extends LitElement {
   private readonly rendererMount: Ref<HTMLDivElement> = createRef();
   private readonly nodeFxSvgRef: Ref<SVGSVGElement> = createRef();
   private readonly nodeFx = new NodeEffectsLayerController();
-  /** Drives pulse/ripple/alert time-based visuals every frame (v1.23.2). */
+  /** Drives time-based node effects (ripple, alert, etc.) every frame (v1.23.2). */
   private _nodeFxRaf: number | null = null;
   private rendererReadyFor?: FlowmeConfig;
 
@@ -1188,20 +1188,6 @@ export class FlowmeCard extends LitElement {
       overflow: hidden;
       pointer-events: all;
       z-index: 10;
-    }
-    .overlay-migration-warning {
-      background: rgba(200, 40, 40, 0.85);
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
-      border: 1px solid rgba(255, 80, 80, 0.7);
-      padding: 4px 8px;
-    }
-    .migration-warning-inner {
-      color: #fff;
-      font-size: 11px;
-      font-family: var(--paper-font-body1_-_font-family, inherit);
-      line-height: 1.4;
-      overflow-wrap: break-word;
     }
     .overlay-custom {
       padding: 0;
