@@ -25,7 +25,7 @@ import { flowDisplayName } from './utils.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.7.1';
+const CARD_VERSION = '2.7.2';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -390,14 +390,33 @@ export class FlowmeCard extends LitElement {
     const mount = this.rendererMount.value;
     if (!mount || this.rendererReadyFor === this.config) return;
 
-    if (
+    const needsReinit = !!(
+      this.renderer &&
+      this.rendererReadyFor &&
+      this.needsRendererReinit(this.rendererReadyFor, this.config)
+    );
+    const willApplyConfig = !!(
       this.renderer &&
       this.rendererReadyFor &&
       typeof this.renderer.applyConfig === 'function' &&
       !this.needsRendererReinit(this.rendererReadyFor, this.config)
-    ) {
+    );
+    const pathTaken = needsReinit ? 'FULL REINIT' : this.renderer?.applyConfig ? 'APPLY CONFIG' : 'NEW RENDERER';
+    console.warn(
+      '[FlowMe] beginRendererInit:',
+      'renderer exists:',
+      !!this.renderer,
+      'needsReinit:',
+      needsReinit,
+      'path taken:',
+      pathTaken,
+      'at:',
+      new Date().toISOString(),
+    );
+
+    if (willApplyConfig) {
       dlog('[FlowMe] renderer applyConfig (skip reinit):', performance.now());
-      this.renderer.applyConfig(this.config);
+      this.renderer!.applyConfig!(this.config);
       this.rendererReadyFor = this.config;
       if (this.hass) this.pushAllValuesToRenderer();
       else this.syncRendererAriaLabels();

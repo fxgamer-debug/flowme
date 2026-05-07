@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.2]
+
+### Added
+
+- **Diagnostics (v2):** `applyConfig` in SVG and Houdini renderers (`console.warn` + stack); `beginRendererInitIfNeeded` branch logging; duration jump warnings when raw `calcAnimDuration` changes by more than 1000 ms per flow.
+
 ## [2.7.1]
 
 ### Added

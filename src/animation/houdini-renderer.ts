@@ -109,6 +109,8 @@ export class HoudiniRenderer implements FlowRenderer {
   private applyUpdate = debounce(() => this.flushUpdates(), 120);
   /** Last applied duration (ms) per flow — for <50ms snap vs CSS transition (ANIM-1) */
   private lastDurMsByFlow = new Map<string, number>();
+  /** DIAG-7: last raw `calcAnimDuration` per flow (ms) for duration-jump logging. */
+  private _lastDuration = new Map<string, number>();
 
   async init(container: HTMLElement, config: FlowmeConfig): Promise<void> {
     this.container = container;
@@ -157,6 +159,7 @@ export class HoudiniRenderer implements FlowRenderer {
   }
 
   applyConfig(config: FlowmeConfig): void {
+    console.warn('[FlowMe] applyConfig called at:', new Date().toISOString(), 'stack:', new Error().stack);
     this.config = config;
     this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
     this.rebuildPaths();
@@ -199,6 +202,7 @@ export class HoudiniRenderer implements FlowRenderer {
     this.flowsById.clear();
     this.latestValues.clear();
     this.lastDurMsByFlow.clear();
+    this._lastDuration.clear();
     this.container = null;
     this.config = null;
   }
@@ -252,13 +256,24 @@ export class HoudiniRenderer implements FlowRenderer {
     div.el.style.opacity = '1';
 
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    const durMs = belowCutoff
-      ? 1e9
-      : Math.max(
-          50,
-          calcAnimDuration(numValue, timing) *
-            speedMultiplier,
-        );
+    const newDuration = calcAnimDuration(numValue, timing);
+    const oldDuration = this._lastDuration.get(flowId) ?? 0;
+    if (Math.abs(newDuration - oldDuration) > 1000) {
+      console.warn(
+        '[FlowMe] DURATION JUMP:',
+        flowId,
+        'from:',
+        oldDuration,
+        'to:',
+        newDuration,
+        'value:',
+        numValue,
+        'at:',
+        new Date().toISOString(),
+      );
+    }
+    this._lastDuration.set(flowId, newDuration);
+    const durMs = belowCutoff ? 1e9 : Math.max(50, newDuration * speedMultiplier);
     const dirCfg = flow.animation?.direction ?? 'auto';
     let direction: number;
     if (dirCfg === 'forward') direction = 1;

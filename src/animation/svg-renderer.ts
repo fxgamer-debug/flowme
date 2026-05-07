@@ -171,6 +171,9 @@ export class SvgRenderer implements FlowRenderer {
   /** When true, all flows render as static lines (OS reduced-motion preference). */
   private prefersReducedMotionFlag = false;
 
+  /** DIAG-7: last raw `calcAnimDuration` per flow (ms) for duration-jump logging. */
+  private _lastDuration = new Map<string, number>();
+
   /** Last travel sign (+1 from→to, −1 to→from) used for path geometry (resize / sync). */
   private flowPathSyncedDirection = new Map<string, number>();
 
@@ -212,6 +215,7 @@ export class SvgRenderer implements FlowRenderer {
 
   /** Same flow ids as at init — refresh paths and particle layout without destroy/init. */
   applyConfig(config: FlowmeConfig): void {
+    console.warn('[FlowMe] applyConfig called at:', new Date().toISOString(), 'stack:', new Error().stack);
     if (!this.svg) return;
     this.config = config;
     this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
@@ -340,6 +344,7 @@ export class SvgRenderer implements FlowRenderer {
     this.randomOffsetsLastUpdate.clear();
     this.lateralPhase.clear();
     this.flowPathSyncedDirection.clear();
+    this._lastDuration.clear();
   }
 
   // ── internal ──────────────────────────────────────────────────────────────
@@ -542,9 +547,24 @@ export class SvgRenderer implements FlowRenderer {
     }
     dom.group.style.display = '';
 
-    const rawSpeed = DEBUG
-      ? DEBUG_DUR_MS
-      : calcAnimDuration(numValue, timing);
+    const newDuration = DEBUG ? DEBUG_DUR_MS : calcAnimDuration(numValue, timing);
+    const oldDuration = this._lastDuration.get(flowId) ?? 0;
+    if (Math.abs(newDuration - oldDuration) > 1000) {
+      console.warn(
+        '[FlowMe] DURATION JUMP:',
+        flowId,
+        'from:',
+        oldDuration,
+        'to:',
+        newDuration,
+        'value:',
+        numValue,
+        'at:',
+        new Date().toISOString(),
+      );
+    }
+    this._lastDuration.set(flowId, newDuration);
+    const rawSpeed = newDuration;
     const speedMultiplier = flow.speed_multiplier ?? 1;
     let durMs = Math.max(50, rawSpeed * speedMultiplier);
     if (isShimmer) durMs = durMs / SHIMMER_SPEED_FACTOR;
