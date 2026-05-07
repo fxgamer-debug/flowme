@@ -317,13 +317,13 @@ Core card/editor/types/utils/strings/i18n/debug + **`validate-config.ts`** (YAML
 | **`src/animation/`** | Includes **`renderer-factory.ts`** (SVG vs Houdini selection) and **`flowme-painter-worklet.js`** (bundled as `?raw`; checklist name **houdini-painter-worklet.js** was a synonym). |
 | **`src/flow-profiles/`** | **`index.ts`**, **`domain-colour-profiles.ts`** plus **per-domain modules** (`energy.ts`, `water.ts`, …) — all required. |
 | **`src/pathfinding/`** | Includes **`simplify.ts`** (collinear simplification); used by **`compute-waypoints.ts`** and tests — **not** obsolete. |
-| **`src/overlays/`** | Four modules only; references to removed native camera/switch types appear only in **`validate-config`** migration paths / strings. |
+| **`src/overlays/`** | Four modules only; removed native overlay types are rejected in **`validate-config`** (see v2.7). |
 | **`src/editor/`** | **`commands.ts`**, **`toolbar.ts`**, **`undo-stack.ts`** — no rubber-band / zone-4 / legacy inspector files. |
 | **`src/dev/`** | **`demo-app.ts`**, **`demo-config.ts`**, **`mock-hass.ts`** only — no extra HTML under **`src/dev/`** (dev shell is repo-root **`index.html`**). |
 
 ### `tests/`
 
-All **`tests/**/*.test.ts`** files map to active **`src/`** behaviour. **`validate-config.test.ts`** still exercises **removed overlay types** (`camera`, `switch`, …) as **migration/validation** — intentional, not dead feature tests.
+All **`tests/**/*.test.ts`** files map to active **`src/`** behaviour. **`validate-config.test.ts`** asserts **removed overlay types** (`camera`, `switch`, …) are **rejected** (v2.7+).
 
 ### `translations/`
 
