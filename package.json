@@ -1,6 +1,6 @@
 {
   "name": "flowme",
-  "version": "2.7.4",
+  "version": "2.8",
   "description": "Animated flow visualisation with freely positioned nodes for Home Assistant",
   "type": "module",
   "main": "dist/flowme-card.js",

@@ -7,7 +7,6 @@ export const STRINGS = {
     invalidConfigurationTitle: 'flowme: invalid configuration',
     noConnection: 'no connection',
     entityNotFound: 'entity not found',
-    hacsDescription: 'Animated flow visualisation over a custom background image',
   },
   security: {
     unsafeUrlInCard: (scheme: string, path: string) =>

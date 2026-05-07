@@ -741,8 +741,7 @@ var dt = [
     loading: "Loading...",
     invalidConfigurationTitle: "flowme: invalid configuration",
     noConnection: "no connection",
-    entityNotFound: "entity not found",
-    hacsDescription: "Animated flow visualisation over a custom background image"
+    entityNotFound: "entity not found"
   },
   security: { unsafeUrlInCard: (i, e) => `Unsafe URL scheme '${i}' in ${e}. flowme rejects javascript:, vbscript:, data: and file: URLs inside custom overlay configs.` },
   overlays: { haHelpersUnavailable: "HA card helpers unavailable" },
@@ -10379,7 +10378,7 @@ F([P()], R.prototype, "panX", void 0);
 F([P()], R.prototype, "panY", void 0);
 F([P()], R.prototype, "imageLayoutReady", void 0);
 R = Oe = F([Ct("flowme-card-editor")], R);
-var lt, yn = "2.7.4";
+var lt, yn = "2.8";
 console.info("%cFlowMe v" + yn + " loaded", "color: #FF6B00; font-weight: bold");
 var zi = 5e3;
 function is(i) {
@@ -11123,8 +11122,8 @@ var vt = window;
 vt.customCards = vt.customCards ?? [];
 vt.customCards.push({
   type: "flowme-card",
-  name: "flowme",
-  description: l("card.hacsDescription"),
+  name: "FlowMe",
+  description: "Animated flow visualisation card for Home Assistant. Connect nodes with animated flows driven by sensor data.",
   preview: !0,
   documentationURL: "https://github.com/fxgamer-debug/flowme"
 });

@@ -6,33 +6,65 @@ A custom Lovelace card that renders animated flow visualisations between freely 
 
 ---
 
+## How FlowMe was built
+
+FlowMe is the result of a three-way collaboration:
+
+- **Human** — product vision, design decisions, feature priorities, testing and direction
+- **Claude (Anthropic)** — research, architecture, specifications and prompt engineering
+- **Cursor** — code implementation, auditing and building
+
+Every feature was human-directed, AI-researched, and AI-coded. No line of production code was written by hand.
+
+---
+
 ## Features
+
+**Recent highlights**
+
+- **Editor tabs** (v2.6) — Card, Nodes, Flows, Overlays, Settings below the toolbar; collapse toggle for the canvas
+- **Transparent mode** (v2.5.3) — Theme shows through when `background.transparent: true` or default URL omitted
+- **Smooth speed interpolation** (v2.7.3) — Cycle duration ramps toward new sensor targets instead of jumping (fewer visible restarts)
+- **Selective flow updates** (v2.7.4) — Only flows whose scaled entity value changed get `updateFlow`; stable flows keep animating when another sensor updates
+- **Linear speed curve** (v2.2) — Sensor magnitude maps to animation speed with configurable min/max duration
+- **Flow `label`** (v2.3) — Optional display label per flow (inspector and ARIA)
+- **Background image browser** (v2.3) — Pick images from a configured `media_dirs` folder in the editor
+- **Animated backgrounds** (v2.4) — GIF, animated WebP, APNG as backgrounds
+- **Six domains** — Energy, water, network, HVAC, gas, generic with calibrated peaks and profiles
+
+**Core behaviour**
 
 **Freely positioned nodes.** Nodes can be placed anywhere on the canvas as a percentage position. No fixed grid or forced layout.
 
-**Animated flow lines.** Flows connect nodes with animated particles. Multiple animation styles: dots, dash, arrow, trail, fluid, none. Direction follows sensor sign automatically.
+**Animated flow lines.** Flows connect nodes with animated particles. Styles: dots, dash, arrow, trail, fluid, none. Direction follows sensor sign automatically (`direction: both` for dual streams).
 
-**Multi-domain support.** Built-in profiles for energy, water, network, HVAC, gas and generic domains. Each domain has calibrated speed curves and colour profiles.
+**Multi-domain support.** Built-in profiles for energy, water, network, HVAC, gas and generic domains.
 
-**Weather-reactive backgrounds.** Background image switches automatically based on HA weather entity state. Sun entity support for automatic day/night variants.
+**Weather-reactive backgrounds.** Background image switches based on HA weather entity state; sun entity for day/night variants.
 
-**Visual drag-and-drop editor.** Full visual editor with zoom, pan, node dragging, waypoint editing, suggest path (A\* pathfinding with Sobel edge detection), undo/redo, and element selection.
+**Visual drag-and-drop editor.** Zoom, pan, node dragging, waypoint editing, suggest path (A\* + Sobel), undo/redo, multi-select.
 
-**Value gradient.** Flow colour interpolates between two colours based on a secondary sensor value. Useful for temperature-driven HVAC flows, battery health, grid frequency deviation and more.
+**Value gradient.** Flow colour interpolates from a secondary sensor (e.g. HVAC, battery, grid frequency).
 
-**Node effects.** Per-node visual effects: glow, badge (node colour change), ripple, alert (threshold flash).
+**Node effects.** Glow, badge, ripple, alert on nodes.
 
-**Custom overlays.** Embed any HA card at any position on the canvas using the custom overlay system. Cameras, switches, sensors — anything.
+**Custom overlays.** Embed any HA card on the canvas (`type: custom`).
 
-**Particle spacing modes.** Six spacing modes: even, random, clustered, pulse, wave_spacing, wave_lateral.
+**Particle spacing.** Even, random, clustered, pulse, wave_spacing, wave_lateral.
 
-**Custom SVG particle shapes.** User-supplied SVG path string as particle shape. Stamps along the flow path with correct orientation.
+**Custom SVG particles.** User-supplied SVG path stamped along the path.
 
-**i18n.** All UI strings extractable. Drop a JSON translation file in `/local/flowme/translations/` and FlowMe loads it automatically based on HA language setting.
+**i18n.** Drop `/local/flowme/translations/{lang}.json` to override strings.
 
-**Accessibility.** ARIA roles, focus outlines, high contrast mode support, prefers-reduced-motion support.
+**Accessibility.** ARIA labels, focus outlines, reduced-motion handling.
 
-**Single file distribution.** One `flowme-card.js` file. No external dependencies. Web Worker pathfinding inlined in the bundle.
+**Single file.** One `flowme-card.js`; pathfinding worker inlined.
+
+---
+
+## Recommended companion
+
+FlowMe adapts to your Home Assistant theme automatically. For the strongest dynamic colours, install [Material You Utilities](https://github.com/addoyle/material-you-utilities), which enables colour extraction from your wallpaper.
 
 ---
 

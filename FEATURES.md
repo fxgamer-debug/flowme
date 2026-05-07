@@ -116,7 +116,11 @@ Weather-reactive background switching is still fully supported via `background.w
 | Field           | Type    | Default | Description |
 | --------------- | ------- | ------- | ----------- |
 | `fps`           | number  | 60      | Cap frame rate (10–60). |
-| `smooth_speed`  | boolean | true    | Ease speed/direction transitions. |
+| `smooth_speed`  | boolean | true    | Ease speed/direction transitions in the SVG renderer (e.g. direction flips). Cycle duration also ramps per update via internal stepping (v2.7.3+) so large sensor jumps do not restart motion as harshly. |
+
+### Hass-driven flow updates (v2.7.4+)
+
+On each `hass` update, the card only calls `updateFlow` for flows whose **scaled** main-entity value changed. Flows with stable values keep animating without a redundant apply pass when another entity updates.
 
 ---
 
@@ -261,7 +265,9 @@ This gives a clear visual representation of heat transfer without any additional
 
 ## Editor
 
-Available in the Lovelace card’s visual editor (when not password-locked): canvas **zoom and pan**; **drag** nodes and waypoints; **insert/delete** waypoints; **suggest path** (worker + Sobel + A\* in the editor); **undo/redo** stack; **from/to** node editing for flows; **domain colour** overrides; **opacity** and **visibility** controls per layer; **multi-select** and **rename** flows/nodes/overlays; overlay **resize** and **card config** JSON.
+**v2.6+:** Tab-based layout (Card, Nodes, Flows, Overlays, Settings) below the toolbar with collapsible canvas.
+
+Available when not password-locked: canvas **zoom and pan**; **drag** nodes and waypoints; **insert/delete** waypoints; **suggest path** (worker + Sobel + A\*); **undo/redo**; flow **from/to** editing; **domain colour** overrides; **background image browser** (requires `media_dirs` — see Background images); per-flow and per-node **visibility** (`visible`, `show_label`, `show_value`); card-level **opacity** (`opacity` block). Global layer toggles (`layer_visibility`) were **removed in v2.5.8**. **multi-select** and **rename** flows/nodes/overlays; overlay **resize** and inner **card** JSON.
 
 ---
 

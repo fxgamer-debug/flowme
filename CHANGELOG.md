@@ -2,6 +2,32 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.8]
+
+### Added
+
+- **HACS default store prep:** `hacs.json` (name, `flowme-card.js`, minimum Home Assistant 2024.1.0).
+- **CI:** `.github/workflows/validate.yml` runs [hacs/action](https://github.com/hacs/action) (`category: plugin`) on push, pull request, and daily schedule.
+
+### Changed
+
+- **Custom card registration:** `window.customCards` entry uses display name **FlowMe**, English description for the HA card picker, `documentationURL` pointing at this repo, and `preview: true`.
+
+### Documentation
+
+- **README:** “How FlowMe was built”, refreshed feature highlights (v2.2–v2.7.4), Material You Utilities companion link, installation unchanged for HACS custom repo and manual `/local/` module resource.
+- **FEATURES.md:** Editor section aligned with v2.6 tabs and v2.5.8 removal of global layer visibility; Hass selective `updateFlow` and `smooth_speed`/duration behaviour noted.
+
+### Repository hygiene (manual — repo owner on GitHub)
+
+- **GitHub Releases:** Latest release **v2.7.4** verified as a full Release with notes and assets (not tag-only). Older releases may remain tag-only; HACS cares most about the latest.
+- **Topics:** Add `home-assistant`, `lovelace`, `lovelace-card`, `custom-card`, `energy`, `flow-visualization`, `hacs`, `dashboard` under repository Settings → General → Topics (topics do not ship in this repo).
+- **Branch protection:** Add a ruleset on `main` requiring status checks **verify** (CI) and **validate** (HACS workflow), block force pushes and branch deletion — Settings → Rules → Rulesets.
+
+### HACS submission
+
+After **Validate with HACS** is green on `main`, open a PR against [hacs/default](https://github.com/hacs/default): fork, branch from `master`, add `fxgamer-debug/flowme` to `plugin` alphabetically, submit with the template completed.
+
 ## [2.7.4]
 
 ### Fixed
