@@ -364,6 +364,33 @@ export function calcAnimDuration(value: unknown, timing: ResolvedAnimTiming): nu
   return Math.min(Math.max(dur, lo), hi);
 }
 
+/** Max fraction of current duration to adjust per Hass update cycle (v2.7.3+). */
+export const DURATION_STEP_RATIO = 0.2;
+/** When |target − current| is at or below this (ms), snap to target immediately. */
+export const DURATION_IMMEDIATE_THRESHOLD = 500;
+
+/**
+ * Step displayed animation duration toward the sensor-derived target over multiple
+ * update cycles to avoid visible SMIL/CSS restarts on large duration jumps.
+ */
+export function stepDuration(current: number, target: number): number {
+  if (!(current > 0) || !Number.isFinite(current)) {
+    return target;
+  }
+  if (!Number.isFinite(target)) {
+    return Math.max(50, current);
+  }
+  const diff = target - current;
+  if (Math.abs(diff) <= DURATION_IMMEDIATE_THRESHOLD) {
+    return target;
+  }
+  const maxStep = current * DURATION_STEP_RATIO;
+  if (Math.abs(diff) <= maxStep) {
+    return target;
+  }
+  return current + Math.sign(diff) * maxStep;
+}
+
 /** Effective peak + duration bounds + stop rule for a flow (v2.2.3+). */
 export interface ResolvedAnimTiming {
   peak: number;

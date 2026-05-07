@@ -2,6 +2,16 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.3]
+
+### Removed
+
+- **Diagnostics:** Temporary `console.warn` / extra `dlog` from v2.7.1–v2.7.2 (teardown, reinit, setConfig, hass, applyConfig, beginRendererInit, duration jump).
+
+### Fixed
+
+- **Animation speed:** SVG and Houdini renderers step cycle duration toward the sensor target over successive updates (`stepDuration` in `utils.ts`, max 20% of current per step, snap when |Δ| ≤ 500 ms). Stopped flows clear stepped state so the next motion starts from the new target; style switches clear the entry per flow.
+
 ## [2.7.2]
 
 ### Added

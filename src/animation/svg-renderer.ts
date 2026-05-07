@@ -13,6 +13,7 @@ import {
   polylineToSvgPathStyled,
   prefersReducedMotion,
   calcAnimDuration,
+  stepDuration,
   resolveAnimTiming,
   normalizeAnimSensorValue,
   isFlowMotionBelowCutoff,
@@ -21,7 +22,7 @@ import {
 } from '../utils.js';
 import type { FlowRenderer } from './types.js';
 import { dlog } from '../debug-log.js';
-import { createDurInterpState, resolveSmoothedDuration, type DurInterpState } from './dur-interpolation.js';
+import { clearDurInterpolation, createDurInterpState, type DurInterpState } from './dur-interpolation.js';
 
 const RLOG = '[FlowMe Renderer]';
 function rlog(...args: unknown[]): void {
@@ -171,8 +172,8 @@ export class SvgRenderer implements FlowRenderer {
   /** When true, all flows render as static lines (OS reduced-motion preference). */
   private prefersReducedMotionFlag = false;
 
-  /** DIAG-7: last raw `calcAnimDuration` per flow (ms) for duration-jump logging. */
-  private _lastDuration = new Map<string, number>();
+  /** v2.7.3+: stepped display duration per flow (ms) to avoid SMIL restart flashes. */
+  private _currentDuration = new Map<string, number>();
 
   /** Last travel sign (+1 from→to, −1 to→from) used for path geometry (resize / sync). */
   private flowPathSyncedDirection = new Map<string, number>();
@@ -215,7 +216,6 @@ export class SvgRenderer implements FlowRenderer {
 
   /** Same flow ids as at init — refresh paths and particle layout without destroy/init. */
   applyConfig(config: FlowmeConfig): void {
-    console.warn('[FlowMe] applyConfig called at:', new Date().toISOString(), 'stack:', new Error().stack);
     if (!this.svg) return;
     this.config = config;
     this.flowsById = new Map(config.flows.map((f) => [f.id, f]));
@@ -344,7 +344,7 @@ export class SvgRenderer implements FlowRenderer {
     this.randomOffsetsLastUpdate.clear();
     this.lateralPhase.clear();
     this.flowPathSyncedDirection.clear();
-    this._lastDuration.clear();
+    this._currentDuration.clear();
   }
 
   // ── internal ──────────────────────────────────────────────────────────────
@@ -526,6 +526,7 @@ export class SvgRenderer implements FlowRenderer {
 
     // Rebuild DOM if style changed since last render
     if (dom.style !== style) {
+      this._currentDuration.delete(flowId);
       this.teardownStyle(dom);
       dom.style = style;
     }
@@ -547,33 +548,26 @@ export class SvgRenderer implements FlowRenderer {
     }
     dom.group.style.display = '';
 
-    const newDuration = DEBUG ? DEBUG_DUR_MS : calcAnimDuration(numValue, timing);
-    const oldDuration = this._lastDuration.get(flowId) ?? 0;
-    if (Math.abs(newDuration - oldDuration) > 1000) {
-      console.warn(
-        '[FlowMe] DURATION JUMP:',
-        flowId,
-        'from:',
-        oldDuration,
-        'to:',
-        newDuration,
-        'value:',
-        numValue,
-        'at:',
-        new Date().toISOString(),
-      );
-    }
-    this._lastDuration.set(flowId, newDuration);
-    const rawSpeed = newDuration;
+    const rawSpeed = DEBUG ? DEBUG_DUR_MS : calcAnimDuration(numValue, timing);
     const speedMultiplier = flow.speed_multiplier ?? 1;
-    let durMs = Math.max(50, rawSpeed * speedMultiplier);
-    if (isShimmer) durMs = durMs / SHIMMER_SPEED_FACTOR;
+    let targetDurForAnim = Math.max(50, rawSpeed * speedMultiplier);
+    if (isShimmer) targetDurForAnim = targetDurForAnim / SHIMMER_SPEED_FACTOR;
 
-    // ANIM-1: smooth_speed — interpolate duration toward target (skip when motion is paused)
-    const smoothSpeed = this.config?.animation?.smooth_speed !== false;
-    if (!belowCutoff) {
-      durMs = resolveSmoothedDuration(flowId, durMs, smoothSpeed, performance.now(), this.durInterp);
+    let durMs: number;
+    if (belowCutoff) {
+      this._currentDuration.delete(flowId);
+      clearDurInterpolation(flowId, this.durInterp);
+      durMs = targetDurForAnim;
+    } else {
+      const currentDur = this._currentDuration.get(flowId) ?? targetDurForAnim;
+      const smoothDur = stepDuration(currentDur, targetDurForAnim);
+      this._currentDuration.set(flowId, smoothDur);
+      durMs = smoothDur;
+      this.durInterp.currentDurMs.set(flowId, durMs);
+      clearDurInterpolation(flowId, this.durInterp);
     }
+
+    const smoothSpeed = this.config?.animation?.smooth_speed !== false;
 
     // Travel sign (+1 from→to, −1 to→from) — path geometry + motion
     const directionMode = anim.direction ?? 'auto';
