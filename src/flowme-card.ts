@@ -25,7 +25,7 @@ import { flowDisplayName } from './utils.js';
 import { loadLanguage, t } from './i18n.js';
 import { NodeEffectsLayerController, type NodeEffectsSyncHooks } from './node-effects-layer.js';
 /** Version string (module load banner + debug logs). */
-const CARD_VERSION = '2.7';
+const CARD_VERSION = '2.7.1';
 // eslint-disable-next-line no-console -- one banner per page load (module eval), not per card instance
 console.info('%cFlowMe v' + CARD_VERSION + ' loaded', 'color: #FF6B00; font-weight: bold');
 const DEFAULT_TRANSITION_MS = 5000;
@@ -85,6 +85,7 @@ export class FlowmeCard extends LitElement {
   set hass(value: HomeAssistant | undefined) {
     const prev = this._hass;
     this._hass = value;
+    dlog('[FlowMe] hass setter called, states updated:', Object.keys(this.hass?.states ?? {}).length);
     if (value && value.language !== this._lastLanguage) {
       this._lastLanguage = value.language;
       loadLanguage(value.language);
@@ -214,14 +215,38 @@ export class FlowmeCard extends LitElement {
     const { background: _nb, ...n } = next;
     void _pb;
     void _nb;
-    if (p.domain !== n.domain) return true;
-    const prevIds = new Set(p.flows.map((f) => f.id));
-    const nextIds = new Set(n.flows.map((f) => f.id));
-    if (prevIds.size !== nextIds.size) return true;
-    for (const id of prevIds) {
-      if (!nextIds.has(id)) return true;
+    let result = false;
+    if (p.domain !== n.domain) {
+      result = true;
+    } else {
+      const prevIds = new Set(p.flows.map((f) => f.id));
+      const nextIds = new Set(n.flows.map((f) => f.id));
+      if (prevIds.size !== nextIds.size) {
+        result = true;
+      } else {
+        for (const id of prevIds) {
+          if (!nextIds.has(id)) {
+            result = true;
+            break;
+          }
+        }
+      }
     }
-    return false;
+    if (result === true) {
+      console.warn(
+        '[FlowMe] needsRendererReinit returned TRUE at:',
+        new Date().toISOString(),
+        'prev domain:',
+        p.domain,
+        'next domain:',
+        n.domain,
+        'prev flow count:',
+        p.flows?.length,
+        'next flow count:',
+        n.flows?.length,
+      );
+    }
+    return result;
   }
 
   /** Avoid resetting background layers when `background.default` is unchanged (editor spam). */
@@ -252,6 +277,7 @@ export class FlowmeCard extends LitElement {
   }
 
   setConfig(raw: unknown): void {
+    console.warn('[FlowMe] setConfig called at:', new Date().toISOString());
     setDebugEnabled(peekDebugFromRaw(raw));
     const t0 = performance.now();
     dlog('setConfig start:', t0);
@@ -1071,6 +1097,7 @@ export class FlowmeCard extends LitElement {
   }
 
   private teardownRenderer(): void {
+    console.warn('[FlowMe] RENDERER TEARDOWN triggered at:', new Date().toISOString(), 'stack:', new Error().stack);
     if (this.renderer) {
       this.renderer.destroy();
       this.renderer = null;

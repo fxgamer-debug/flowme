@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.1]
+
+### Added
+
+- **Diagnostics:** Renderer teardown (`console.warn` + stack), `needsRendererReinit` when it returns true (domains and flow counts), every `setConfig` entry, and `hass` setter state count (`dlog`, debug mode).
+
 ## [2.7]
 
 ### Removed
