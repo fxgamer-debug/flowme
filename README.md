@@ -22,45 +22,75 @@ Every feature was human-directed, AI-researched, and AI-coded. No line of produc
 
 ## Features
 
-**Recent highlights**
+### Animation styles
 
-- **Editor tabs** (v2.6) — Card, Nodes, Flows, Overlays, Settings below the toolbar; collapse toggle for the canvas
-- **Transparent mode** (v2.5.3) — Theme shows through when `background.transparent: true` or default URL omitted
-- **Smooth speed interpolation** (v2.7.3) — Cycle duration ramps toward new sensor targets instead of jumping (fewer visible restarts)
-- **Selective flow updates** (v2.7.4) — Only flows whose scaled entity value changed get `updateFlow`; stable flows keep animating when another sensor updates
-- **Linear speed curve** (v2.2) — Sensor magnitude maps to animation speed with configurable min/max duration
-- **Flow `label`** (v2.3) — Optional display label per flow (inspector and ARIA)
-- **Background image browser** (v2.3) — Pick images from a configured `media_dirs` folder in the editor
-- **Animated backgrounds** (v2.4) — GIF, animated WebP, APNG as backgrounds
-- **Six domains** — Energy, water, network, HVAC, gas, generic with calibrated peaks and profiles
+`dots` · `dash` · `arrow` · `trail` · `fluid` · `none`
 
-**Core behaviour**
+### Particle shapes
 
-**Freely positioned nodes.** Nodes can be placed anywhere on the canvas as a percentage position. No fixed grid or forced layout.
+`circle` · `square` · `arrow` · `teardrop` · `diamond` · `custom_svg`
 
-**Animated flow lines.** Flows connect nodes with animated particles. Styles: dots, dash, arrow, trail, fluid, none. Direction follows sensor sign automatically (`direction: both` for dual streams).
+### Domains
 
-**Multi-domain support.** Built-in profiles for energy, water, network, HVAC, gas and generic domains.
+Energy · Water · Network · HVAC · Gas · Generic — each with calibrated peak values and colour profiles. Domain controls flow colour and animation speed calibration.
 
-**Weather-reactive backgrounds.** Background image switches based on HA weather entity state; sun entity for day/night variants.
+### Direction
 
-**Visual drag-and-drop editor.** Zoom, pan, node dragging, waypoint editing, suggest path (A\* + Sobel), undo/redo, multi-select.
+`auto` (follows sensor sign) · `forward` · `reverse` · `both` (dual simultaneous streams)
 
-**Value gradient.** Flow colour interpolates from a secondary sensor (e.g. HVAC, battery, grid frequency).
+### Editor
 
-**Node effects.** Glow, badge, ripple, alert on nodes.
+Drag-and-drop visual editor with five tabs (Card / Nodes / Flows / Overlays / Settings), collapsible canvas, chip pickers, zoom/pan, waypoint editing, A\* + Sobel suggest path, undo/redo, background image browser.
 
-**Custom overlays.** Embed any HA card on the canvas (`type: custom`).
+### Other features
 
-**Particle spacing.** Even, random, clustered, pulse, wave_spacing, wave_lateral.
+- Weather-reactive background switching
+- Animated backgrounds (GIF, WebP, APNG)
+- Transparent mode (HA theme shows through)
+- Custom overlays (embed any HA card)
+- Value gradient (colour by secondary sensor)
+- Node effects (glow, badge, ripple, alert)
+- `flow.label` and `node.label` for display names
+- Smooth speed interpolation (animation ramps to new speed, no jarring restarts)
+- Selective flow updates (stable flows never restart when unrelated sensors update)
+- Per-flow and per-node visibility toggles
+- Custom SVG particles
+- Particle spacing modes (even, random, clustered, wave)
+- i18n (drop a JSON translation file)
+- Accessibility (ARIA, focus outlines, reduced-motion)
+- Single file distribution (`flowme-card.js`, worker inlined)
+- Material You / HA theme compatible
 
-**Custom SVG particles.** User-supplied SVG path stamped along the path.
+---
 
-**i18n.** Drop `/local/flowme/translations/{lang}.json` to override strings.
+## Compatibility & testing notes
 
-**Accessibility.** ARIA labels, focus outlines, reduced-motion handling.
+FlowMe was developed and tested primarily on a residential solar / battery / grid energy setup.
 
-**Single file.** One `flowme-card.js`; pathfinding worker inlined.
+### Well tested ✅
+
+- Energy domain — solar, grid, battery and load flows
+- All animation styles and direction modes
+- Background image switching with weather states
+- Transparent mode
+- Custom overlays with standard HA card types (picture-entity, tile, button, mini-graph-card etc.)
+- Visual editor — drag, suggest path, undo/redo
+- Chrome and Firefox on desktop
+
+### Implemented, limited real-world testing ⚠️
+
+- Water, gas, network, HVAC and generic domains — animation works correctly but sensor unit coverage may have gaps for less common units (e.g. gal/min, ft³/h, CFH)
+- Node effects (glow, badge, ripple, alert)
+- Value gradient
+- Suggest Path on complex or low-contrast background images
+
+### Sensor units
+
+FlowMe reads `unit_of_measurement` from your sensor and converts to the domain base unit automatically. Common units are covered. If your sensor uses an uncommon unit and animation speed seems off, set `peak_value` on the flow to match your sensor's actual scale.
+
+### Reporting issues
+
+FlowMe is sensibly maintained in my spare time. If you encounter issues with a specific sensor type, domain or unit, please open a GitHub issue including your sensor's `unit_of_measurement` and the domain you are using.
 
 ---
 
@@ -74,13 +104,16 @@ FlowMe adapts to your Home Assistant theme automatically. For the strongest dyna
 
 ### HACS (recommended)
 
-1. Add this repository as a custom repository in HACS: `https://github.com/fxgamer-debug/flowme`
+FlowMe is submitted to the HACS default store. While awaiting approval, add it as a custom repository:
 
-2. Search for FlowMe in HACS → Frontend
+1. In HACS → Custom repositories, add: `https://github.com/fxgamer-debug/flowme`  
+   Category: **Dashboard**
 
-3. Download and restart Home Assistant
+2. Search for FlowMe and download
 
-4. Add the card via the Lovelace card picker or YAML configuration
+3. Restart Home Assistant
+
+4. Add via the Lovelace card picker or YAML
 
 ### Manual
 
@@ -164,8 +197,7 @@ Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP unde
 | `domain`      | string  | `energy`       | Flow domain: `energy`, `water`, `network`, `hvac`, `gas`, `generic` |
 | `debug`       | boolean | `false`        | Enable console logging                          |
 | `aspect_ratio`| string  | (image native) | Canvas aspect ratio, e.g. `16:10`               |
-| `fullscreen`  | boolean | `false`        | Panel / fullscreen style                        |
-| `edit_mode_password` | string | —        | Optional password before the visual editor opens |
+| `pause_when_hidden` | boolean | `true` | Pause animations when the browser tab is hidden |
 
 ### Background
 
@@ -191,7 +223,10 @@ Use **`background.transparent: true`** when you want the Lovelace theme to show 
 | `position.y`  | number  | Vertical position 0–100% |
 | `entity`      | string  | HA entity for value display |
 | `label`       | string  | Display label |
-| `show_value`  | boolean | Show sensor value |
+| `show_label`  | boolean | Show node label (default `true`) |
+| `show_value`  | boolean | Show sensor value (default `true`) |
+| `visible`     | boolean | Show/hide the node (default `true`) |
+| `opacity`     | number  | Node opacity 0–1 (default `1`) |
 | `color`       | string  | Override node colour |
 | `node_effect` | object  | Node effect configuration (`glow`, `badge`, `ripple`, `alert`) |
 
@@ -212,7 +247,22 @@ Use **`background.transparent: true`** when you want the Lovelace theme to show 
 | `label`           | string | Optional display label for the flow (inspector and ARIA); omit or match `id` to hide |
 | `visible`         | boolean | When `false`, hides the flow line and particles on the dashboard card (default `true`) |
 
-Per-flow animation options (`animation_style`, `particle_shape`, `direction`, spacing, etc.) belong under an **`animation`** object on each flow in YAML (see **`FEATURES.md`**).
+Per-flow animation options — including style, direction, spacing, and timing fields such as `min_duration`, `max_duration`, and `zero_threshold` — belong under an **`animation:`** object. Set **`peak_value`** on the flow itself (sibling to `animation:`) to override the domain default peak for speed calibration. Example:
+
+```yaml
+flows:
+  - id: solar_to_home
+    from_node: solar
+    to_node: home
+    entity: sensor.solar_power
+    peak_value: 5000
+    animation:
+      animation_style: dots
+      direction: auto
+      min_duration: 100
+      max_duration: 10000
+      zero_threshold: 0.002
+```
 
 ### Overlays
 

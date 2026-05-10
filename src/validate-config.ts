@@ -689,17 +689,6 @@ export function validateConfig(raw: unknown): FlowmeConfig {
     }
     config.aspect_ratio = c['aspect_ratio'] as string;
   }
-  if (c['fullscreen'] !== undefined) {
-    if (typeof c['fullscreen'] !== 'boolean') fail('fullscreen', t('validation.mustBeBoolean'));
-    config.fullscreen = c['fullscreen'] as boolean;
-  }
-  if (c['edit_mode_password'] !== undefined) {
-    if (typeof c['edit_mode_password'] !== 'string') {
-      fail('edit_mode_password', t('validation.editPasswordMustBeString'));
-    }
-    config.edit_mode_password = c['edit_mode_password'] as string;
-  }
-
   if (c['pause_when_hidden'] !== undefined) {
     if (typeof c['pause_when_hidden'] !== 'boolean') {
       fail('pause_when_hidden', t('validation.mustBeBoolean'));

@@ -76,8 +76,6 @@ For each of the six domains (`energy`, `water`, `network`, `hvac`, `gas`, `gener
   - [ ] Runs Sobel + A\* (spinner visible briefly for typical images)
   - [ ] Proposes waypoints that visibly hug architectural features
   - [ ] **Accept** commits them to the flow; **Cancel** leaves the flow untouched
-- [ ] Editor password gate (`edit_mode_password`) blocks access until entered.
-
 ## 3. HACS
 
 - [ ] Add the repo as a custom Dashboard repository in HACS.

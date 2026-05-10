@@ -320,8 +320,7 @@ Flow nodes and flows expose appropriate **ARIA** labels where implemented; edito
 | `nodes` / `flows`     | arrays | Required. |
 | `overlays`            | array | Optional custom overlays. |
 | `aspect_ratio`        | string | Optional layout hint. |
-| `fullscreen`          | bool | |
-| `edit_mode_password`  | string | |
+| `pause_when_hidden`   | bool | Pause animations when the browser tab is hidden (default `true`). |
 | `defaults`            | `FlowmeDefaults` | `node_radius`, burst/dot/line globals. |
 | `domain_colors`       | map | Role hex overrides. |
 | `debug`               | bool | |

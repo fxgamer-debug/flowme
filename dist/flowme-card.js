@@ -1215,7 +1215,6 @@ entity: sensor.my_sensor`,
     atLeastOneNode: "at least one node is required",
     flowsMustBeArray: "must be an array",
     aspectRatioRegex: 'must match regex \\d+:\\d+ (e.g. "16:10")',
-    editPasswordMustBeString: "must be a string",
     overlaysMustBeArray: "must be an array",
     overlayTypeMustBeCustom: 'must be "custom" — native overlay types (camera, switch, sensor, button) were removed in v1.0.9. Use type: custom with a card: block instead.',
     duplicateOverlayId: (i) => `duplicate overlay id "${i}"`,
@@ -1905,7 +1904,7 @@ function ve(i) {
     nodes: c,
     flows: p.map((h, g) => ro(h, g, u, d))
   };
-  if (e.aspect_ratio !== void 0 && ((typeof e.aspect_ratio != "string" || !/^\d+:\d+$/.test(e.aspect_ratio)) && x("aspect_ratio", l("validation.aspectRatioRegex")), f.aspect_ratio = e.aspect_ratio), e.fullscreen !== void 0 && (typeof e.fullscreen != "boolean" && x("fullscreen", l("validation.mustBeBoolean")), f.fullscreen = e.fullscreen), e.edit_mode_password !== void 0 && (typeof e.edit_mode_password != "string" && x("edit_mode_password", l("validation.editPasswordMustBeString")), f.edit_mode_password = e.edit_mode_password), e.pause_when_hidden !== void 0 && (typeof e.pause_when_hidden != "boolean" && x("pause_when_hidden", l("validation.mustBeBoolean")), f.pause_when_hidden = e.pause_when_hidden), e.overlays !== void 0) {
+  if (e.aspect_ratio !== void 0 && ((typeof e.aspect_ratio != "string" || !/^\d+:\d+$/.test(e.aspect_ratio)) && x("aspect_ratio", l("validation.aspectRatioRegex")), f.aspect_ratio = e.aspect_ratio), e.pause_when_hidden !== void 0 && (typeof e.pause_when_hidden != "boolean" && x("pause_when_hidden", l("validation.mustBeBoolean")), f.pause_when_hidden = e.pause_when_hidden), e.overlays !== void 0) {
     Array.isArray(e.overlays) || x("overlays", l("validation.overlaysMustBeArray"));
     const h = /* @__PURE__ */ new Set();
     f.overlays = e.overlays.map((g, v) => fo(g, v, h));

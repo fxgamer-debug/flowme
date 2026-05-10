@@ -515,7 +515,6 @@ export const STRINGS = {
     atLeastOneNode: 'at least one node is required',
     flowsMustBeArray: 'must be an array',
     aspectRatioRegex: 'must match regex \\d+:\\d+ (e.g. "16:10")',
-    editPasswordMustBeString: 'must be a string',
     overlaysMustBeArray: 'must be an array',
     overlayTypeMustBeCustom:
       'must be "custom" — native overlay types (camera, switch, sensor, button) were removed in v1.0.9. Use type: custom with a card: block instead.',

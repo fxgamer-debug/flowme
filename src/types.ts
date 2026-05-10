@@ -430,10 +430,6 @@ export interface FlowmeConfig {
   overlays?: OverlayConfig[];
   /** e.g. '16:10'. Defaults to the background image's native aspect. */
   aspect_ratio?: string;
-  /** Panel/fullscreen mode. */
-  fullscreen?: boolean;
-  /** Optional password required before the editor activates. */
-  edit_mode_password?: string;
   /** Card-level rendering defaults (v1.0.8+). All fields optional. */
   defaults?: FlowmeDefaults;
   /**

@@ -39,8 +39,6 @@ describe('validateConfig — happy path', () => {
     const raw = {
       ...minimalConfig(),
       aspect_ratio: '16:10',
-      fullscreen: false,
-      edit_mode_password: 'secret',
       background: {
         default: '/local/ok.jpg',
         weather_entity: 'weather.home',
