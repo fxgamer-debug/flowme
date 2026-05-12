@@ -49,8 +49,10 @@ export function defaultDomainFlowColor(
  *   1. `flow.color_positive` / `flow.color_negative` — direction-specific
  *      explicit overrides.
  *   2. `flow.color` — single-colour shorthand applied to both directions.
- *   3. `resolveFlowRoleBasedDomainHue(...)` — manual `flow.role`, then entity
- *      auto-detect (`detectFlowRole`), then flow-id pattern defaults (v2.8+).
+ *   3. `resolveFlowRoleBasedDomainHue(...)` — when `flow.color` is absent: manual
+ *      `flow.role`, entity auto-detect (`detectFlowRole`), then flow-id pattern
+ *      defaults (v2.9+). When `flow.color` is set, step 3 is skipped here because
+ *      step 2 already supplies the hue.
  *   4. `profile.default_color_positive` / `profile.default_color_negative`
  *      — profile-level fallback.
  *
@@ -80,7 +82,10 @@ export function resolveFlowColor(
   flowIndex?: number,
 ): string {
   const explicit = nonEmptyColour(flow.color);
-  const domainHue = resolveFlowRoleBasedDomainHue(domain, flow, domainColors, flowIndex);
+  const domainHue =
+    explicit !== undefined
+      ? undefined
+      : resolveFlowRoleBasedDomainHue(domain, flow, domainColors, flowIndex);
   const universal = explicit ?? domainHue;
 
   let resolved: string | undefined;

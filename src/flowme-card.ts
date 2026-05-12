@@ -1183,14 +1183,18 @@ export class FlowmeCard extends LitElement {
       opacity: var(--flowme-opacity-labels, 1);
       display: block;
       color: var(--primary-text-color);
-      text-shadow: 0 0 3px var(--card-background-color, rgba(0, 0, 0, 0.5));
+      text-shadow:
+        0 0 4px var(--card-background-color, rgba(255, 255, 255, 0.9)),
+        0 0 8px var(--card-background-color, rgba(255, 255, 255, 0.9));
     }
     .node-value {
       opacity: calc(0.85 * var(--flowme-opacity-values, 1));
       white-space: nowrap;
       display: block;
       color: var(--primary-text-color);
-      text-shadow: 0 0 3px var(--card-background-color, rgba(0, 0, 0, 0.5));
+      text-shadow:
+        0 0 4px var(--card-background-color, rgba(255, 255, 255, 0.9)),
+        0 0 8px var(--card-background-color, rgba(255, 255, 255, 0.9));
     }
     .overlay {
       position: absolute;

@@ -2021,10 +2021,7 @@ export class FlowmeCardEditor extends LitElement {
     const previewColor = flow.color ?? '#4ADE80';
 
     return html`
-      <details class="anim-details" open>
-        <summary>${t('editor.inspector.animation')}</summary>
-        <div class="anim-body">
-
+      <div class="anim-body anim-body--flat">
           <!-- Live preview strip -->
           <div class="anim-preview-wrap">
             <svg class="anim-preview" viewBox="0 0 200 40" xmlns="http://www.w3.org/2000/svg">
@@ -2269,7 +2266,6 @@ export class FlowmeCardEditor extends LitElement {
               }}>${t('editor.inspector.resetToDefaults')}</button>`
             : nothing}
         </div>
-      </details>
     `;
   }
 
@@ -6641,22 +6637,12 @@ export class FlowmeCardEditor extends LitElement {
       background: rgba(0,0,0,0.3);
       display: flex;
     }
-    /* Animation section */
-    .anim-details {
-      margin-top: 8px;
-      border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
-      padding-top: 8px;
+    /* Animation fields (flat under parent "Animation" section — no nested subsection) */
+    .anim-body.anim-body--flat {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
     }
-    .anim-details summary {
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      list-style: none;
-      padding: 4px 0;
-    }
-    .anim-details summary::before { content: '▸ '; }
-    .anim-details[open] summary::before { content: '▾ '; }
-    .anim-details summary::-webkit-details-marker { display: none; }
     .anim-body {
       display: flex;
       flex-direction: column;
@@ -6844,8 +6830,7 @@ export class FlowmeCardEditor extends LitElement {
     .inspector textarea:focus-visible,
     .eye-toggle:focus-visible,
     .icon-btn:focus-visible,
-    .suggest-bar button:focus-visible,
-    .anim-details summary:focus-visible {
+    .suggest-bar button:focus-visible {
       outline: 2px solid var(--primary-color);
       outline-offset: 2px;
       border-radius: 2px;
