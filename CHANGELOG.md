@@ -2,11 +2,15 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.10]
 
 ### Breaking
 
 - **Background image folder:** The recommended path for the image browser is now `/config/www/flowme-backgrounds/` on disk (served at `/local/flowme-backgrounds/`). Set `media_dirs.flowme` to that folder and update any YAML URLs that used `/local/community/flowme/backgrounds/…`. Storing images only under `/config/www/community/flowme/` is unsafe: HACS can replace that directory on updates.
+
+### Removed
+
+- **Editor:** Redundant inline SVG animation preview strip in the flow Animation section (Home Assistant’s card preview covers this).
 
 ## [2.9.0]
 
