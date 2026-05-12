@@ -2017,18 +2017,10 @@ export class FlowmeCardEditor extends LitElement {
     const showTrailLength = style === 'trail';
     const showDashGap = style === 'dash';
 
-    // Live preview strip — a small SVG preview of the current animation style
     const previewColor = flow.color ?? '#4ADE80';
 
     return html`
       <div class="anim-body anim-body--flat">
-          <!-- Live preview strip -->
-          <div class="anim-preview-wrap">
-            <svg class="anim-preview" viewBox="0 0 200 40" xmlns="http://www.w3.org/2000/svg">
-              ${this.renderAnimPreview(style, anim, previewColor)}
-            </svg>
-          </div>
-
           <label>${t('editor.inspector.style')}
             <select
               .value=${style}
@@ -2266,80 +2258,6 @@ export class FlowmeCardEditor extends LitElement {
               }}>${t('editor.inspector.resetToDefaults')}</button>`
             : nothing}
         </div>
-    `;
-  }
-
-  /**
-   * Render a small inline SVG preview strip showing the current animation style.
-   * Uses CSS animations (not SVG animateMotion) so it works even with no live data.
-   */
-  private renderAnimPreview(
-    style: string,
-    anim: FlowAnimationConfig,
-    color: string,
-  ): TemplateResult {
-    const r = 4 * (anim.particle_size ?? 1.0);
-    const count = Math.min(anim.particle_count ?? 3, 8);
-
-    if (style === 'none') {
-      return html`<line x1="10" y1="20" x2="190" y2="20" stroke=${color} stroke-width="2" stroke-opacity="0.3"/>`;
-    }
-    if (style === 'dash') {
-      const gap = (anim.dash_gap ?? 0.5);
-      const dashLen = 14;
-      const gapLen = dashLen * gap;
-      return html`
-        <line x1="10" y1="20" x2="190" y2="20"
-          stroke=${color} stroke-width="3"
-          stroke-dasharray="${dashLen} ${gapLen}" stroke-linecap="round"
-        >
-          <animate attributeName="stroke-dashoffset" from="0" to="-${dashLen + gapLen}"
-            dur="0.8s" repeatCount="indefinite"/>
-        </line>
-      `;
-    }
-    if (style === 'fluid') {
-      return html`
-        <line x1="10" y1="20" x2="190" y2="20"
-          stroke=${color} stroke-width="6" stroke-dasharray="60 200" stroke-linecap="round">
-          <animate attributeName="stroke-dashoffset" from="0" to="-260" dur="1.2s" repeatCount="indefinite"/>
-        </line>
-      `;
-    }
-    // wave_lateral — particles moving along a wavy path
-    if (anim.particle_spacing === 'wave_lateral') {
-      const waveCx = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * 180 + 10);
-      return html`
-        <line x1="10" y1="20" x2="190" y2="20" stroke=${color} stroke-width="1.5" stroke-opacity="0.25"/>
-        ${waveCx.map(
-          (cx, i) => html`
-            <circle cx=${cx} cy="20" r=${r} fill=${color} opacity="0">
-              <animate attributeName="cx" values="${cx};190;10;${cx}" dur="1.4s"
-                repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
-              <animate attributeName="cy" values="20;${10 + (i % 2 === 0 ? 6 : -6)};20;${10 + (i % 2 === 0 ? -6 : 6)};20"
-                dur="1.4s" repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
-              <animate attributeName="opacity" values="0;1;1;0" dur="1.4s"
-                repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
-            </circle>
-          `,
-        )}
-      `;
-    }
-
-    // dots / arrow / trail — show moving particles
-    const positions = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * 180 + 10);
-    return html`
-      <line x1="10" y1="20" x2="190" y2="20" stroke=${color} stroke-width="1.5" stroke-opacity="0.25"/>
-      ${positions.map(
-        (cx, i) => html`
-          <circle cx=${cx} cy="20" r=${r} fill=${color} opacity="0">
-            <animate attributeName="cx" values="${cx};190;10;${cx}" dur="1.4s"
-              repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
-            <animate attributeName="opacity" values="0;1;1;0" dur="1.4s"
-              repeatCount="indefinite" begin="${((i / count) * -1.4).toFixed(2)}s"/>
-          </circle>
-        `,
-      )}
     `;
   }
 
@@ -3416,7 +3334,7 @@ export class FlowmeCardEditor extends LitElement {
                       <span>${t('editor.stateA.browserSetupStep3')}</span>
                       <pre class="browser-code">homeassistant:
   media_dirs:
-    flowme: /config/www/community/flowme/backgrounds</pre>
+    flowme: /config/www/flowme-backgrounds</pre>
                     </li>
                     <li>${t('editor.stateA.browserSetupStep4')}</li>
                   </ol>
@@ -6668,17 +6586,6 @@ export class FlowmeCardEditor extends LitElement {
       flex-direction: row !important;
       align-items: center;
       gap: 8px !important;
-    }
-    .anim-preview-wrap {
-      border-radius: 6px;
-      overflow: hidden;
-      background: rgba(0,0,0,0.4);
-      border: 1px solid var(--divider-color, rgba(255,255,255,0.1));
-    }
-    .anim-preview {
-      display: block;
-      width: 100%;
-      height: 40px;
     }
     .anim-global-panel {
       border-top: 1px solid var(--divider-color, rgba(255,255,255,0.1));
