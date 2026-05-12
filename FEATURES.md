@@ -6,23 +6,25 @@ Technical reference for implemented behaviour. For installation and overview, se
 
 ## Background images
 
-Place your background images in `/config/www/community/flowme/backgrounds/`. They are served at URLs such as `/local/community/flowme/backgrounds/filename.jpg`.
+⚠️ **Do not store background images inside `/config/www/community/flowme/`.** That directory is managed by HACS and can be deleted or replaced when the card updates. Use **`/config/www/flowme-backgrounds/`** instead (served at **`/local/flowme-backgrounds/`**).
+
+Place your background images in `/config/www/flowme-backgrounds/`. They are served at URLs such as `/local/flowme-backgrounds/filename.jpg`.
 
 To enable the visual image browser in the FlowMe editor, add this to your `configuration.yaml`:
 
 ```yaml
 homeassistant:
   media_dirs:
-    flowme: /config/www/community/flowme/backgrounds
+    flowme: /config/www/flowme-backgrounds
 ```
 
-Then restart Home Assistant. The **Browse** button in the editor lists images from that folder and inserts `/local/community/flowme/backgrounds/…` URLs into the configuration.
+Then restart Home Assistant. The **Browse** button in the editor lists images from that folder and inserts `/local/flowme-backgrounds/…` URLs into the configuration.
 
 Without this setup, you can still set `background.default` and weather image URLs manually to any allowed path (for example other files under `/local/`).
 
 ### Animated backgrounds
 
-GIF, animated WebP, and APNG files work as ordinary background images (browser/CSS `background-image`). Store them under `/config/www/community/flowme/backgrounds/` and reference `/local/community/flowme/backgrounds/…` in YAML.
+GIF, animated WebP, and APNG files work as ordinary background images (browser/CSS `background-image`). Store them under `/config/www/flowme-backgrounds/` and reference `/local/flowme-backgrounds/…` in YAML.
 
 Rough file-size guidance: GIF < 2MB; animated WebP < 1MB; APNG < 1MB.
 

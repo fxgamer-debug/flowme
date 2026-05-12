@@ -109,7 +109,7 @@ FlowMe is submitted to the HACS default store. While awaiting approval, add it a
 1. In HACS → Custom repositories, add: `https://github.com/fxgamer-debug/flowme`  
    Category: **Dashboard**
 
-2. Search for FlowMe and download
+2. Search for FlowMe and install the latest version (or download the latest release asset)
 
 3. Restart Home Assistant
 
@@ -161,14 +161,16 @@ flows:
 
 ## Background images
 
-Place your background images in `/config/www/community/flowme/backgrounds/`. They are served at URLs such as `/local/community/flowme/backgrounds/filename.jpg`.
+⚠️ **Do not store background images inside `/config/www/community/flowme/`.** That directory is managed by HACS and can be deleted or replaced when the card updates. Use a folder you own instead, for example **`/config/www/flowme-backgrounds/`**, which Home Assistant serves at **`/local/flowme-backgrounds/`**.
+
+Place your background images in `/config/www/flowme-backgrounds/`. They are served at URLs such as `/local/flowme-backgrounds/filename.jpg`.
 
 To enable the visual image browser in the FlowMe editor, add this to your `configuration.yaml`:
 
 ```yaml
 homeassistant:
   media_dirs:
-    flowme: /config/www/community/flowme/backgrounds
+    flowme: /config/www/flowme-backgrounds
 ```
 
 Then restart Home Assistant. The **Browse** button in the editor will show thumbnails of all images in that folder.
@@ -177,11 +179,11 @@ Without this setup, you can still enter background image URLs manually.
 
 ### Animated backgrounds
 
-FlowMe supports animated background images (GIF, animated WebP, APNG). Place the file in `/config/www/community/flowme/backgrounds/`, then set the URL as usual, for example:
+FlowMe supports animated background images (GIF, animated WebP, APNG). Place the file in `/config/www/flowme-backgrounds/`, then set the URL as usual, for example:
 
 ```yaml
 background:
-  default: /local/community/flowme/backgrounds/rain.gif
+  default: /local/flowme-backgrounds/rain.gif
 ```
 
 Suggested upper bounds for smooth performance: GIF under 2MB; animated WebP under 1MB; APNG under 1MB (WebP often looks better than GIF at a smaller size).

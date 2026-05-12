@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Breaking
+
+- **Background image folder:** The recommended path for the image browser is now `/config/www/flowme-backgrounds/` on disk (served at `/local/flowme-backgrounds/`). Set `media_dirs.flowme` to that folder and update any YAML URLs that used `/local/community/flowme/backgrounds/…`. Storing images only under `/config/www/community/flowme/` is unsafe: HACS can replace that directory on updates.
+
 ## [2.9.0]
 
 ### Added

@@ -756,7 +756,7 @@ export class FlowmeCard extends LitElement {
 
   static getStubConfig(): FlowmeConfig {
     // Uses an empty background so the card renders immediately without the
-    // user first needing to copy any image into /config/www/community/flowme/.
+    // user first needing to copy any image into /config/www/flowme-backgrounds/.
     // Waypoints are omitted — a straight line renders fine and the user can
     // click the flow to add bends. Replace `sensor.example_power` with a real
     // numeric entity to see particles animate.
