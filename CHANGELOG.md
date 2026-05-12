@@ -2,6 +2,17 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.9]
+
+### Added
+
+- **Flow role selector:** Optional per-flow `role` in the editor Connection section (Auto-detect or domain role keys). Colours resolve from manual role, entity-id pattern detection (`detectFlowRole`), then domain defaults. Validated against `listDomainRoleKeys` for the effective domain.
+
+### Changed
+
+- **Flow inspector — Animation:** Nested “Animation” subsection removed; style, shape, direction, particles, glow, shimmer, and flicker controls sit flat under the parent Animation section card.
+- **Dashboard card — node labels/values:** Text uses `var(--primary-text-color)` with a dual-layer `text-shadow` from `var(--card-background-color, …)` for readability on photos and dark themes.
+
 ## [2.8.1]
 
 ### Fixed

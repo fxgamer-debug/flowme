@@ -10473,7 +10473,7 @@ F([P()], E.prototype, "panX", void 0);
 F([P()], E.prototype, "panY", void 0);
 F([P()], E.prototype, "imageLayoutReady", void 0);
 E = Le = F([Ft("flowme-card-editor")], E);
-var ct, yn = "2.8.1";
+var ct, yn = "2.9";
 console.info("%cFlowMe v" + yn + " loaded", "color: #FF6B00; font-weight: bold");
 var zi = 5e3;
 function rs(i) {
