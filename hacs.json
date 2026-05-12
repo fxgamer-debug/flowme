@@ -1,5 +1,5 @@
 {
   "name": "FlowMe",
-  "filename": "flowme-card.js",
+  "filename": "dist/flowme-card.js",
   "homeassistant": "2024.1.0"
 }
