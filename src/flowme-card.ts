@@ -1161,13 +1161,10 @@ export class FlowmeCard extends LitElement {
       flex-direction: column;
       align-items: center;
       gap: 2px;
-      color: var(--primary-text-color, #fff);
       font-size: 12px;
       font-family: var(--paper-font-body1_-_font-family, inherit);
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
       pointer-events: none;
       opacity: var(--flowme-opacity-nodes, 1);
-      display: flex;
     }
     .node-dot-wrap {
       position: relative;
@@ -1185,11 +1182,15 @@ export class FlowmeCard extends LitElement {
       white-space: nowrap;
       opacity: var(--flowme-opacity-labels, 1);
       display: block;
+      color: var(--primary-text-color);
+      text-shadow: 0 0 3px var(--card-background-color, rgba(0, 0, 0, 0.5));
     }
     .node-value {
       opacity: calc(0.85 * var(--flowme-opacity-values, 1));
       white-space: nowrap;
       display: block;
+      color: var(--primary-text-color);
+      text-shadow: 0 0 3px var(--card-background-color, rgba(0, 0, 0, 0.5));
     }
     .overlay {
       position: absolute;
