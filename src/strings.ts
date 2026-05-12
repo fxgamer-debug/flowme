@@ -160,6 +160,8 @@ export const STRINGS = {
       flowLabelPlaceholder: 'Display name (optional)',
       overlayIdField: 'Overlay id',
       entity: 'Entity',
+      flowRole: 'Role',
+      flowRoleAuto: 'Auto-detect',
       colour: 'Colour',
       visible: 'Visible',
       opacity: 'Opacity',

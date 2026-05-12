@@ -21,6 +21,8 @@
       "flowLabelPlaceholder": "Display name (optional)",
       "overlayIdField": "Overlay id",
       "entity": "Entity",
+      "flowRole": "Role",
+      "flowRoleAuto": "Auto-detect",
       "visible": "Visible",
       "opacity": "Opacity",
       "deleteNode": "Delete node",

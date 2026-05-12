@@ -26,6 +26,7 @@ import { findUnsafeUrls } from './overlays/url-scan.js';
 import { dlog } from './debug-log.js';
 import { t } from './i18n.js';
 import { DEFAULT_ZERO_THRESHOLD } from './utils.js';
+import { listDomainRoleKeys } from './flow-profiles/domain-colour-profiles.js';
 
 export class FlowmeConfigError extends Error {
   override name = 'FlowmeConfigError';
@@ -151,6 +152,7 @@ function validateFlow(
   idx: number,
   seenIds: Set<string>,
   nodeIds: Set<string>,
+  cardDomain: FlowConfig['domain'],
 ): FlowConfig {
   const path = `flows[${idx}]`;
   if (!raw || typeof raw !== 'object') fail(path, t('validation.mustBeObject'));
@@ -209,6 +211,22 @@ function validateFlow(
       fail(`${path}.domain`, t('validation.mustBeOneOf', FLOW_DOMAINS.join(', ')));
     }
     flow.domain = f['domain'] as FlowConfig['domain'];
+  }
+
+  const effectiveDomain = flow.domain ?? cardDomain;
+  if (f['role'] !== undefined) {
+    if (typeof f['role'] !== 'string') {
+      fail(`${path}.role`, t('validation.mustBeString'));
+    }
+    const roleTrim = (f['role'] as string).trim();
+    if (roleTrim.length > 0) {
+      const allowed = new Set(listDomainRoleKeys(effectiveDomain));
+      if (!allowed.has(roleTrim)) {
+        console.warn(`[FlowMe] ${path}.role: invalid role "${roleTrim}" for domain "${effectiveDomain}" — ignored`);
+      } else {
+        flow.role = roleTrim;
+      }
+    }
   }
   if (typeof f['color'] === 'string') flow.color = f['color'] as string;
   if (typeof f['color_positive'] === 'string') flow.color_positive = f['color_positive'] as string;
@@ -672,7 +690,7 @@ export function validateConfig(raw: unknown): FlowmeConfig {
   if (!Array.isArray(flowsRaw)) fail('flows', t('validation.flowsMustBeArray'));
   const seenFlowIds = new Set<string>();
   const flows = (flowsRaw as unknown[]).map((f, i) =>
-    validateFlow(f, i, seenFlowIds, seenNodeIds),
+    validateFlow(f, i, seenFlowIds, seenNodeIds, cardDomain),
   );
 
   const config: FlowmeConfig = {

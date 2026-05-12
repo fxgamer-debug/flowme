@@ -1,5 +1,6 @@
-import type { DomainColors, FlowDomain } from '../types.js';
+import type { DomainColors, FlowConfig, FlowDomain } from '../types.js';
 import { dlog } from '../debug-log.js';
+import { detectFlowRole } from './role-detection.js';
 
 export interface DomainColourRole {
   key: string;
@@ -177,4 +178,50 @@ export function resolveDomainFlowDefaultColour(
   const resolved = roleColour(role, domainColors);
   dlog('colour resolution:', flowId, 'domain:', dom, 'matched role:', matchedKey, 'resolved:', resolved);
   return resolved;
+}
+
+/** Valid role keys for the domain colour profile (for validation + editor). */
+export function listDomainRoleKeys(domain: FlowDomain | undefined): string[] {
+  const d = domain ?? 'generic';
+  const profile: DomainColourProfile = DOMAIN_COLOUR_PROFILES[d] ?? DOMAIN_COLOUR_PROFILES.generic!;
+  return profile.roles.map((r) => r.key);
+}
+
+/**
+ * Domain hue before explicit `flow.color` / direction overrides: manual `flow.role`,
+ * entity-based auto-detect, then existing flow-id pattern matching.
+ */
+export function resolveFlowRoleBasedDomainHue(
+  domain: FlowDomain | undefined,
+  flow: Pick<FlowConfig, 'id' | 'entity' | 'role'>,
+  domainColors?: DomainColors,
+  flowIndex?: number,
+): string | undefined {
+  if (domain === undefined) {
+    dlog('colour resolution:', flow.id, 'domain:', 'undefined', 'matched role:', 'none', 'resolved:', undefined);
+    return undefined;
+  }
+
+  const profile: DomainColourProfile = DOMAIN_COLOUR_PROFILES[domain] ?? DOMAIN_COLOUR_PROFILES.generic!;
+
+  if (flow.role) {
+    const roleObj = profile.roles.find((r) => r.key === flow.role);
+    if (roleObj) {
+      const resolved = roleColour(roleObj, domainColors);
+      dlog('colour resolution:', flow.id, 'domain:', domain, 'matched role:', flow.role, '(manual)', 'resolved:', resolved);
+      return resolved;
+    }
+  }
+
+  const detected = detectFlowRole(flow.entity, domain);
+  if (detected) {
+    const roleObj = profile.roles.find((r) => r.key === detected);
+    if (roleObj) {
+      const resolved = roleColour(roleObj, domainColors);
+      dlog('colour resolution:', flow.id, 'domain:', domain, 'matched role:', detected, '(entity)', 'resolved:', resolved);
+      return resolved;
+    }
+  }
+
+  return resolveDomainFlowDefaultColour(domain, flow.id, domainColors, flowIndex);
 }

@@ -1,5 +1,5 @@
 import type { DomainColors, FlowConfig, FlowDomain, FlowProfile } from '../types.js';
-import { resolveDomainFlowDefaultColour } from './domain-colour-profiles.js';
+import { resolveDomainFlowDefaultColour, resolveFlowRoleBasedDomainHue } from './domain-colour-profiles.js';
 import { energyProfile } from './energy.js';
 import { waterProfile } from './water.js';
 import { networkProfile } from './network.js';
@@ -49,9 +49,8 @@ export function defaultDomainFlowColor(
  *   1. `flow.color_positive` / `flow.color_negative` — direction-specific
  *      explicit overrides.
  *   2. `flow.color` — single-colour shorthand applied to both directions.
- *   3. `defaultDomainFlowColor(domain, flow.id, domainColors)` — pattern-based
- *      defaults per domain (energy: solar/grid/…; other domains: first-role
- *      fallback when the id matches nothing), overrideable by `domain_colors:` (v1.0.8+).
+ *   3. `resolveFlowRoleBasedDomainHue(...)` — manual `flow.role`, then entity
+ *      auto-detect (`detectFlowRole`), then flow-id pattern defaults (v2.8+).
  *   4. `profile.default_color_positive` / `profile.default_color_negative`
  *      — profile-level fallback.
  *
@@ -73,7 +72,7 @@ function nonEmptyColour(s: string | undefined): string | undefined {
 }
 
 export function resolveFlowColor(
-  flow: Pick<FlowConfig, 'id' | 'color' | 'color_positive' | 'color_negative'>,
+  flow: Pick<FlowConfig, 'id' | 'color' | 'color_positive' | 'color_negative' | 'entity' | 'role'>,
   profile: FlowProfile,
   domain: FlowDomain | undefined,
   direction: number,
@@ -81,7 +80,7 @@ export function resolveFlowColor(
   flowIndex?: number,
 ): string {
   const explicit = nonEmptyColour(flow.color);
-  const domainHue = resolveDomainFlowDefaultColour(domain, flow.id, domainColors, flowIndex);
+  const domainHue = resolveFlowRoleBasedDomainHue(domain, flow, domainColors, flowIndex);
   const universal = explicit ?? domainHue;
 
   let resolved: string | undefined;
@@ -104,6 +103,9 @@ export {
   gasProfile,
   genericProfile,
 };
+
+export { listDomainRoleKeys, resolveFlowRoleBasedDomainHue } from './domain-colour-profiles.js';
+export { detectFlowRole } from './role-detection.js';
 
 export {
   calcAnimDuration,

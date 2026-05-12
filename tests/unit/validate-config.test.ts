@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { validateConfig, FlowmeConfigError } from '../../src/validate-config.js';
 
@@ -592,5 +592,26 @@ describe('validateConfig — overlay schema', () => {
       overlays: [customOverlay({ opacity: 2 })],
     };
     expect(() => validateConfig(raw)).toThrow(/opacity/);
+  });
+});
+
+describe('validateConfig — flow.role', () => {
+  it('warns and drops invalid role for domain', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const raw = {
+      ...minimalConfig(),
+      flows: [{ id: 'f1', from_node: 'a', to_node: 'b', entity: 'sensor.p', role: 'not_a_valid_role', waypoints: [] }],
+    };
+    expect(validateConfig(raw).flows[0]?.role).toBeUndefined();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('keeps role when it matches domain profile', () => {
+    const raw = {
+      ...minimalConfig(),
+      flows: [{ id: 'f1', from_node: 'a', to_node: 'b', entity: 'sensor.p', role: 'grid', waypoints: [] }],
+    };
+    expect(validateConfig(raw).flows[0]?.role).toBe('grid');
   });
 });
