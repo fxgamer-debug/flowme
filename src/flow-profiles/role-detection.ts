@@ -1,14 +1,20 @@
 import type { FlowDomain } from '../types.js';
+import { FLOW_DOMAINS } from '../types.js';
 
 /**
- * Infer a domain colour role key from the flow entity id (lowercase substring rules).
+ * Infer a domain colour role key from the flow entity id (lowercase substring / token rules).
  * Returns the first matching role; `generic` never auto-detects.
+ *
+ * @param entityId — Home Assistant entity id (e.g. `sensor.grid_power`)
+ * @param domain — Diagram domain string (`energy`, `water`, …)
  */
-export function detectFlowRole(entityId: string, domain: FlowDomain | string | undefined): string | undefined {
-  if (!entityId || !domain || domain === 'generic') return undefined;
+export function detectFlowRole(entityId: string, domain: string | undefined): string | undefined {
+  if (!entityId || !domain) return undefined;
+  const dom = domain.trim().toLowerCase();
+  if (dom === 'generic' || !(FLOW_DOMAINS as readonly string[]).includes(dom)) return undefined;
   const id = entityId.toLowerCase();
 
-  switch (domain as FlowDomain) {
+  switch (dom as FlowDomain) {
     case 'energy': {
       if (id.includes('solar') || id.includes('pv')) return 'solar';
       if (id.includes('grid') || id.includes('meter')) return 'grid';
@@ -26,18 +32,19 @@ export function detectFlowRole(entityId: string, domain: FlowDomain | string | u
       return undefined;
     }
     case 'network': {
+      // First match wins (order matches v2.9 spec).
       if (id.includes('upload')) return 'upload';
+      if (/(?:^|[^a-z])up(?:[^a-z]|$)/.test(id)) return 'upload';
+      if (id.includes('tx')) return 'upload';
+      if (/(?:^|[^a-z])out(?:[^a-z]|$)/.test(id)) return 'upload';
+
       if (id.includes('download')) return 'download';
+      if (/(?:^|[^a-z])down(?:[^a-z]|$)/.test(id)) return 'download';
+      if (id.includes('rx')) return 'download';
+      if (/(?:^|[^a-z])in(?:[^a-z]|$)/.test(id)) return 'download';
+
       if (id.includes('local') || id.includes('lan')) return 'local';
       if (id.includes('external') || id.includes('wan') || id.includes('internet')) return 'external';
-      if (id.includes(' tx') || id.includes('_tx') || id.includes('/tx')) return 'upload';
-      if (id.includes(' rx') || id.includes('_rx') || id.includes('/rx')) return 'download';
-      if (/(?:^|[^a-z])up(?:[^a-z]|$)/.test(id)) return 'upload';
-      if (/(?:^|[^a-z])down(?:[^a-z]|$)/.test(id)) return 'download';
-      if (/(?:^|[^a-z])tx(?:[^a-z]|$)/.test(id)) return 'upload';
-      if (/(?:^|[^a-z])rx(?:[^a-z]|$)/.test(id)) return 'download';
-      if (/(?:^|[^a-z])out(?:[^a-z]|$)/.test(id)) return 'upload';
-      if (/(?:^|[^a-z])in(?:[^a-z]|$)/.test(id)) return 'download';
       return undefined;
     }
     case 'hvac': {

@@ -482,6 +482,17 @@ describe('detectFlowRole', () => {
   it('detects water supply', () => {
     expect(detectFlowRole('sensor.main_inlet_temp', 'water')).toBe('supply');
   });
+
+  it('detects network roles from entity id (v2.9 pattern order)', () => {
+    expect(detectFlowRole('sensor.wan_upload_mbps', 'network')).toBe('upload');
+    expect(detectFlowRole('sensor.link_up_status', 'network')).toBe('upload');
+    expect(detectFlowRole('sensor.tx_bytes', 'network')).toBe('upload');
+    expect(detectFlowRole('sensor.bytes_out_total', 'network')).toBe('upload');
+    expect(detectFlowRole('sensor.download_speed', 'network')).toBe('download');
+    expect(detectFlowRole('sensor.rx_errors', 'network')).toBe('download');
+    expect(detectFlowRole('binary_sensor.lan_ping', 'network')).toBe('local');
+    expect(detectFlowRole('sensor.external_latency', 'network')).toBe('external');
+  });
 });
 
 describe('NEUTRAL_NODE_COLOR', () => {

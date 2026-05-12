@@ -188,18 +188,41 @@ export function listDomainRoleKeys(domain: FlowDomain | undefined): string[] {
 }
 
 /**
- * Domain hue before explicit `flow.color` / direction overrides: manual `flow.role`,
- * entity-based auto-detect, then existing flow-id pattern matching.
+ * Domain hue before direction-specific `color_positive` / `color_negative` overrides.
+ * Resolution order (highest precedence first); `flow.color` is also merged by
+ * `resolveFlowColor` at a higher level — when provided here it keeps this helper
+ * self-contained for inspector previews.
+ *
+ *   1. `flow.color` — explicit single-colour override (hex).
+ *   2. `flow.role` — manual role key → profile role colour.
+ *   3. `detectFlowRole(flow.entity, domain)` — entity id patterns → role colour.
+ *   4. `resolveDomainFlowDefaultColour` — flow id patterns / index fallback.
  */
 export function resolveFlowRoleBasedDomainHue(
   domain: FlowDomain | undefined,
-  flow: Pick<FlowConfig, 'id' | 'entity' | 'role'>,
+  flow: Pick<FlowConfig, 'id' | 'entity' | 'role' | 'color'>,
   domainColors?: DomainColors,
   flowIndex?: number,
 ): string | undefined {
   if (domain === undefined) {
     dlog('colour resolution:', flow.id, 'domain:', 'undefined', 'matched role:', 'none', 'resolved:', undefined);
     return undefined;
+  }
+
+  const explicitColor =
+    typeof flow.color === 'string' && flow.color.trim() !== '' ? flow.color.trim() : undefined;
+  if (explicitColor) {
+    dlog(
+      'colour resolution:',
+      flow.id,
+      'domain:',
+      domain,
+      'matched role:',
+      'none (flow.color)',
+      'resolved:',
+      explicitColor,
+    );
+    return explicitColor;
   }
 
   const profile: DomainColourProfile = DOMAIN_COLOUR_PROFILES[domain] ?? DOMAIN_COLOUR_PROFILES.generic!;
