@@ -1061,22 +1061,26 @@ export class FlowmeCardEditor extends LitElement {
 
   private renderInspector(): TemplateResult | typeof nothing {
     if (!this.config) return nothing;
+    const selectedFlow =
+      this.selectedFlowId != null ? this.config.flows.find((f) => f.id === this.selectedFlowId) : undefined;
+    /** On the Flows tab, flow inspector wins so a stale node id never hides the flow (e.g. role row). */
+    const preferFlowInspector = this.activeTab === 'flows' && selectedFlow !== undefined;
+
     if (this.selectedNodeId) {
       const node = this.config.nodes.find((n) => n.id === this.selectedNodeId);
-      if (!node) return nothing;
-
-      const patchNode = (patch: Partial<typeof node>, description: string) => {
-        if (!this.config) return;
-        const prev = this.config;
-        const next = {
-          ...prev,
-          nodes: prev.nodes.map((n) => n.id === node.id ? { ...n, ...patch } : n),
+      if (node && !preferFlowInspector) {
+        const patchNode = (patch: Partial<typeof node>, description: string) => {
+          if (!this.config) return;
+          const prev = this.config;
+          const next = {
+            ...prev,
+            nodes: prev.nodes.map((n) => (n.id === node.id ? { ...n, ...patch } : n)),
+          };
+          this.pushPatch(prev, next, description);
         };
-        this.pushPatch(prev, next, description);
-      };
 
-      const nodeAdv = this.showAdvanced.nodes === true;
-      return html`
+        const nodeAdv = this.showAdvanced.nodes === true;
+        return html`
         <div class="inspector">
           <h3>${t('editor.inspector.nodeHeading', node.id)}</h3>
           ${this.renderSectionCard(
@@ -1255,10 +1259,10 @@ export class FlowmeCardEditor extends LitElement {
           </div>
         </div>
       `;
+      }
     }
-    if (this.selectedFlowId) {
-      const flow = this.config.flows.find((f) => f.id === this.selectedFlowId);
-      if (!flow) return nothing;
+    if (selectedFlow) {
+      const flow = selectedFlow;
       const flowIndex = this.config.flows.findIndex((f) => f.id === flow.id);
       const flowTitle = flowDisplayName(flow);
       const flowAdv = this.showAdvanced.flows === true;
@@ -4073,6 +4077,8 @@ export class FlowmeCardEditor extends LitElement {
 
     this.pushPatch(prev, next, 'Change flow endpoints');
     this.selectedFlowId = flowId;
+    this.selectedNodeId = null;
+    this.selectedNodeIds = new Set();
   }
 
   private renderSuggestPreview(): TemplateResult | typeof nothing {
@@ -4312,6 +4318,8 @@ export class FlowmeCardEditor extends LitElement {
     this.errorMessage = '';
     this.pushPatch(prev, next, `Rename flow ${oldId} to ${raw}`);
     this.selectedFlowId = raw;
+    this.selectedNodeId = null;
+    this.selectedNodeIds = new Set();
   }
 
   private onInspectorOverlayIdChange(oldId: string, event: Event): void {
@@ -5652,6 +5660,21 @@ export class FlowmeCardEditor extends LitElement {
     .flow-endpoint-select {
       width: 100%;
       max-width: 100%;
+    }
+    .field-row.flow-role-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 8px;
+    }
+    .field-row.flow-role-row > label {
+      font-size: 12px;
+      color: var(--primary-text-color);
+    }
+    .field-row.flow-role-row select {
+      width: 100%;
+      max-width: 100%;
+      min-height: 32px;
     }
     .flow-endpoint-busy {
       margin: 4px 0 8px;
