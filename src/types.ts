@@ -129,6 +129,11 @@ export interface FlowConfig {
   /** Override the card-level domain for this flow. */
   domain?: FlowDomain;
   /**
+   * Optional domain colour role key (e.g. energy: solar, grid). When set, selects
+   * that role's colour before entity auto-detect and flow-id patterns.
+   */
+  role?: string;
+  /**
    * Single-colour shorthand. When set (and the direction-specific
    * `color_positive` / `color_negative` are omitted) it is used for both
    * directions of flow, and the connected nodes inherit it as well.

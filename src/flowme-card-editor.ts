@@ -1363,6 +1363,33 @@ export class FlowmeCardEditor extends LitElement {
                   { includeDomains: ['sensor', 'input_number', 'number'] },
                 )}
               </label>
+              <div class="field-row flow-role-row">
+                <label for=${`flow-role-${flow.id}`}>${t('editor.inspector.flowRole')}</label>
+                <div class="row" style="align-items: center; gap: 8px; flex-wrap: wrap">
+                  <select
+                    id=${`flow-role-${flow.id}`}
+                    .value=${flow.role ?? ''}
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLSelectElement).value;
+                      this.onFlowRoleChange(flow.id, v);
+                    }}
+                  >
+                    <option value="">${t('editor.inspector.flowRoleAuto')}</option>
+                    ${(() => {
+                      const dom = flow.domain ?? this.config!.domain;
+                      const prof = DOMAIN_COLOUR_PROFILES[dom] ?? DOMAIN_COLOUR_PROFILES.generic!;
+                      return prof.roles.map(
+                        (r) => html`<option value=${r.key}>${r.label} (${r.key})</option>`,
+                      );
+                    })()}
+                  </select>
+                  <span
+                    class="role-colour-swatch"
+                    style=${`background: ${this.resolveFlowInspectorColour(flow)}; width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(127,127,127,0.35);`}
+                    title=${this.resolveFlowInspectorColour(flow)}
+                  ></span>
+                </div>
+              </div>
               <label>
                 ${t('editor.inspector.flowVisible')}
                 <div class="row">
@@ -4638,6 +4665,33 @@ export class FlowmeCardEditor extends LitElement {
       ),
     };
     this.pushPatch(prev, next, `edit entity of ${flow ? flowDisplayName(flow) : flowId}`);
+  }
+
+  private onFlowRoleChange(flowId: string, value: string): void {
+    if (!this.config) return;
+    const prev = this.config;
+    const next = {
+      ...prev,
+      flows: prev.flows.map((f) => {
+        if (f.id !== flowId) return f;
+        const copy = { ...f };
+        if (value === '') {
+          delete copy.role;
+        } else {
+          copy.role = value;
+        }
+        return copy;
+      }),
+    };
+    this.pushPatch(prev, next, 'Set flow role');
+  }
+
+  private resolveFlowInspectorColour(flow: FlowConfig): string {
+    if (!this.config) return '#FFFFFF';
+    const domain = flow.domain ?? this.config.domain;
+    const profile = getProfile(domain);
+    const fi = this.config.flows.findIndex((f) => f.id === flow.id);
+    return resolveFlowColor(flow, profile, domain, 1, this.config.domain_colors, fi >= 0 ? fi : 0);
   }
 
   private onOverlaySizeChange(id: string, which: 'width' | 'height', event: Event): void {

@@ -13,6 +13,7 @@ import {
   ensureRenderableStrokeColour,
   resolveFlowColor,
   NEUTRAL_NODE_COLOR,
+  detectFlowRole,
 } from '../../src/flow-profiles/index.js';
 import {
   calcAnimDuration,
@@ -398,9 +399,19 @@ describe('ensureRenderableStrokeColour (v2.1.1)', () => {
 });
 
 describe('resolveFlowColor (v1.0.7 unified colour resolution)', () => {
-  function flowFixture(overrides: Partial<{ id: string; color: string; color_positive: string; color_negative: string }> = {}) {
+  function flowFixture(
+    overrides: Partial<{
+      id: string;
+      color: string;
+      color_positive: string;
+      color_negative: string;
+      entity: string;
+      role: string;
+    }> = {},
+  ) {
     return {
       id: 'flow_x',
+      entity: 'sensor.flow_fixture_neutral',
       ...overrides,
     } as Parameters<typeof resolveFlowColor>[0];
   }
@@ -436,9 +447,40 @@ describe('resolveFlowColor (v1.0.7 unified colour resolution)', () => {
     expect(resolveFlowColor(flow, energyProfile, 'energy', -1)).toBe(energyProfile.default_color_negative);
   });
 
+  it('uses entity auto-detect before flow id when id does not match', () => {
+    const flow = flowFixture({ id: 'inverter', entity: 'sensor.grid_import_power' });
+    expect(resolveFlowColor(flow, energyProfile, 'energy', 1)).toBe('#1EB4FF');
+  });
+
+  it('manual flow.role beats entity and flow id', () => {
+    const flow = flowFixture({
+      id: 'solar1',
+      entity: 'sensor.grid_power',
+      role: 'battery',
+    });
+    expect(resolveFlowColor(flow, energyProfile, 'energy', 1)).toBe('#32DC50');
+  });
+
   it('non-energy domains: unmatched id uses first domain role colour, not profile fallback', () => {
     const flow = flowFixture({ id: 'solar1' });
     expect(resolveFlowColor(flow, waterProfile, 'water', 1)).toBe('#60CFFF');
+  });
+});
+
+describe('detectFlowRole', () => {
+  it('detects energy roles from entity id', () => {
+    expect(detectFlowRole('sensor.house_consumption', 'energy')).toBe('load');
+    expect(detectFlowRole('sensor.solar_power', 'energy')).toBe('solar');
+    expect(detectFlowRole('sensor.grid_meter', 'energy')).toBe('grid');
+    expect(detectFlowRole('sensor.battery_soc', 'energy')).toBe('battery');
+  });
+
+  it('returns undefined for generic', () => {
+    expect(detectFlowRole('sensor.solar_power', 'generic')).toBeUndefined();
+  });
+
+  it('detects water supply', () => {
+    expect(detectFlowRole('sensor.main_inlet_temp', 'water')).toBe('supply');
   });
 });
 
