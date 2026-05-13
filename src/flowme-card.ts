@@ -1205,6 +1205,7 @@ export class FlowmeCard extends LitElement {
       width: 100%;
       height: 100%;
       pointer-events: none;
+      z-index: 5;
     }
     .overlay {
       position: absolute;
