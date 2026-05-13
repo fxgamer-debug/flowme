@@ -31,13 +31,6 @@ export class FlowmeCustomOverlay extends LitElement {
     }
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    if (this.card && !this.childCard) {
-      this.rebuildChild();
-    }
-  }
-
   override disconnectedCallback(): void {
     this.disposeChild();
     super.disconnectedCallback();
