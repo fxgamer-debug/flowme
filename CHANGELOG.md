@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.10.3]
+
+### Fixed
+
+- **Overlay remount after edit:** Overlay cards now re-render immediately after config edit without requiring a hard refresh (`disposeChild` clears cached config JSON so `rebuildChild` always remounts).
+
 ## [2.10.2]
 
 ### Fixed
