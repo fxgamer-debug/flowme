@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.10.6]
+
+### Fixed
+
+- **Overlay mounting:** Overlays now mount correctly — removed `connectedCallback` override that caused a race condition with `updated()`, where both async calls aborted as stale leaving overlays permanently empty (Fixes #29).
+
 ## [2.10.5]
 
 ### Fixed
