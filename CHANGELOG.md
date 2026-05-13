@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.10.5]
+
+### Fixed
+
+- **Overlay visibility:** Added `z-index: 5` to `.overlay-host` so overlays paint above renderer, node effects, and background layers (Fixes #26).
+
 ## [2.10.4]
 
 ### Fixed
