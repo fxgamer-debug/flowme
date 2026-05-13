@@ -86,6 +86,9 @@ export class FlowmeCustomOverlay extends LitElement {
         if (mount) {
           mount.innerHTML = '';
           mount.appendChild(this.childCard);
+          if (this.hass && this.childCard.hass !== this.hass) {
+            this.childCard.hass = this.hass;
+          }
         }
       })
       .catch((err) => {
