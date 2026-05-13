@@ -2,6 +2,14 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.10.2]
+
+### Fixed
+
+- **Overlay positioning:** Overlay cards now position and size correctly — removed `position: relative` from `.overlay-interactive` (was overriding `position: absolute`, causing all overlays to cluster in document flow).
+- **Overlay sizing:** Added `.overlay-host` wrapper so percentage height resolves correctly against the visual stage area instead of the zero-height content box.
+- **Overlay hass propagation:** `button-card` and similar cards now receive `hass` correctly after `appendChild`.
+
 ## [2.10]
 
 ### Breaking
