@@ -3729,7 +3729,7 @@ var nt, Ce = (nt = class extends ne {
         if (this.lastMountedConfigJson !== t) return;
         this.childCard = n, this.hass && (this.childCard.hass = this.hass);
         const o = this.renderRoot.querySelector(".mount");
-        o && (o.innerHTML = "", o.appendChild(this.childCard));
+        o && (o.innerHTML = "", o.appendChild(this.childCard), this.hass && this.childCard.hass !== this.hass && (this.childCard.hass = this.hass));
       }).catch((n) => {
         this.errorMessage = n instanceof Error ? n.message : String(n), this.requestUpdate();
       });
@@ -10791,7 +10791,9 @@ var j = (ct = class extends ne {
             ${K(this.nodeFxSvgRef)}
           ></svg>
           ${e.nodes.map((s) => this.renderNodeHandle(s))}
-          ${(e.overlays ?? []).map((s) => (A("rendering overlay →", s.type, "position=", s.position, "size=", s.size), Yo(s, this.hass, { onOverlayKeydown: this.onOverlayKeydown })))}
+          <div class="overlay-host">
+            ${(e.overlays ?? []).map((s) => (A("rendering overlay →", s.type, "position=", s.position, "size=", s.size), Yo(s, this.hass, { onOverlayKeydown: this.onOverlayKeydown })))}
+          </div>
         </div>
         <div
           class=${`fm-toast ${this.toastVisible ? "fm-toast--visible" : ""}`}
@@ -11014,6 +11016,14 @@ var j = (ct = class extends ne {
         0 0 4px var(--card-background-color, rgba(255, 255, 255, 0.9)),
         0 0 8px var(--card-background-color, rgba(255, 255, 255, 0.9));
     }
+    .overlay-host {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
     .overlay {
       position: absolute;
       display: block;
@@ -11034,7 +11044,6 @@ var j = (ct = class extends ne {
     }
     /* Material-style tap ripple on interactive overlay wrappers + embedded card host. */
     .overlay.overlay-interactive {
-      position: relative;
       overflow: hidden;
     }
     .overlay.overlay-interactive::after {

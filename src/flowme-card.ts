@@ -840,12 +840,14 @@ export class FlowmeCard extends LitElement {
             ${ref(this.nodeFxSvgRef)}
           ></svg>
           ${config.nodes.map((n) => this.renderNodeHandle(n))}
-          ${(config.overlays ?? []).map((o) => {
-            dlog('rendering overlay →', o.type, 'position=', o.position, 'size=', o.size);
-            return renderOverlayHost(o, this.hass, {
-              onOverlayKeydown: this.onOverlayKeydown,
-            });
-          })}
+          <div class="overlay-host">
+            ${(config.overlays ?? []).map((o) => {
+              dlog('rendering overlay →', o.type, 'position=', o.position, 'size=', o.size);
+              return renderOverlayHost(o, this.hass, {
+                onOverlayKeydown: this.onOverlayKeydown,
+              });
+            })}
+          </div>
         </div>
         <div
           class=${`fm-toast ${this.toastVisible ? 'fm-toast--visible' : ''}`}
@@ -1196,6 +1198,14 @@ export class FlowmeCard extends LitElement {
         0 0 4px var(--card-background-color, rgba(255, 255, 255, 0.9)),
         0 0 8px var(--card-background-color, rgba(255, 255, 255, 0.9));
     }
+    .overlay-host {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
     .overlay {
       position: absolute;
       display: block;
@@ -1216,7 +1226,6 @@ export class FlowmeCard extends LitElement {
     }
     /* Material-style tap ripple on interactive overlay wrappers + embedded card host. */
     .overlay.overlay-interactive {
-      position: relative;
       overflow: hidden;
     }
     .overlay.overlay-interactive::after {
