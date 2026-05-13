@@ -2,6 +2,13 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.10.4]
+
+### Fixed
+
+- **Apply card config:** No longer shows "Config is empty" on first click when the overlay already has a card configuration (Fixes #22).
+- **Overlay reconnect:** Overlays now remount correctly after disconnect/reconnect cycle introduced in v2.10.3 (Fixes #23).
+
 ## [2.10.3]
 
 ### Fixed
