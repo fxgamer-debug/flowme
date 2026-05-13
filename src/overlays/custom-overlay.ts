@@ -102,6 +102,7 @@ export class FlowmeCustomOverlay extends LitElement {
       this.childCard.parentElement.removeChild(this.childCard);
     }
     this.childCard = undefined;
+    this.lastMountedConfigJson = undefined;
   }
 
   static override styles = css`

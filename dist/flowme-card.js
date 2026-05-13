@@ -3736,7 +3736,7 @@ var nt, Ce = (nt = class extends ne {
     }
   }
   disposeChild() {
-    this.childCard && this.childCard.parentElement && this.childCard.parentElement.removeChild(this.childCard), this.childCard = void 0;
+    this.childCard && this.childCard.parentElement && this.childCard.parentElement.removeChild(this.childCard), this.childCard = void 0, this.lastMountedConfigJson = void 0;
   }
 }, nt.styles = $t`
     :host {
