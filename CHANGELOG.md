@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.10.7]
+
+### Fixed
+
+- **Overlay mounting:** Overlays mount correctly again — reverted `disposeChild()` to v2.10.2 behaviour by not clearing `lastMountedConfigJson`, fixing mounting after disconnect/reconnect cycles introduced in v2.10.3 (Fixes #33).
+
 ## [2.10.6]
 
 ### Fixed
