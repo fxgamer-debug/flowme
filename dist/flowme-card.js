@@ -3702,6 +3702,9 @@ var nt, Ce = (nt = class extends ne {
   updated(e) {
     super.updated(e), e.has("card") && this.rebuildChild(), this.childCard && this.hass && this.childCard.hass !== this.hass && (this.childCard.hass = this.hass);
   }
+  connectedCallback() {
+    super.connectedCallback(), this.card && !this.childCard && this.rebuildChild();
+  }
   disconnectedCallback() {
     this.disposeChild(), super.disconnectedCallback();
   }
@@ -8435,7 +8438,11 @@ var E = (be = class extends ne {
   }
   applyCustomConfig(e) {
     if (!this.config) return;
-    const t = this.customConfigDraft.trim();
+    let t = this.customConfigDraft.trim();
+    if (!t) {
+      const r = (this.config.overlays ?? []).find((s) => s.id === e)?.card;
+      r && typeof r == "object" && (t = JSON.stringify(r, null, 2));
+    }
     if (!t) {
       this.customConfigError = "Config is empty.";
       return;

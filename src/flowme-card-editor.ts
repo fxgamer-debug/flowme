@@ -4630,7 +4630,14 @@ export class FlowmeCardEditor extends LitElement {
 
   private applyCustomConfig(overlayId: string): void {
     if (!this.config) return;
-    const raw = this.customConfigDraft.trim();
+    let raw = this.customConfigDraft.trim();
+    if (!raw) {
+      const overlay = (this.config.overlays ?? []).find((o) => o.id === overlayId);
+      const existing = overlay?.card;
+      if (existing && typeof existing === 'object') {
+        raw = JSON.stringify(existing, null, 2);
+      }
+    }
     if (!raw) {
       this.customConfigError = 'Config is empty.';
       return;
