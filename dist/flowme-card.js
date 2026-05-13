@@ -3702,9 +3702,6 @@ var nt, Ce = (nt = class extends ne {
   updated(e) {
     super.updated(e), e.has("card") && this.rebuildChild(), this.childCard && this.hass && this.childCard.hass !== this.hass && (this.childCard.hass = this.hass);
   }
-  connectedCallback() {
-    super.connectedCallback(), this.card && !this.childCard && this.rebuildChild();
-  }
   disconnectedCallback() {
     this.disposeChild(), super.disconnectedCallback();
   }
