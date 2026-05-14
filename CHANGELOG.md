@@ -2,6 +2,12 @@
 
 All notable changes to flowme are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.10.8]
+
+### Fixed
+
+- **Overlay reconnect:** Overlays now remount correctly after a dashboard edit/save without requiring a page refresh. Added `_needsRebuildOnConnect` flag to `FlowmeCustomOverlay` — set by `disconnectedCallback`, checked by `connectedCallback` to trigger a rebuild only after a genuine disconnect (not on initial mount), avoiding the race condition from v2.10.4.
+
 ## [2.10.7]
 
 ### Fixed
