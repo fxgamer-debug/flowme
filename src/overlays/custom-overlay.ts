@@ -20,6 +20,16 @@ export class FlowmeCustomOverlay extends LitElement {
 
   private childCard?: HTMLElement & { hass?: HomeAssistant };
   private lastMountedConfigJson?: string;
+  private _needsRebuildOnConnect = false;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this._needsRebuildOnConnect) {
+      this._needsRebuildOnConnect = false;
+      this.lastMountedConfigJson = undefined;
+      this.rebuildChild();
+    }
+  }
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
@@ -33,6 +43,7 @@ export class FlowmeCustomOverlay extends LitElement {
 
   override disconnectedCallback(): void {
     this.disposeChild();
+    this._needsRebuildOnConnect = true;
     super.disconnectedCallback();
   }
 
